@@ -1,0 +1,1742 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+
+<!-- ═══ VIEWPORT & PWA iOS ═══ -->
+<!-- viewport-fit=cover : étend l'app sous l'encoche et la Dynamic Island -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+
+<!-- Titre de la page -->
+<title>夢 Yume</title>
+
+<!-- ═══ APPLE WEB APP (iOS PWA) ═══ -->
+<!-- Permet l'installation sur l'écran d'accueil iOS comme une app native -->
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<!-- black-translucent = la barre de statut devient transparente, l'app prend tout l'écran -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<!-- Nom affiché sous l'icône sur l'écran d'accueil iOS -->
+<meta name="apple-mobile-web-app-title" content="Yume"/>
+
+<!-- ═══ ICÔNES APPLE TOUCH ═══ -->
+<!-- Remplace icon.png par ton icône réelle (recommandé : 180×180 px, fond plein, coins arrondis) -->
+<!-- Place le fichier icon.png dans le même dossier que index.html -->
+<link rel="apple-touch-icon" href="./icon.png"/>
+<link rel="apple-touch-icon" sizes="152x152" href="./icon.png"/>
+<link rel="apple-touch-icon" sizes="167x167" href="./icon.png"/>
+<link rel="apple-touch-icon" sizes="180x180" href="./icon.png"/>
+
+<!-- ═══ ICÔNE FAVICON (navigateur desktop) ═══ -->
+<link rel="icon" type="image/png" href="./icon.png"/>
+
+<!-- ═══ META GÉNÉRALES (SEO + partage) ═══ -->
+<meta name="description" content="Yume — Tes voyages, ta mémoire. Application de voyage hors-ligne."/>
+<meta name="theme-color" content="#e8748a"/>
+<!-- theme-color adapté au dark mode -->
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e1c18"/>
+
+<!-- ═══ POLICES GOOGLE ═══ -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+
+  <!-- ═══ STYLES ═══ -->
+  <link rel="stylesheet" href="./css/style.css"/>
+
+  <!-- ═══ LEAFLET CSS ═══ -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <!-- ═══ FOUC PREVENTION ═══ -->
+  <script>(function(){
+    var t=localStorage.getItem('yume_theme')||'standard';
+    document.documentElement.setAttribute('data-theme',t);
+  })();</script>
+</head>
+
+<body>
+
+<!-- ══ SPLASH SCREEN ══ -->
+<div id="splash-screen" role="presentation" aria-hidden="true">
+  <div class="splash-logo">
+    <div class="splash-kanji">夢</div>
+    <div class="splash-name">Yume</div>
+  </div>
+  <div class="splash-dot"></div>
+</div>
+
+<div id="spa-root">
+
+<!-- PAGE : ACCUEIL -->
+<div class="spa-page active" id="page-home">
+  <div id="home-topbar">
+    <div id="home-topbar-title">夢 Yume</div>
+    <div id="home-topbar-stats">
+      <div class="hts-chip"><span class="hts-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M21 16l-3-8-3 3-5-5-3 3 2 3-4 2 1 2 5-1 1 3 3-1 1 3 3-3z"/></svg></span><b id="hts-voyages">0</b><span>voyages</span></div>
+      <div class="hts-chip"><span class="hts-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span><b id="hts-pays">0</b><span>pays</span></div>
+    </div>
+  </div>
+  <div id="home-scroll">
+    <button id="btn-new-voyage" onclick="openCreateModal()">
+      <span class="bv-plus">＋</span><span>Nouveau voyage</span>
+    </button>
+    <div class="home-section-label">Mes voyages</div>
+    <div id="trips-list-container"></div>
+  </div>
+  <!-- Compat IDs -->
+  <div id="home-bg" style="display:none"></div>
+  <div id="stat-voyages" style="display:none">0</div>
+  <div id="stat-pays" style="display:none">0</div>
+  <span id="stat-voyages-s" style="display:none"></span>
+  <span id="stat-pays-s" style="display:none"></span>
+</div>
+
+<!-- Create-trip modal (global, accessible depuis Home) -->
+<div class="create-modal" id="create-modal">
+  <div class="create-modal-box">
+    <div class="create-modal-title">Nouveau voyage</div>
+    <div class="create-modal-sub">Remplis les informations ci-dessous pour commencer.</div>
+
+    <!-- Nom -->
+    <div class="create-modal-field">
+      <label>Nom du voyage</label>
+      <input class="create-modal-input" type="text" id="new-trip-name"
+        placeholder="ex: Japon Été 2025" maxlength="60"/>
+    </div>
+
+    <!-- Type : V ou VA -->
+    <div class="create-modal-field">
+      <label>Type de voyage</label>
+      <div class="trip-type-selector">
+        <button class="tts-btn active" id="tts-v"
+          onclick="selectTripType('V',this)">Voyage</button>
+        <button class="tts-btn va" id="tts-va"
+          onclick="selectTripType('VA',this)">Voyage d'affaires</button>
+      </div>
+      <input type="hidden" id="new-trip-type" value="V"/>
+    </div>
+
+    <!-- Destination : International / France -->
+    <div class="create-modal-field">
+      <label>Destination</label>
+      <div class="dest-selector">
+        <button class="dts-btn active" id="dts-intl"
+          onclick="selectDestType('international',this)">International</button>
+        <button class="dts-btn" id="dts-fr"
+          onclick="selectDestType('france',this)">
+          🇫🇷 France
+        </button>
+      </div>
+      <input type="hidden" id="new-trip-dest-type" value="international"/>
+    </div>
+
+    <!-- Pays (international) -->
+    <div class="create-modal-field" id="dest-intl-wrap">
+      <label>Pays <span style="font-weight:400;color:var(--ink-hint)">(optionnel)</span></label>
+      <div class="country-input-wrap">
+        <input class="create-modal-input" type="text" id="new-trip-country"
+          placeholder="Ajouter un pays…"
+          autocomplete="off"
+          oninput="onCountryInput(this.value)"
+          onfocus="onCountryInput(this.value)"/>
+        <div class="country-suggestions" id="country-suggestions"></div>
+      </div>
+      <div class="selected-countries-row" id="selected-countries-row"></div>
+      <div class="country-tags-list" id="country-tags-list"></div>
+    </div>
+
+    <!-- Région France (cachée par défaut) -->
+    <div class="create-modal-field" id="dest-france-wrap" style="display:none">
+      <label>Région</label>
+      <select id="new-trip-region">
+        <option value="">— Choisir une région —</option>
+        <option>Auvergne-Rhône-Alpes</option>
+        <option>Bourgogne-Franche-Comté</option>
+        <option>Bretagne</option>
+        <option>Centre-Val de Loire</option>
+        <option>Corse</option>
+        <option>Grand Est</option>
+        <option>Guadeloupe</option>
+        <option>Guyane</option>
+        <option>Hauts-de-France</option>
+        <option>Île-de-France</option>
+        <option>La Réunion</option>
+        <option>Martinique</option>
+        <option>Mayotte</option>
+        <option>Normandie</option>
+        <option>Nouvelle-Aquitaine</option>
+        <option>Occitanie</option>
+        <option>Pays de la Loire</option>
+        <option>Provence-Alpes-Côte d'Azur</option>
+      </select>
+    </div>
+
+    <!-- Dates -->
+    <div class="cm-row">
+      <div class="create-modal-field">
+        <label>Départ <span style="font-weight:400;color:var(--ink-hint)">(opt.)</span></label>
+        <input class="create-modal-input cal-trigger" type="text" id="new-trip-date-dep"
+          placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('new-trip-date-dep')"/>
+      </div>
+      <div class="create-modal-field">
+        <label>Retour <span style="font-weight:400;color:var(--ink-hint)">(opt.)</span></label>
+        <input class="create-modal-input cal-trigger" type="text" id="new-trip-date-ret"
+          placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('new-trip-date-ret')"/>
+      </div>
+    </div>
+
+    <!-- Mode : Solo / Groupe -->
+    <div class="create-modal-field">
+      <label>Voyage</label>
+      <div class="group-toggle-row">
+        <button class="gts-btn active" id="gts-solo" onclick="selectGroupMode('solo',this)">Solo</button>
+        <button class="gts-btn" id="gts-groupe" onclick="selectGroupMode('groupe',this)">En groupe</button>
+      </div>
+      <input type="hidden" id="new-trip-group-mode" value="solo"/>
+      <!-- Saisie membres — visible si Groupe -->
+      <div class="group-members-wrap" id="group-members-wrap">
+        <div class="group-members-input-row">
+          <input type="text" id="new-member-input" placeholder="Prénom (ex: Simon)" maxlength="20"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addMemberChip();}"/>
+          <button onclick="addMemberChip()">＋ Ajouter</button>
+        </div>
+        <div class="members-chips" id="members-chips-list"></div>
+        <div class="members-hint">Appuyez sur Entrée ou cliquez ＋ pour ajouter. 2 membres minimum.</div>
+      </div>
+    </div>
+
+    <div class="create-modal-actions">
+      <button class="btn-ghost" onclick="closeCreateModal()">Annuler</button>
+      <button class="btn-primary" onclick="createTrip()">Créer →</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE : MON VOYAGE -->
+<div class="spa-page" id="page-voyage">
+
+  <!-- Placeholder si aucun voyage actif -->
+  <div id="voyage-placeholder">
+    <div class="vp-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" width="44" height="44"><path d="M21 16l-3-8-3 3-5-5-3 3 2 3-4 2 1 2 5-1 1 3 3-1 1 3 3-3z"/></svg></div>
+    <div class="vp-title">Aucun voyage sélectionné</div>
+    <div class="vp-sub">Sélectionne un voyage dans l'onglet<br><strong>Accueil</strong> pour voir les détails.</div>
+    <button class="vp-btn" onclick="showPage('home',document.querySelector('.tb-item[data-page=\'home\']'))">
+      Aller à l'accueil
+    </button>
+  </div>
+
+  <!-- Contenu voyage actif (affiché par showAppScreen) -->
+  <div id="voyage-content" style="display:none">
+
+    <!-- Header voyage — compact, barre de progression sous lui -->
+    <header class="app-header" style="height:calc(48px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px)">
+      <button onclick="showHomeScreen()" style="background:none;border:none;cursor:pointer;padding:6px;color:var(--ink-muted);font-size:20px;display:flex;align-items:center" title="Accueil">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span id="app-trip-name" style="flex:1;font-size:15px;font-weight:600;color:var(--ink);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px"></span>
+      <div style="width:34px"></div><!-- spacer for centering -->
+      <!-- Hidden compat elements -->
+      <span id="tp-days-label" style="display:none"></span>
+      <div id="tp-bar" style="display:none"><div id="tp-fill"></div></div>
+      <div id="app-header-stats" style="display:none"></div>
+    </header>
+
+    <!-- Barre de sections (scroll horizontal) -->
+    <div id="voyage-progress-bar">
+      <div id="voyage-progress-trip-name">
+        <span id="vpn-name">Mon voyage</span>
+        <span class="vpn-days" id="vpn-days"></span>
+      </div>
+      <div class="voyage-prog-track">
+        <div class="voyage-prog-fill" id="vpn-fill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- Navigation sections avec icônes SVG -->
+    <div id="voyage-section-nav">
+      <button class="vsn-item active" data-tab="mobilite" onclick="switchSection('mobilite',this)">
+        <svg viewBox="0 0 24 24">
+          <path d="M21 3C20 2 16.5 3 13 6.5L10.5 9L4 7L3 8.5L8.5 11.5L6 14L4 13.5L3 15L6.5 16.5L7.5 20L9 19L8.5 16L11 14L14 19L15.5 18L13.5 12.5L17 9C20.5 5.5 22 4 21 3Z"/>
+        </svg>
+        <span>Transports</span>
+      </button>
+      <button class="vsn-item" data-tab="locations" onclick="switchSection('locations',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Anneau -->
+          <circle cx="5" cy="12" r="3.5"/>
+          <!-- Barre horizontale -->
+          <path d="M8.5 12H22"/>
+          <!-- 3 dents vers le bas, hauteurs différentes -->
+          <path d="M15 12V16"/>
+          <path d="M18 12V14.5"/>
+          <path d="M22 12V17.5"/>
+        </svg>
+        <span>Locations</span>
+      </button>
+      <button class="vsn-item" data-tab="hotels" onclick="switchSection('hotels',this)">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Héberg.</span>
+      </button>
+      <button class="vsn-item" data-tab="lieux" onclick="switchSection('lieux',this)">
+        <svg viewBox="0 0 24 24"><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span>Lieux</span>
+      </button>
+      <button class="vsn-item" data-tab="timeline" onclick="switchSection('timeline',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8" y2="14" stroke-width="2.5" stroke-linecap="round"/><line x1="8" y1="18" x2="16" y2="18"/><line x1="12" y1="14" x2="21" y2="14"/></svg>
+        <span>Planning</span>
+      </button>
+      <button class="vsn-item" data-tab="alertes" onclick="switchSection('alertes',this)" style="position:relative">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span>Alertes</span>
+        <span id="sa-notif-badge" style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;border-radius:8px;background:#c0392b;color:white;font-size:10px;font-weight:700;display:none;align-items:center;justify-content:center;padding:0 4px;border:2px solid var(--surface)"></span>
+      </button>
+      <button class="vsn-item" data-tab="budget" onclick="switchSection('budget',this)">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/><path d="M16 8H9.5a2.5 2.5 0 000 5h5a2.5 2.5 0 010 5H6"/><path d="M12 6v2M12 16v2"/></svg>
+        <span>Budget</span>
+      </button>
+      <button class="vsn-item" data-tab="convertir" onclick="switchSection('convertir',this)">
+        <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/><path d="M7 12h10M7 8l4 4-4 4"/></svg>
+        <span>Convertir</span>
+      </button>
+    </div>
+
+    <!-- Zone sections (flex pour le belt) -->
+    <div id="voyage-sections">
+
+    <!-- Settings panel (déplacé ici pour restez dans le flux) -->
+    <!-- Settings modal is global (outside swipe area) -->
+<div class="tab-belt" id="tab-belt">
+<!-- ═══════════════════════════════════════════════════════
+     SECTION : TRAJETS & PASS (Vols, Trains, Bus, Bateau, Covoiturage, Pass)
+════════════════════════════════════════════════════════ -->
+<section class="section active" id="tab-mobilite">
+  <div class="section-top">
+    <div class="section-top-title">Transports &amp; Pass</div>
+    <div class="section-top-actions">
+      <button class="btn-edit-mode" id="bedit-mobilite" onclick="toggleEmode('mobilite')">Modifier</button>
+    </div>
+  </div>
+  <div class="edit-banner" id="ebanner-mobilite">Mode édition — cliquez sur l'icône d'un trajet pour le modifier ou le supprimer</div>
+
+  <!-- Pass épinglés en haut -->
+  <div id="passes-pin-top" style="display:none">
+    <div class="passes-section-header">
+      <div class="passes-section-title"><span class="passes-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M2 12h20"/><circle cx="7" cy="12" r="1.5"/></svg></span> Pass &amp; Abonnements</div>
+      <div class="passes-section-sub">Titres de transport longue durée</div>
+    </div>
+    <div id="passes-list"></div>
+    <div class="trajets-section-header">
+      <div class="trajets-section-title"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13"><path d="M3 20l4-16M17 20l4-16M3 10h18M3 14h18"/></svg></span> Trajets</div>
+    </div>
+  </div>
+
+
+  <!-- Liste des trajets -->
+  <div id="mobilite-list"></div>
+
+  <!-- Formulaire d'ajout unifié — champs dynamiques par type -->
+  <div class="add-form" id="form-mobilite">
+    <div class="add-form-title" id="mob-form-title">Ajouter un trajet</div>
+
+    <!-- ── Ligne 0 : Sélecteur de type (chips visuels) ── -->
+    <div id="mob-type-chips" class="mob-type-chips">
+      <button class="mob-chip active" data-type="vol"          onclick="setMobType('vol',this)">Vol</button>
+      <button class="mob-chip"        data-type="train"        onclick="setMobType('train',this)">Train</button>
+      <button class="mob-chip"        data-type="bus"          onclick="setMobType('bus',this)">Bus</button>
+      <button class="mob-chip"        data-type="bateau"       onclick="setMobType('bateau',this)">Bateau</button>
+      <button class="mob-chip"        data-type="covoiturage"  onclick="setMobType('covoiturage',this)">Covoit.</button>
+      <button class="mob-chip"        data-type="metro"        onclick="setMobType('metro',this)">Métro</button>
+      <button class="mob-chip"        data-type="taxi"         onclick="setMobType('taxi',this)">Taxi</button>
+      <button class="mob-chip"        data-type="pass"         onclick="setMobType('pass',this)">Pass</button>
+    </div>
+    <input type="hidden" id="mob-type" value="vol"/>
+
+    <!-- ── Statut + Preview (masqué pour Pass) ── -->
+    <div class="form-row" id="mob-statut-row" style="align-items:center;gap:8px;margin-top:2px">
+      <select id="mob-statut" style="max-width:155px;flex:none">
+        <option>Confirmé</option>
+        <option>À confirmer</option>
+        <option>Réservé</option>
+        <option>À réserver</option>
+      </select>
+      <span id="mob-route-preview" class="vol-titre-preview" style="font-size:13px"></span>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         GROUPE : VOL — codes IATA, terminal, porte, bagages, escales
+    ═══════════════════════════════════════════════ -->
+    <div class="mob-group" id="mob-group-vol">
+      <div class="mob-group-sep">Informations du vol</div>
+
+      <!-- Aéroports -->
+      <div class="form-row">
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
+          <label class="mob-lbl">Départ</label>
+          <div class="mob-iata-wrap">
+            <div class="ac-wrap" style="flex:1;position:relative"><input type="text" id="mob-dep" placeholder="Paris CDG / Tokyo NRT" autocomplete="off" oninput="updateMobPreview();onVolVilleInput('dep',this.value)" style="width:100%"/><div class="ac-list" id="ac-dep-ville"></div></div>
+            <input type="text" id="mob-code-dep" placeholder="CDG" style="max-width:60px;text-transform:uppercase;font-weight:600;text-align:center" oninput="this.value=this.value.toUpperCase()"/>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
+          <label class="mob-lbl">Arrivée</label>
+          <div class="mob-iata-wrap">
+            <div class="ac-wrap" style="flex:1;position:relative"><input type="text" id="mob-arr" placeholder="Tokyo NRT / Paris CDG" autocomplete="off" oninput="updateMobPreview();onVolVilleInput('arr',this.value)" style="width:100%"/><div class="ac-list" id="ac-arr-ville"></div></div>
+            <input type="text" id="mob-code-arr" placeholder="NRT" style="max-width:60px;text-transform:uppercase;font-weight:600;text-align:center" oninput="this.value=this.value.toUpperCase()"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- Date + Heures + Terminal + Porte -->
+      <div class="form-row">
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1.2;min-width:120px">
+          <label class="mob-lbl">Date</label>
+          <input class="vol-date-input" type="text" id="mob-date" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('mob-date')"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+          <label class="mob-lbl">Décollage</label>
+          <input type="time" id="mob-heure-dep" class="vol-time-input" oninput="calcMobDuree()"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+          <label class="mob-lbl">Atterrissage</label>
+          <input type="time" id="mob-heure-arr" class="vol-time-input" oninput="calcMobDuree()"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:none">
+          <label class="mob-lbl">Durée</label>
+          <div class="hm-duree-auto" id="mob-duree-display">—</div>
+          <input type="hidden" id="mob-duree"/>
+        </div>
+      </div>
+
+      <!-- Compagnie + N° vol + Siège + Terminal + Porte -->
+      <div class="form-row">
+        <div class="ac-wrap" style="flex:2;position:relative"><input type="text" id="mob-compagnie" placeholder="Compagnie (ex: Air France)" autocomplete="off" oninput="onCompagnieInput(this.value)" style="width:100%"/><div class="ac-list" id="ac-compagnie"></div></div>
+        <input type="text" id="mob-numero"    placeholder="N° vol (AF275)" style="flex:1;min-width:80px"/>
+        <input type="text" id="mob-siege"     placeholder="Siège (24A)" style="max-width:76px;flex:none"/>
+      </div>
+      <div class="form-row">
+        <input type="text" id="mob-terminal"  placeholder="Terminal (ex: T2E)" style="max-width:110px;flex:none"/>
+        <input type="text" id="mob-porte"     placeholder="Porte (ex: K42)" style="max-width:100px;flex:none"/>
+        <input type="text" id="mob-resa-vol"  placeholder="N° réservation (PNR)"/>
+        <input type="text" id="mob-bagages"   placeholder="Bagage (ex: 23kg + cabine)" style="flex:1.5"/>
+      </div>
+
+      <!-- Escales / Segment 2 -->
+      <div class="mob-escale-section">
+        <label class="mob-escale-toggle-label">
+          <input type="checkbox" id="mob-escale-check" onchange="toggleMobEscales()"/>
+          <span>Vol avec escale</span>
+        </label>
+        <div id="mob-escales-wrap" style="display:none;margin-top:10px">
+
+          <!-- Durée d'escale -->
+          <div class="mob-seg2-layover">
+            <span class="mob-seg2-layover-icon">⏳</span>
+            <div style="flex:1">
+              <label class="mob-lbl">Durée d'escale à l'aéroport intermédiaire</label>
+              <input type="text" id="mob-esc-duree" placeholder="ex: 2h30" style="max-width:120px;margin-top:3px"/>
+            </div>
+          </div>
+
+          <!-- Titre segment 2 -->
+          <div class="mob-seg2-header">
+            <div class="mob-seg2-badge">SEG. 2</div>
+            <div class="mob-seg2-subtitle">Détails du second vol</div>
+          </div>
+
+          <!-- Aéroports seg 2 -->
+          <div class="form-row">
+            <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
+              <label class="mob-lbl">Départ (escale)</label>
+              <div class="mob-iata-wrap">
+                <div class="ac-wrap" style="flex:1;position:relative">
+                  <input type="text" id="mob-esc-dep" placeholder="Aéroport escale" autocomplete="off" style="width:100%" oninput="updateMobPreview();onEscSegVilleInput('dep',this.value)"/>
+                  <div class="ac-list" id="ac-esc-dep"></div>
+                </div>
+                <input type="text" id="mob-esc-code-dep" placeholder="ICN" style="max-width:56px;text-transform:uppercase;font-weight:600;text-align:center" oninput="this.value=this.value.toUpperCase()"/>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
+              <label class="mob-lbl">Arrivée finale</label>
+              <div class="mob-iata-wrap">
+                <div class="ac-wrap" style="flex:1;position:relative">
+                  <input type="text" id="mob-esc-arr" placeholder="Destination finale" autocomplete="off" style="width:100%" oninput="updateMobPreview();onEscSegVilleInput('arr',this.value)"/>
+                  <div class="ac-list" id="ac-esc-arr"></div>
+                </div>
+                <input type="text" id="mob-esc-code-arr" placeholder="NRT" style="max-width:56px;text-transform:uppercase;font-weight:600;text-align:center" oninput="this.value=this.value.toUpperCase()"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Horaires seg 2 -->
+          <div class="form-row">
+            <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+              <label class="mob-lbl">Décollage</label>
+              <input type="time" id="mob-esc-heure-dep" class="vol-time-input" oninput="calcEscDuree()"/>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+              <label class="mob-lbl">Atterrissage</label>
+              <input type="time" id="mob-esc-heure-arr" class="vol-time-input" oninput="calcEscDuree()"/>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;flex:none">
+              <label class="mob-lbl">Durée vol 2</label>
+              <div class="hm-duree-auto" id="mob-esc-duree-display">—</div>
+              <input type="hidden" id="mob-esc-duree-vol"/>
+            </div>
+          </div>
+
+          <!-- Compagnie + N° vol seg 2 -->
+          <div class="form-row">
+            <input type="text" id="mob-esc-compagnie" placeholder="Compagnie (peut différer)" style="flex:2"/>
+            <input type="text" id="mob-esc-numero" placeholder="N° vol (ex: KE703)" style="flex:1;min-width:80px"/>
+          </div>
+
+          <!-- Siège + Réservation + Bagages seg 2 -->
+          <div class="form-row">
+            <input type="text" id="mob-esc-siege" placeholder="Siège (ex: 22A)" style="max-width:80px;flex:none"/>
+            <input type="text" id="mob-esc-resa" placeholder="N° résa (si différent)" style="flex:1"/>
+            <input type="text" id="mob-esc-bagages" placeholder="Bagage segment 2" style="flex:1.5"/>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         GROUPE : TRAIN — gares, voiture, siège, n° train
+    ═══════════════════════════════════════════════ -->
+    <div class="mob-group" id="mob-group-train" style="display:none">
+      <div class="mob-group-sep">Informations du trajet</div>
+      <div class="form-row">
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
+          <label class="mob-lbl">Gare de départ</label>
+          <div class="ac-wrap" style="position:relative"><input type="text" id="mob-dep" placeholder="Paris Gare de Lyon" autocomplete="off" oninput="updateMobPreview();onTrainVilleInput('dep',this.value)" style="width:100%"/><div class="ac-list" id="ac-tr-dep"></div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
+          <label class="mob-lbl">Gare d'arrivée</label>
+          <div class="ac-wrap" style="position:relative"><input type="text" id="mob-arr" placeholder="Lyon Part-Dieu" autocomplete="off" oninput="updateMobPreview();onTrainVilleInput('arr',this.value)" style="width:100%"/><div class="ac-list" id="ac-tr-arr"></div></div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1.2;min-width:120px">
+          <label class="mob-lbl">Date</label>
+          <input class="vol-date-input" type="text" id="mob-date" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('mob-date')"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+          <label class="mob-lbl">Départ</label>
+          <input type="time" id="mob-heure-dep" class="vol-time-input" oninput="calcMobDuree()"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+          <label class="mob-lbl">Arrivée</label>
+          <input type="time" id="mob-heure-arr" class="vol-time-input" oninput="calcMobDuree()"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:none">
+          <label class="mob-lbl">Durée</label>
+          <div class="hm-duree-auto" id="mob-duree-display">—</div>
+          <input type="hidden" id="mob-duree"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <input type="text" id="mob-compagnie" placeholder="Opérateur (SNCF, Eurostar…)" style="flex:2"/>
+        <input type="text" id="mob-numero"    placeholder="N° train (TGV 6201)" style="flex:1.5"/>
+      </div>
+      <div class="form-row">
+        <input type="text" id="mob-siege"   placeholder="Siège (ex: 22A)" style="max-width:100px;flex:none"/>
+        <input type="text" id="mob-voiture" placeholder="Voiture (ex: 4)" style="max-width:100px;flex:none"/>
+        <input type="text" id="mob-resa-vol" placeholder="N° réservation"/>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         GROUPE : BATEAU — ports, navire, cabine, pont
+    ═══════════════════════════════════════════════ -->
+    <div class="mob-group" id="mob-group-bateau" style="display:none">
+      <div class="mob-group-sep">Informations de la traversée</div>
+      <div class="form-row">
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1">
+          <label class="mob-lbl">Port de départ</label>
+          <input type="text" id="mob-dep" placeholder="Marseille / Calais…" oninput="updateMobPreview()"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1">
+          <label class="mob-lbl">Port d'arrivée</label>
+          <input type="text" id="mob-arr" placeholder="Bastia / Douvres…" oninput="updateMobPreview()"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1.2;min-width:120px">
+          <label class="mob-lbl">Date</label>
+          <input class="vol-date-input" type="text" id="mob-date" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('mob-date')"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+          <label class="mob-lbl">Départ</label>
+          <input type="time" id="mob-heure-dep" class="vol-time-input" oninput="calcMobDuree()"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+          <label class="mob-lbl">Arrivée</label>
+          <input type="time" id="mob-heure-arr" class="vol-time-input" oninput="calcMobDuree()"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <input type="text" id="mob-compagnie" placeholder="Compagnie (ex: Corsica Ferries)" style="flex:2"/>
+        <input type="text" id="mob-numero"    placeholder="N° traversée"/>
+      </div>
+      <div class="form-row">
+        <input type="text" id="mob-cabine"  placeholder="Cabine (ex: C-214)" style="flex:1"/>
+        <input type="text" id="mob-pont"    placeholder="Pont (ex: Pont 7)" style="flex:1"/>
+        <input type="text" id="mob-resa-vol" placeholder="N° réservation"/>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         GROUPE : BUS / COVOITURAGE / MÉTRO / TAXI
+    ═══════════════════════════════════════════════ -->
+    <div class="mob-group" id="mob-group-autre" style="display:none">
+      <div class="mob-group-sep" id="mob-group-autre-sep">Informations du trajet</div>
+      <div class="form-row">
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1">
+          <label class="mob-lbl">Lieu de départ</label>
+          <input type="text" id="mob-dep" placeholder="Arrêt / Adresse de départ" oninput="updateMobPreview()"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1">
+          <label class="mob-lbl">Lieu d'arrivée</label>
+          <input type="text" id="mob-arr" placeholder="Arrêt / Adresse d'arrivée" oninput="updateMobPreview()"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1.2;min-width:120px">
+          <label class="mob-lbl">Date</label>
+          <input class="vol-date-input" type="text" id="mob-date" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('mob-date')"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+          <label class="mob-lbl">Départ</label>
+          <input type="time" id="mob-heure-dep" class="vol-time-input" oninput="calcMobDuree()"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+          <label class="mob-lbl">Arrivée</label>
+          <input type="time" id="mob-heure-arr" class="vol-time-input" oninput="calcMobDuree()"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <input type="text" id="mob-compagnie" placeholder="Opérateur / Conducteur" style="flex:2"/>
+        <input type="text" id="mob-numero"    placeholder="N° ligne / réservation"/>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         GROUPE : PASS — champs simples
+    ═══════════════════════════════════════════════ -->
+    <div class="mob-group mob-group-pass-styled" id="mob-group-pass" style="display:none">
+      <div class="mob-group-sep" style="color:var(--gold)">Informations du Pass</div>
+      <div class="form-row">
+        <select id="mob-pass-categorie" style="max-width:190px;flex:none">
+          <option value="rail">Pass Rail</option>
+          <option value="urban">Pass Transport Urbain</option>
+          <option value="vignette">Vignette / Péage</option>
+          <option value="autre">Autre pass</option>
+        </select>
+        <input type="text" id="mob-pass-nom" placeholder="Nom du pass (ex: JR Pass 30j, Navigo…)" style="flex:2"/>
+      </div>
+      <div class="form-row">
+        <div class="vol-date-field" style="flex:1;min-width:130px">
+          <label>Date de début</label>
+          <input class="vol-date-input" type="text" id="mob-pass-debut" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('mob-pass-debut')"/>
+        </div>
+        <div class="vol-date-field" style="flex:1;min-width:130px">
+          <label>Date de fin</label>
+          <input class="vol-date-input" type="text" id="mob-pass-fin" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('mob-pass-fin')"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:none;min-width:100px">
+          <label class="mob-lbl">Prix</label>
+          <input type="number" id="mob-pass-prix" placeholder="ex: 350" min="0" step="0.01" style="max-width:110px"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <input type="text" id="mob-pass-numero" placeholder="N° de pass / code activation (optionnel)"/>
+        <select id="mob-pass-statut" style="max-width:155px;flex:none">
+          <option>Activé</option>
+          <option>Non activé</option>
+          <option>En transit</option>
+        </select>
+      </div>
+      <!-- Zone de validité -->
+      <div class="form-row">
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1">
+          <label class="mob-lbl">Zone de validité</label>
+          <input type="text" id="mob-pass-zone" placeholder="ex: Toute la Corée, Région Kansai, Île-de-France…"/>
+        </div>
+      </div>
+      <!-- Note dédiée au Pass -->
+      <div class="form-row" id="mob-pass-note-row">
+        <textarea id="mob-pass-note" rows="2" placeholder="Notes (conseils d'utilisation…)" style="flex:1;resize:vertical;font-size:13px"></textarea>
+      </div>
+    </div>
+
+    <!-- ── Note (masquée pour pass) ── -->
+    <div class="form-row" id="mob-note-row" style="align-items:center;margin-top:2px">
+      <input type="text" id="mob-note" placeholder="Note (optionnel)" style="flex:1"/>
+    </div>
+    <!-- ── Actions (toujours visibles) ── -->
+    <div class="form-row" id="mob-action-row" style="align-items:center;margin-top:6px;justify-content:flex-end">
+      <button class="btn-primary" onclick="addMobilite()">+ Ajouter</button>
+      <button class="btn-ghost"   onclick="_resetTransportForm();toggleForm('form-mobilite')">Annuler</button>
+    </div>
+    <div class="form-row" style="align-items:center">
+      <label class="pdf-btn">Billet / Document
+        <input type="file" accept=".pdf,application/pdf" onchange="attachPdfToForm('mob-pdf',this)"/>
+      </label>
+      <div id="mob-pdf-badge" class="pdf-action-row"></div>
+      <input type="hidden" id="mob-pdf" value=""/>
+    </div>
+  </div>
+  <button class="add-trigger" id="btn-transport-picker" onclick="showTransportPicker()"><span class="trig-label">Trajet ou Pass</span></button>
+  <!-- Sélecteur Trajet / Pass — affiché au clic du bouton principal -->
+  <div id="transport-picker" class="transport-picker" style="display:none">
+    <button class="tpick-btn tpick-trajet" onclick="pickTransport('trajet')">
+      <div class="tpick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><rect x="3" y="6" width="18" height="13" rx="2"/><line x1="3" y1="11" x2="21" y2="11"/><circle cx="7.5" cy="20" r="1.5"/><circle cx="16.5" cy="20" r="1.5"/></svg></div>
+      <div class="tpick-text">
+        <div class="tpick-label">Ajouter un Trajet</div>
+        <div class="tpick-sub">Vol, Train, Bus, Bateau…</div>
+      </div>
+      <div class="tpick-arrow">›</div>
+    </button>
+    <button class="tpick-btn tpick-pass" onclick="pickTransport('pass')">
+      <div class="tpick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M2 12h20"/><circle cx="7" cy="12" r="1.5"/></svg></div>
+      <div class="tpick-text">
+        <div class="tpick-label">Ajouter un Pass</div>
+        <div class="tpick-sub">JR Pass, Navigo, Eurail…</div>
+      </div>
+      <div class="tpick-arrow">›</div>
+    </button>
+  </div>
+
+  <!-- Compatibilité anciens vols (données héritées affichées ici) -->
+  <div id="mob-legacy-vols-wrap" style="display:none">
+    <div class="section-divider"><span>Vols (données existantes)</span></div>
+    <div id="vols-list"></div>
+  </div>
+
+  <!-- Sélects cachés pour compatibilité -->
+  <div style="display:none">
+    <select id="vol-dep-jour"></select><select id="vol-dep-mois"></select>
+    <select id="vol-arr-jour"></select><select id="vol-arr-mois"></select>
+    <select id="tr-jour"></select><select id="tr-mois"></select>
+  </div>
+</section>
+<section class="section" id="tab-locations">
+  <div class="section-top">
+    <div class="section-top-title">Locations</div>
+    <div class="section-top-actions">
+      <button class="btn-edit-mode" id="bedit-locations" onclick="toggleEmode('locations')">Modifier</button>
+    </div>
+  </div>
+  <div class="edit-banner" id="ebanner-locations">Mode édition — cliquez sur Modifier pour éditer ou supprimer</div>
+  <div id="locations-list"></div>
+  <div class="add-form" id="form-location">
+    <div class="add-form-title">Ajouter une location</div>
+    <div class="form-row">
+      <select id="loc-type" style="max-width:170px;flex:none">
+        <option value="voiture">Voiture</option>
+        <option value="scooter">Scooter / Moto</option>
+        <option value="velo">Vélo</option>
+        <option value="camping">Camping-car / Van</option>
+        <option value="bateau">Bateau de plaisance</option>
+      </select>
+      <input type="text" id="loc-modele" placeholder="Modèle / Description (ex: Toyota Yaris)" style="flex:2"/>
+      <select id="loc-statut" style="max-width:150px;flex:none">
+        <option>Confirmée</option>
+        <option>À confirmer</option>
+        <option>En attente</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <input type="text" id="loc-loueur" placeholder="Loueur / Agence (ex: Hertz, Budget…)"/>
+      <input type="text" id="loc-resa"   placeholder="N° réservation"/>
+    </div>
+    <div class="form-row">
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:130px">
+        <label style="font-size:12px;color:var(--ink-muted)">Prise en charge</label>
+        <input class="vol-date-input" type="text" id="loc-date-dep"
+          placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('loc-date-dep')"/>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:130px">
+        <label style="font-size:12px;color:var(--ink-muted)">Restitution</label>
+        <input class="vol-date-input" type="text" id="loc-date-ret"
+          placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('loc-date-ret')"/>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;flex:none;min-width:100px">
+        <label style="font-size:12px;color:var(--ink-muted)">Heure restitution</label>
+        <input type="time" id="loc-heure-ret" class="vol-time-input"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <input type="text" id="loc-lieu-dep" placeholder="Lieu de prise en charge (ex: Aéroport CDG T2)"/>
+      <input type="text" id="loc-lieu-ret" placeholder="Lieu de restitution"/>
+    </div>
+    <div class="form-row">
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:120px">
+        <label style="font-size:12px;color:var(--ink-muted)">Caution</label>
+        <input type="text" id="loc-caution" placeholder="ex: 800 € pré-autorisés"/>
+      </div>
+      <input type="text" id="loc-note" placeholder="Note (assurance, plein, etc.)" style="flex:2"/>
+    </div>
+    <div class="form-row" style="align-items:center">
+      <button class="btn-primary" onclick="addLocation()">Ajouter la location</button>
+      <button class="btn-ghost"   onclick="_resetFormLocation();toggleForm('form-location')">Annuler</button>
+      <label class="pdf-btn" style="margin-left:auto">Contrat / Bon
+        <input type="file" accept=".pdf,application/pdf" onchange="attachPdfToForm('loc-pdf',this)"/>
+      </label>
+      <div id="loc-pdf-badge" class="pdf-action-row"></div>
+      <input type="hidden" id="loc-pdf" value=""/>
+    </div>
+  </div>
+  <button class="add-trigger" onclick="toggleForm('form-location')"><span class="trig-label">Ajouter une location</span></button>
+</section>
+<section class="section" id="tab-hotels">
+  <div class="section-top">
+    <div class="section-top-title">Mes hébergements</div>
+    <div class="section-top-actions">
+      <button class="btn-edit-mode" id="bedit-hotels" onclick="toggleEmode('hotels')">Modifier</button>
+    </div>
+  </div>
+  <div class="edit-banner" id="ebanner-hotels">Mode édition — cliquez sur l'icône d'un hébergement pour le modifier ou le supprimer</div>
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div style="font-size:14px;font-weight:500;color:var(--ink)">Répartition des nuitées</div>
+      <button class="btn-ghost" style="font-size:11px;padding:5px 10px" onclick="toggleForm('form-nuits')">Modifier le total</button>
+    </div>
+    <div class="add-form" id="form-nuits" style="padding:10px 0;margin:6px 0 0;border:none;box-shadow:none;background:transparent">
+      <div class="nuits-inline-form">
+        <label>Total nuitées :</label>
+        <input type="number" id="nuits-total-input" min="1" max="365" value="30"/>
+        <button class="btn-primary" style="padding:7px 14px;font-size:12px" onclick="setTotalNuits()">Valider</button>
+        <button class="btn-ghost" style="padding:7px 10px;font-size:12px" onclick="toggleForm('form-nuits')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+    </div>
+    <div class="nights-tl" id="nights-timeline"></div>
+    <div id="nights-legend" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px"></div>
+  </div>
+  <div class="section-divider"><span>Hébergements</span></div>
+  <div id="hotels-list"></div>
+  <div class="add-form" id="form-hotel">
+    <div class="add-form-title">Ajouter un hébergement</div>
+    <div class="magic-addr-wrap">
+      <div class="magic-addr-label">Coller l'adresse complète <span style="font-weight:400;text-transform:none;letter-spacing:0">(ex: Google Maps)</span></div>
+      <div class="magic-addr-row">
+        <input type="text" id="ht-magic-input" class="magic-addr-input" placeholder="ex: Keio Plaza Hotel, 2-2-1 Nishishinjuku, Shinjuku, Tokyo"/>
+        <button class="magic-addr-btn" id="ht-magic-btn" type="button" onclick="parseMagicAddress('hotel')">Parser</button>
+      </div>
+      <div class="magic-addr-result" id="ht-magic-result"></div>
+    </div>
+    <div class="form-row">
+      <input type="text" id="ht-nom" placeholder="Nom de l'hébergement (ex: Hôtel Keio)" style="flex:1"/>
+    </div>
+    <div class="form-row">
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px">
+        <label style="font-size:12px;color:var(--ink-muted)">Check-in <span style="font-weight:400;color:var(--ink-hint)">(JJ/MM/AAAA)</span></label>
+        <input type="text" id="ht-ci" placeholder="JJ/MM/AAAA" style="flex:1" class="cal-trigger" readonly onclick="openCalendar('ht-ci')" oninput="autoHotel('ci')"/>
+        <span class="auto-hint" id="hint-ht-ci">Calculé</span>
+        <!-- Champs cachés gardés pour compatibilité avec le code existant -->
+        <select id="ht-ci-jour" style="display:none"></select>
+        <select id="ht-ci-mois" style="display:none"></select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px">
+        <label style="font-size:12px;color:var(--ink-muted)">Check-out <span style="font-weight:400;color:var(--ink-hint)">(JJ/MM/AAAA)</span></label>
+        <input type="text" id="ht-co" placeholder="JJ/MM/AAAA" style="flex:1" class="cal-trigger" readonly onclick="openCalendar('ht-co')" oninput="autoHotel('co')"/>
+        <span class="auto-hint" id="hint-ht-co">Calculé</span>
+        <select id="ht-co-jour" style="display:none"></select>
+        <select id="ht-co-mois" style="display:none"></select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex:none">
+        <label style="font-size:12px;color:var(--ink-muted)">Nuits</label>
+        <input type="number" id="ht-nuits" placeholder="—" style="max-width:70px;min-width:60px;flex:none" oninput="autoHotel('nuits')"/>
+        <span class="auto-hint" id="hint-ht-nuits">Calculé</span>
+      </div>
+    </div>
+    <div class="form-row">
+      <input type="text" id="ht-type" placeholder="Type (ex: Chambre double)"/>
+      <input type="text" id="ht-resa" placeholder="N° de réservation"/>
+      <button class="btn-primary" onclick="addHotel()">Ajouter</button>
+      <button class="btn-ghost" onclick="toggleForm('form-hotel')">Annuler</button>
+    </div>
+    <!-- ── Bloc Adresse structuré ── -->
+    <div class="addr-block" id="ht-addr-block">
+      <div class="addr-block-header">
+        <span class="addr-block-label">Adresse</span>
+      </div>
+      <div class="addr-grid">
+        <!-- Pays (requis) -->
+        <div class="addr-field">
+          <label>Pays <span class="required-star">*</span></label>
+          <select id="ht-pays" class="pays-select" onchange="onPaysFormChange('ht', this.value)">
+            <option value="">— Choisir un pays —</option>
+          </select>
+        </div>
+        <!-- Ville -->
+        <div class="addr-field">
+          <label>Ville</label>
+          <div class="ac-wrap" style="position:relative">
+            <input type="text" id="ht-ville-addr" placeholder="Tokyo, Paris…"
+              autocomplete="off" oninput="onHotelVilleAddrInput(this.value)"
+              style="padding:7px 10px;font-size:12px;font-family:'DM Sans',sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);color:var(--ink);outline:none;transition:border-color .15s;width:100%"/>
+            <div class="ac-list" id="ac-ht-ville-addr" style="position:absolute;top:100%;left:0;right:0;z-index:700"></div>
+          </div>
+        </div>
+        <!-- Code Postal -->
+        <div class="addr-field">
+          <label>Code Postal</label>
+          <input type="text" id="ht-cp" placeholder="75001, 160-0022…"/>
+        </div>
+        <!-- Rue / N° -->
+        <div class="addr-field">
+          <label>Rue / N°</label>
+          <div style="position:relative">
+            <input type="text" id="ht-rue" placeholder="1-2-3 Shinjuku…"
+              autocomplete="off" oninput="htAdresseInput(this.value)"/>
+            <div id="ht-adresse-suggestions"
+              style="display:none;position:absolute;top:100%;left:0;right:0;z-index:700;
+              background:var(--surface);border:1px solid var(--border);border-top:none;
+              border-radius:0 0 var(--r-sm) var(--r-sm);box-shadow:var(--shadow-md);
+              max-height:160px;overflow-y:auto"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Bouton Vérifier + résultat -->
+      <button class="btn-verify-addr" id="ht-verify-btn"
+        type="button" onclick="verifierAdresse('hotel')">
+        Vérifier l'adresse
+      </button>
+      <div class="addr-result-badge" id="ht-addr-result"></div>
+    </div>
+    <!-- Coords cachées -->
+    <input type="hidden" id="ht-adresse-lat" value=""/>
+    <input type="hidden" id="ht-adresse-lng" value=""/>
+    <!-- Champ ville principal (maintenu pour compatibilité addHotel) -->
+    <input type="hidden" id="ht-ville" value=""/>
+    <div class="form-row" style="align-items:center">
+      <label class="pdf-btn">Confirmation / Bon
+        <input type="file" accept=".pdf,application/pdf" onchange="attachPdfToForm('hotel-pdf',this)"/>
+      </label>
+      <span id="hotel-pdf-badge"></span>
+      <input type="hidden" id="hotel-pdf" value=""/>
+    </div>
+  </div>
+  <button class="add-trigger" onclick="toggleForm('form-hotel')"><span class="trig-label">Ajouter un hébergement</span></button>
+</section>
+<section class="section" id="tab-lieux">
+  <div class="section-top">
+    <div class="section-top-title">Lieux à visiter</div>
+    <div class="section-top-actions">
+      <button class="btn-edit-mode" id="bedit-lieux" onclick="toggleEmode('lieux')">Modifier</button>
+    </div>
+  </div>
+  <div class="edit-banner" id="ebanner-lieux">Mode édition — cliquez sur l'icône d'une carte pour modifier ou supprimer ce lieu</div>
+  <div class="places-controls" id="places-filter-bar">
+    <button class="filter-btn active" onclick="filterPlaces('Tous',this)">Tous</button>
+  </div>
+  <div class="add-form" id="form-lieu">
+    <div class="add-form-title">Ajouter un lieu</div>
+    <div class="magic-addr-wrap">
+      <div class="magic-addr-label">Coller l'adresse complète <span style="font-weight:400;text-transform:none;letter-spacing:0">(ex: Google Maps)</span></div>
+      <div class="magic-addr-row">
+        <input type="text" id="lieu-magic-input" class="magic-addr-input" placeholder="ex: Fushimi Inari-taisha, 68 Fukakusa Yabunouchicho, Fushimi, Kyoto"/>
+        <button class="magic-addr-btn" id="lieu-magic-btn" type="button" onclick="parseMagicAddress('lieu')">Parser</button>
+      </div>
+      <div class="magic-addr-result" id="lieu-magic-result"></div>
+    </div>
+    <div class="form-row">
+      <input type="text" id="lieu-emoji" placeholder="Emoji (⛩)" style="max-width:80px"/>
+      <input type="text" id="lieu-nom" placeholder="Nom du lieu"/>
+    </div>
+    <div class="form-row">
+      <div class="ac-wrap" style="flex:1;position:relative">
+        <input type="text" id="lieu-ville" placeholder="Ville (ex: Tokyo, Kyoto…)"
+          autocomplete="off" list="lieu-ville-datalist"
+          oninput="onLieuVilleInput(this.value)"/>
+        <datalist id="lieu-ville-datalist"></datalist>
+      </div>
+      <input type="text" id="lieu-categorie" placeholder="Catégorie"
+        list="lieu-cat-datalist" autocomplete="off" style="flex:1"/>
+      <datalist id="lieu-cat-datalist">
+        <option value="Temples">
+        <option value="Parcs">
+        <option value="Randonnées">
+        <option value="Restaurants">
+        <option value="Musées">
+        <option value="Shopping">
+        <option value="Onsen">
+        <option value="Châteaux">
+        <option value="Plages">
+        <option value="Points de vue">
+        <option value="Marchés">
+        <option value="Galeries">
+      </datalist>
+    </div>
+    <div class="form-row">
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
+        <label style="font-size:11px;color:var(--ink-muted)">Ouverture</label>
+        <input type="text" id="lieu-ouverture" placeholder="09h00"
+          class="cal-trigger" readonly
+          onclick="openTimePicker('lieu-ouverture','Heure d\'ouverture')"/>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
+        <label style="font-size:11px;color:var(--ink-muted)">Fermeture</label>
+        <input type="text" id="lieu-fermeture" placeholder="18h00"
+          class="cal-trigger" readonly
+          onclick="openTimePicker('lieu-fermeture','Heure de fermeture')"/>
+      </div>
+    </div>
+    <!-- ── Bloc Adresse structuré ── -->
+    <div class="addr-block" id="lieu-addr-block">
+      <div class="addr-block-header">
+        <span class="addr-block-label">Adresse <span style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink-hint)">(optionnel)</span></span>
+      </div>
+      <div class="addr-grid">
+        <div class="addr-field">
+          <label>Pays</label>
+          <select id="lieu-pays" class="pays-select" onchange="onPaysFormChange('lieu', this.value)">
+            <option value="">— Choisir un pays —</option>
+          </select>
+        </div>
+        <!-- Ville déjà saisie au-dessus — on synchronise -->
+        <div class="addr-field">
+          <label>Ville</label>
+          <input type="text" id="lieu-ville-addr" placeholder="Tokyo, Kyoto…"
+            autocomplete="off" oninput="syncLieuVille(this.value)"/>
+        </div>
+        <div class="addr-field">
+          <label>Code Postal</label>
+          <input type="text" id="lieu-cp" placeholder="75001, 604-8344…"/>
+        </div>
+        <div class="addr-field">
+          <label>Rue / N°</label>
+          <input type="text" id="lieu-rue" placeholder="ex: 1 Rue de Rivoli"/>
+        </div>
+      </div>
+      <button class="btn-verify-addr" id="lieu-verify-btn"
+        type="button" onclick="verifierAdresse('lieu')">
+        Vérifier l'adresse
+      </button>
+      <div class="addr-result-badge" id="lieu-addr-result"></div>
+    </div>
+    <input type="hidden" id="lieu-adresse-lat" value=""/>
+    <input type="hidden" id="lieu-adresse-lng" value=""/>
+    <div class="form-row">
+      <input type="text" id="lieu-note" placeholder="Note / conseil (optionnel)" style="flex:1"/>
+    </div>
+    <div class="form-row" style="align-items:center">
+      <button class="btn-primary" onclick="addLieu()">Ajouter</button>
+      <button class="btn-ghost" onclick="toggleForm('form-lieu')">Annuler</button>
+      <label class="pdf-btn" style="margin-left:auto">PDF
+        <input type="file" accept=".pdf,application/pdf" onchange="attachPdfToForm('lieu-pdf',this)"/>
+      </label>
+      <span id="lieu-pdf-badge"></span>
+      <input type="hidden" id="lieu-pdf" value=""/>
+    </div>
+  </div>
+  <div class="places-grid" id="places-grid"></div>
+  <div id="places-empty" class="empty-state" style="display:none"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg></div><div>Aucun lieu dans cette catégorie</div></div>
+  <button class="add-trigger" onclick="toggleForm('form-lieu')"><span class="trig-label">Ajouter un lieu</span></button>
+</section>
+<section class="section" id="tab-timeline">
+  <div class="section-top">
+    <div class="section-top-title">Planning du voyage</div>
+  </div>
+  <div id="timeline-container"></div>
+</section>
+<section class="section" id="tab-alertes">
+  <div class="section-top">
+    <div class="section-top-title">Alertes &amp; Budget</div>
+    <button class="btn-ghost" style="padding:5px 12px;font-size:12px" onclick="if(window.SmartAlerts)SmartAlerts.refresh()">↻ Actualiser</button>
+  </div>
+  <div id="smart-alerts-panel"></div>
+</section>
+<section class="section" id="tab-budget">
+  <!-- Bouton Équilibres — visible si voyage de groupe -->
+  <div id="budget-groupe-btn-wrap" style="display:none">
+    <button class="btn-groupe-equilibres" onclick="openGroupBalances()">
+      <span class="bge-icon"><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' width='18' height='18'><path d='M6 3h12M12 3v18M3 9l9 2 9-2M5 15l7 3 7-3'/></svg></span>
+      <span>
+        <div>Équilibres du groupe</div>
+        <div class="bge-sub">Voir qui doit quoi à qui</div>
+      </span>
+    </button>
+  </div>
+  <div class="budget-grid">
+    <div class="metric-tile"><div class="metric-label">Budget</div><div class="metric-value" id="m-budget">0 €</div></div>
+    <div class="metric-tile"><div class="metric-label">Dépensé</div><div class="metric-value expense" id="m-spent">0 €</div></div>
+    <div class="metric-tile"><div class="metric-label">Restant</div><div class="metric-value safe" id="m-remaining">0 €</div></div>
+  </div>
+  <div class="progress-wrap"><div class="progress-fill" id="budget-bar" style="width:0%"></div></div>
+  <div class="progress-label"><span>0 €</span><span id="budget-pct-label">0% utilisé</span><span id="budget-max-label">0 €</span></div>
+  <div class="budget-input-row">
+    <label>Mon budget :</label>
+    <input type="number" id="budget-input" placeholder="ex: 3000" min="0"/>
+    <button class="btn-primary" onclick="setBudget()">Définir</button>
+  </div>
+  <div class="section-divider"><span>Dépenses par catégorie</span></div>
+  <div class="card"><div id="cat-breakdown"><div class="empty-state" style="padding:16px 0"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg></div><div>Aucune dépense enregistrée</div></div></div></div>
+  <div class="section-divider"><span>Ajouter une transaction</span></div>
+  <div class="card" style="padding:16px 20px">
+    <div class="form-row">
+      <input type="text" id="tx-desc" placeholder="Description (ex: Ramen Ichiran)" style="flex:2"/>
+      <input type="number" id="tx-amount" placeholder="Montant" min="0" step="0.01"/>
+      <select id="tx-devise" style="max-width:130px;flex:none">
+        <option value="EUR">€ Euro</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <select id="tx-cat">
+        <option value="🍱 Repas">Repas</option>
+        <option value="🚉 Transport">Transport</option>
+        <option value="🏯 Hébergement">Hébergement</option>
+        <option value="🎌 Activités">Activités</option>
+        <option value="🛍 Shopping">Shopping</option>
+        <option value="💊 Santé">Santé</option>
+        <option value="📱 Divers">Divers</option>
+      </select>
+      <input type="date" id="tx-date"/>
+      <button class="btn-primary" onclick="addTransaction()">Ajouter</button>
+    </div>
+    <!-- Champs Groupe (conditionnels) -->
+    <div class="tx-group-fields" id="tx-group-fields">
+      <div class="tx-paidby-row">
+        <label class="tx-group-label">Payé par :</label>
+        <select id="tx-paidby"></select>
+      </div>
+      <div>
+        <span class="tx-group-label">Pour qui :</span>
+        <div class="tx-forwho-grid" id="tx-forwho-grid"></div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--ink-hint);margin-top:4px" id="tx-hint"><span id="tx-hint-text">La devise locale est convertie en € au taux temps réel.</span></div>
+  </div>
+  <div class="section-divider"><span>Historique</span></div>
+  <div class="card" style="padding:8px 18px"><div class="tx-list" id="tx-list"><div class="empty-state"><div class="empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v2m0 8v2m-4-4h8"/></svg></div><div>Aucune transaction</div></div></div></div>
+</section>
+<section class="section" id="tab-convertir">
+  <div class="section-top">
+    <div class="section-top-title" id="conv-section-title">Convertisseur</div>
+  </div>
+
+  <!-- Hero : devise destination + taux -->
+  <div class="conv-hero">
+    <!-- Sélecteur de devise source -->
+    <div class="conv-devise-row">
+      <label>Devise locale :</label>
+      <select id="conv-devise-select" onchange="onConvDeviseChange(this.value)">
+        <option value="JPY">¥ Yen (JPY)</option>
+      </select>
+    </div>
+    <!-- Contexte devise du voyage -->
+    <div id="conv-dest-badge"></div>
+    <!-- Taux principal -->
+    <div class="conv-rate-row">
+      <div>
+        <div class="conv-rate-main" id="conv-rate-display">1 € = … —</div>
+        <div class="conv-rate-inv" id="conv-rate-inv"></div>
+      </div>
+      <button class="conv-refresh-btn" onclick="fetchRate()" style="margin-left:auto">↻ Actualiser</button>
+    </div>
+    <div class="conv-rate-sub" id="conv-rate-info">Chargement du taux…</div>
+  </div>
+
+  <!-- Taux manuel (hors-ligne) -->
+  <div class="conv-manual-rate" id="conv-manual-wrap" style="display:none">
+    Hors-ligne — taux approximatif.
+    <span>Modifier :</span>
+    <span>1 € =</span>
+    <input type="number" id="conv-manual-input" min="0.0001" step="0.01"/>
+    <span id="conv-manual-cur">—</span>
+    <button onclick="applyManualRate()">Appliquer</button>
+  </div>
+
+  <!-- Calculatrice -->
+  <div class="conv-box">
+    <div class="conv-single-row">
+      <!-- Champ gauche -->
+      <div class="conv-field">
+        <div class="conv-label" id="conv-label-left">€ Euro</div>
+        <div style="position:relative">
+          <input class="conv-input" type="number" id="conv-left" placeholder="0" min="0" oninput="convertLeft()"/>
+          <span class="conv-currency" id="conv-sym-left">€</span>
+        </div>
+      </div>
+
+      <!-- Bouton interversion -->
+      <button class="conv-swap-center" onclick="swapConverter()" title="Intervertir">⇄</button>
+
+      <!-- Résultat -->
+      <div class="conv-field">
+        <div class="conv-label" id="conv-label-right">— Devise locale</div>
+        <div class="conv-result-box" id="conv-result-box">
+          <span class="conv-result-val" id="conv-result">—</span>
+          <span class="conv-result-cur" id="conv-sym-right">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Raccourcis contextuels -->
+    <div class="presets-wrap" id="conv-presets">
+      <span style="font-size:11px;color:var(--ink-hint);width:100%;margin-bottom:2px">Montants rapides :</span>
+    </div>
+  </div>
+
+  <!-- Table de référence -->
+  <div class="section-divider"><span>Table de référence</span></div>
+  <div class="card" style="padding:8px 18px" id="conv-ref-table"></div>
+</section>
+
+</div><!-- /tab-belt -->
+</main>
+    </div><!-- /voyage-sections -->
+
+  </div><!-- /voyage-content -->
+
+  <!-- Settings overlay — global, outside swipe area -->
+<div class="settings-overlay" id="settings-overlay" onclick="closeSettingsOnBg(event)">
+  <div class="settings-panel" id="settings-panel">
+    <button class="settings-close" onclick="closeSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <div class="settings-title">Paramètres</div>
+    <div class="settings-sub">Personnalise ton expérience Yume</div>
+
+    <!-- Profil voyageur -->
+    <div class="settings-section-title">Profil voyageur</div>
+    <div class="profile-avatar-wrap">
+      <div>
+        <img class="profile-avatar" id="profile-avatar-img" src="" alt="Photo"
+          onclick="document.getElementById('profile-avatar-input').click()"
+          onerror="this.src=''" style="display:none"/>
+        <div id="profile-avatar-placeholder" onclick="document.getElementById('profile-avatar-input').click()"
+          style="width:56px;height:56px;border-radius:50%;background:var(--sakura-light);
+                 border:2.5px dashed var(--sakura);display:flex;align-items:center;justify-content:center;
+                 font-size:24px;cursor:pointer;flex-shrink:0;transition:opacity .15s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
+        <input type="file" id="profile-avatar-input" accept="image/*"
+          onchange="saveProfileAvatar(this)" style="display:none"/>
+        <div class="profile-avatar-label" onclick="document.getElementById('profile-avatar-input').click()">Changer</div>
+      </div>
+      <input class="profile-name-input" id="profile-name-input" type="text"
+        placeholder="Ton prénom (ex: Sophie)"
+        oninput="saveProfileName(this.value)"/>
+    </div>
+
+    <!-- Thèmes -->
+    <div class="settings-section-title">Thème de couleur</div>
+    <!-- Thème auto système -->
+    <div class="auto-theme-row">
+      <div>
+        <div style="font-size:13px;font-weight:500;color:var(--ink)">Suivre le thème du système</div>
+        <div style="font-size:11px;color:var(--ink-hint)">Bascule auto Clair / Sombre</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="auto-theme-toggle" onchange="toggleAutoTheme(this.checked)"/>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="theme-grid" id="theme-grid-manual">
+      <div class="theme-card theme-standard" data-theme="standard" onclick="applyTheme('standard')">
+        <div class="tc-check"></div>
+        <div class="tc-name">Standard</div>
+        <div class="tc-palette">
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+        </div>
+      </div>
+      <div class="theme-card theme-nature" data-theme="nature" onclick="applyTheme('nature')">
+        <div class="tc-check"></div>
+        <div class="tc-name">Nature</div>
+        <div class="tc-palette">
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+        </div>
+      </div>
+      <div class="theme-card theme-mer" data-theme="mer" onclick="applyTheme('mer')">
+        <div class="tc-check"></div>
+        <div class="tc-name">Mer</div>
+        <div class="tc-palette">
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+        </div>
+      </div>
+      <div class="theme-card theme-nuit" data-theme="nuit" onclick="applyTheme('nuit')">
+        <div class="tc-check"></div>
+        <div class="tc-name">Nuit</div>
+        <div class="tc-palette">
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fond d'écran -->
+    <div class="settings-section-title">Fond d'écran</div>
+    <div class="bg-section">
+      <div class="bg-mode-grid">
+        <div class="bg-mode-btn active" id="bg-mode-auto" onclick="setBgMode('auto')">
+          Auto
+        </div>
+        <div class="bg-mode-btn" id="bg-mode-manual" onclick="setBgMode('manual')">
+          Manuel
+        </div>
+        <div class="bg-mode-btn" id="bg-mode-none" onclick="setBgMode('none')">
+          Couleur
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--ink-hint);margin-bottom:10px" id="bg-mode-hint">
+        Auto : le fond correspond au thème sélectionné
+      </div>
+      <div class="bg-image-grid" id="bg-image-grid">
+        <div class="bg-img-card" id="bgcard-japon" data-img="./japon.jpg" onclick="setBgManual('./japon.jpg')">
+          <img src="./japon.jpg" alt="Japon" loading="lazy"/>
+          <div class="bic-label">Japon</div>
+          <div class="bic-check"></div>
+        </div>
+        <div class="bg-img-card" id="bgcard-mer" data-img="./mer.png" onclick="setBgManual('./mer.png')">
+          <img src="./mer.png" alt="Mer" loading="lazy"/>
+          <div class="bic-label">Mer</div>
+          <div class="bic-check"></div>
+        </div>
+        <div class="bg-img-card" id="bgcard-nature" data-img="./nature.png" onclick="setBgManual('./nature.png')">
+          <img src="./nature.png" alt="Nature" loading="lazy"/>
+          <div class="bic-label">Nature</div>
+          <div class="bic-check"></div>
+        </div>
+        <div class="bg-img-card" id="bgcard-nuit" data-img="./nuit.png" onclick="setBgManual('./nuit.png')">
+          <img src="./nuit.png" alt="Nuit" loading="lazy"/>
+          <div class="bic-label">Nuit étoilée</div>
+          <div class="bic-check"></div>
+        </div>
+      </div>
+      <!-- Curseurs luminosité + flou artistique -->
+      <div class="bg-slider-row" id="bg-sliders-wrap">
+        <div class="bg-slider-label">
+          <span>Luminosité</span>
+          <span id="bg-brightness-val">100%</span>
+        </div>
+        <input class="bg-range" type="range" id="bg-brightness-range"
+          min="20" max="100" value="100"
+          oninput="onBgBrightnessInput(this.value)"/>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-hint);margin-top:2px">
+          <span>Sombre</span><span>Normal</span>
+        </div>
+        <div class="bg-slider-label" style="margin-top:12px">
+          <span>Flou artistique</span>
+          <span id="bg-blur-val">0px</span>
+        </div>
+        <input class="bg-range" type="range" id="bg-blur-range"
+          min="0" max="20" value="0"
+          oninput="onBgBlurInput(this.value)"/>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-hint);margin-top:2px">
+          <span>Net</span><span>Flou max</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Données -->
+    <div class="settings-section-title">Mes données</div>
+    <button class="data-btn" onclick="exportData()">
+      <span class="db-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+      <span class="db-text">Exporter mes données
+        <span class="db-sub">Télécharge un fichier JSON de sauvegarde</span>
+      </span>
+    </button>
+    <button class="data-btn" onclick="document.getElementById('import-input').click()">
+      <span class="db-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+      <span class="db-text">Importer une sauvegarde
+        <span class="db-sub">Charge un fichier JSON précédemment exporté</span>
+      </span>
+    </button>
+    <input type="file" id="import-input" accept=".json,application/json"
+      onchange="importData(this)" style="display:none"/>
+    <button class="data-btn danger" onclick="resetApp()">
+      <span class="db-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></span>
+      <span class="db-text">Réinitialiser l'application
+        <span class="db-sub">Supprime toutes les données — irréversible</span>
+      </span>
+    </button>
+
+    <!-- Rappels -->
+    <div class="settings-section-title">Rappels de voyage</div>
+    <div class="reminder-section">
+      <div class="auto-theme-row" style="padding:8px 0">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--ink)">Rappel 24h avant le vol</div>
+          <div style="font-size:11px;color:var(--ink-hint)">Toast d'alerte la veille du départ</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="reminder-vol-toggle"
+            onchange="toggleReminder('vol',this.checked)"/>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="auto-theme-row" style="padding:8px 0">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--ink)">Rappel check-in hôtel</div>
+          <div style="font-size:11px;color:var(--ink-hint)">Alerte le jour du check-in</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="reminder-hotel-toggle"
+            onchange="toggleReminder('hotel',this.checked)"/>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- À propos -->
+    <div class="settings-section-title" style="margin-top:8px">À propos</div>
+    <div style="font-size:12px;color:var(--ink-muted);line-height:1.6">
+      <b style="font-family:'Noto Serif JP',serif;color:var(--sakura)">夢 Yume</b> — Tes voyages, ta mémoire.<br/>
+      Application hors-ligne · Données 100% locales · v3.0
+    </div>
+
+    <!-- Bouton Valider -->
+    <div class="settings-validate-bar">
+      <button class="btn-ghost settings-cancel-btn" onclick="cancelSettings()">Annuler</button>
+      <button class="btn-primary settings-validate-btn" onclick="validateSettings()">Valider les modifications</button>
+    </div>
+  </div>
+</div>
+
+    <!-- Belt des sections (Vols, Trains, etc.) -->
+<main class="app-content" style="flex:1;overflow-y:auto;padding-bottom:calc(80px + env(safe-area-inset-bottom,0px))">
+
+</div><!-- /page-voyage -->
+
+<!-- PAGE : CARTE DU VOYAGE -->
+<div class="spa-page" id="page-futur">
+  <!-- Topbar -->
+  <div id="tripmap-topbar">
+    <div id="tripmap-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z"/><line x1="9" y1="3" x2="9" y2="17"/><line x1="15" y1="6.5" x2="15" y2="20.5"/></svg> Carte du voyage</div>
+    <div id="tripmap-topbar-btns">
+      <button id="tripmap-geolocate-btn" onclick="tripmapGeolocate()" title="Ma position GPS">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+          <circle cx="12" cy="12" r="7" stroke-dasharray="2 3" opacity=".5"/>
+        </svg>
+      </button>
+      <button id="tripmap-recenter-btn" onclick="tripmapRecenter()" title="Recentrer sur tous les points">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><path d="M12 7a5 5 0 100 10A5 5 0 0012 7z" opacity=".3"/></svg>
+        Recentrer
+      </button>
+    </div>
+  </div>
+
+  <!-- Légende / filtres rapides -->
+  <div id="tripmap-legend-bar">
+    <button class="tmap-filter active" data-filter="all"        onclick="tripmapFilter('all')">Tout</button>
+    <button class="tmap-filter"        data-filter="hotels"     onclick="tripmapFilter('hotels')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><rect x="2" y="6" width="20" height="16" rx="2"/><path d="M2 12h20"/><rect x="7" y="16" width="3" height="6"/><rect x="14" y="16" width="3" height="6"/></svg> Logements</button>
+    <button class="tmap-filter"        data-filter="lieux"      onclick="tripmapFilter('lieux')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg> Activités</button>
+    <button class="tmap-filter"        data-filter="itineraire" onclick="tripmapFilter('itineraire')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M21 16l-3-8-3 3-5-5-3 3 2 3-4 2 1 2 5-1 1 3 3-1 1 3 3-3z"/></svg> Itinéraire</button>
+    <span id="tmap-active-count" style="display:none"></span>
+  </div>
+
+  <!-- Carte Leaflet dédiée -->
+  <div id="tripmap-wrap">
+    <div id="tripmap-leaflet"></div>
+    <!-- Placeholder si pas de voyage -->
+    <div id="tripmap-placeholder">
+      <div style="margin-bottom:12px;opacity:0.5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="36" height="36"><circle cx="12" cy="12" r="10"/><polygon points="12 2 14.5 9.5 22 12 14.5 14.5 12 22 9.5 14.5 2 12 9.5 9.5"/></svg></div>
+      <div style="font-size:15px;font-weight:500;color:var(--ink);margin-bottom:6px">Ouvre un voyage</div>
+      <div style="font-size:12px;color:var(--ink-muted)">Les hébergements et lieux à visiter<br>apparaîtront ici automatiquement.</div>
+    </div>
+  </div>
+
+  <!-- Liste des points sous la carte -->
+  <div id="tripmap-list-wrap">
+    <div id="tripmap-list-inner"></div>
+  </div>
+</div>
+
+<!-- PAGE : PROFIL -->
+<div class="spa-page" id="page-profil">
+
+  <div id="profil-topbar">Profil</div>
+
+  <div id="profil-scroll">
+
+    <!-- Hero : avatar centré + nom + stats -->
+    <div class="profil-hero">
+      <div class="profil-avatar-circle" onclick="document.getElementById('profil-avatar-input').click()" id="profil-avatar-display"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
+      <input type="file" id="profil-avatar-input" accept="image/*"
+        onchange="saveProfileAvatar(this)" style="display:none"/>
+      <div class="profil-name" id="profil-display-name">Voyageur</div>
+      <div class="profil-username" id="profil-display-username">@yume</div>
+      <div class="profil-stats-row">
+        <div class="profil-stat">
+          <span class="profil-stat-val" id="profil-stat-voyages">0</span>
+          <span class="profil-stat-lbl">voyages</span>
+        </div>
+        <div class="profil-stat">
+          <span class="profil-stat-val" id="profil-stat-pays">0</span>
+          <span class="profil-stat-lbl">pays</span>
+        </div>
+      </div>
+      <div class="profil-since" id="profil-since"></div>
+    </div>
+
+    <!-- Infos personnelles -->
+    <div class="profil-section">
+      <div class="profil-info-field">
+        <span class="profil-info-label">Prénom</span>
+        <input type="text" id="profil-fname" placeholder="Ajouter"
+          style="border:none;background:transparent;font-size:15px;color:var(--ink-muted);font-family:'DM Sans',sans-serif;outline:none;min-width:0;text-align:right;flex:1"
+          oninput="saveProfileField('fname',this.value)"/>
+      </div>
+      <div class="profil-info-field">
+        <span class="profil-info-label">Email</span>
+        <input type="email" id="profil-email" placeholder="Ajouter"
+          style="border:none;background:transparent;font-size:15px;color:var(--ink-muted);font-family:'DM Sans',sans-serif;outline:none;min-width:0;text-align:right;flex:1"
+          oninput="saveProfileField('email',this.value)"/>
+      </div>
+      <div class="profil-info-field">
+        <span class="profil-info-label">Téléphone</span>
+        <input type="tel" id="profil-phone" placeholder="Ajouter"
+          style="border:none;background:transparent;font-size:15px;color:var(--ink-muted);font-family:'DM Sans',sans-serif;outline:none;min-width:0;text-align:right;flex:1"
+          oninput="saveProfileField('phone',this.value)"/>
+      </div>
+    </div>
+
+    <!-- Menu iOS style -->
+    <div class="profil-section">
+
+      <!-- Paramètres -->
+      <div class="profil-row" onclick="toggleProfilSettings()">
+        <div class="profil-row-icon bg-gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+        <div class="profil-row-body">
+          <div class="profil-row-label">Paramètres</div>
+        </div>
+        <span class="profil-row-chevron" id="profil-settings-chevron">›</span>
+      </div>
+
+      <!-- Langue -->
+      <div class="profil-row">
+        <div class="profil-row-icon bg-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></div>
+        <div class="profil-row-body">
+          <div class="profil-row-label">Langue</div>
+        </div>
+        <select class="lang-select" onchange="saveProfileField('lang',this.value)">
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+        </select>
+        <span class="profil-row-chevron">›</span>
+      </div>
+
+      <!-- Aide -->
+      <div class="profil-row" onclick="alert('Aide à venir dans une prochaine mise à jour.')">
+        <div class="profil-row-icon bg-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+        <div class="profil-row-body">
+          <div class="profil-row-label">Aide</div>
+          <div class="profil-row-sub">FAQ et support</div>
+        </div>
+        <span class="profil-row-chevron">›</span>
+      </div>
+
+    </div><!-- /profil-section menu -->
+
+    <!-- Déconnexion -->
+    <button class="profil-logout-btn" onclick="if(confirm('Réinitialiser le profil ?')) resetData()">
+      Déconnexion
+    </button>
+
+    <div style="text-align:center;padding:8px 0 4px;font-size:11px;color:var(--ink-hint)">
+      Yume 夢 · v3.0 · Données 100% locales
+    </div>
+
+  </div><!-- /profil-scroll -->
+</div><!-- /page-profil -->
+
+<!-- ══ MODAL PARAMÈTRES PROFIL (overlay global) ══ -->
+<div id="settings-modal-overlay" onclick="closeSettingsModal(event)">
+  <div class="settings-modal-box" id="settings-modal-box">
+    <!-- Header -->
+    <div class="settings-modal-header">
+      <span class="settings-modal-title">Paramètres</span>
+      <button class="settings-modal-close" onclick="closeSettingsModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+
+    <!-- Thème -->
+    <div class="psp-label">Thème</div>
+    <div class="theme-grid" id="psp-theme-grid">
+      <div class="theme-chip tc-standard active" data-theme="standard" onclick="applyThemeFromProfil('standard')">Standard</div>
+      <div class="theme-chip tc-nature" data-theme="nature" onclick="applyThemeFromProfil('nature')">Nature</div>
+      <div class="theme-chip tc-mer"    data-theme="mer"    onclick="applyThemeFromProfil('mer')">Mer</div>
+      <div class="theme-chip tc-nuit"   data-theme="nuit"   onclick="applyThemeFromProfil('nuit')">Nuit</div>
+    </div>
+
+    <!-- Données -->
+    <div class="psp-label" style="margin-top:18px">Données</div>
+    <button class="data-btn" onclick="exportData()">
+      <span class="db-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+      <span class="db-text">Exporter mes données<span class="db-sub">Télécharge un fichier JSON de sauvegarde</span></span>
+    </button>
+    <button class="data-btn" onclick="document.getElementById('import-input-modal').click()">
+      <span class="db-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+      <span class="db-text">Importer une sauvegarde<span class="db-sub">Charge un fichier JSON précédemment exporté</span></span>
+    </button>
+    <input type="file" id="import-input-modal" accept=".json,application/json" onchange="importData(this)" style="display:none"/>
+    <button class="data-btn danger" onclick="if(confirm('Réinitialiser toutes les données ?')) resetData()">
+      <span class="db-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></span>
+      <span class="db-text">Réinitialiser<span class="db-sub">Supprime toutes les données — irréversible</span></span>
+    </button>
+  </div>
+</div>
+</div><!-- /spa-root -->
+
+</div><!-- /spa-root -->
+
+<!-- ══ BARRE D'ONGLETS ══ -->
+<nav id="tab-bar">
+  <button class="tb-item active" data-page="home" onclick="showPage('home',this)">
+    <svg viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><polyline points="9 21 9 12 15 12 15 21"/></svg>
+    <span>Accueil</span>
+  </button>
+  <button class="tb-item" data-page="voyage" onclick="showPage('voyage',this)">
+    <svg viewBox="0 0 24 24"><path d="M22 16.5c0 2.5-4.5 5-10 5S2 19 2 16.5"/><path d="M2 16.5c0-1.5 1.5-3 4-4L12 3l6 9.5c2.5 1 4 2.5 4 4z"/></svg>
+    <span>Voyage</span>
+  </button>
+  <button class="tb-item" data-page="futur" onclick="showPage('futur',this)">
+    <svg viewBox="0 0 24 24"><path d="M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z"/><line x1="9" y1="3" x2="9" y2="17"/><line x1="15" y1="6.5" x2="15" y2="20.5"/></svg>
+    <span>Carte</span>
+  </button>
+  <button class="tb-item" data-page="profil" onclick="showPage('profil',this)">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+    <span>Profil</span>
+  </button>
+</nav>
+
+
+
+<div class="tp-overlay" id="tp-overlay">
+  <div class="tp-sheet">
+    <div class="tp-header">
+      <div class="tp-title" id="tp-title">Heure</div>
+      <button class="modal-close" onclick="closeTimePicker()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="tp-display" id="tp-display">--:--</div>
+    <div class="tp-mode-hint" id="tp-mode-hint">Sélectionne l'heure</div>
+    <div class="tp-grid" id="tp-grid"></div>
+    <div class="tp-actions">
+      <button class="btn-ghost" onclick="closeTimePicker()">Annuler</button>
+      <button class="btn-primary" id="tp-confirm" onclick="confirmTimePicker()" disabled>Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CALENDAR PICKER ═══ -->
+<div class="cal-overlay" id="cal-overlay">
+  <div class="cal-box">
+    <div class="cal-nav">
+      <button class="cal-nav-btn" onclick="calMove(-1)">‹</button>
+      <span class="cal-month-label" id="cal-month-label" onclick="calToggleYearView()">—</span>
+      <button class="cal-nav-btn" onclick="calMove(1)">›</button>
+    </div>
+    <div id="cal-body"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <button class="btn-ghost" style="padding:7px 14px;font-size:12px" onclick="closeCalendar()">Annuler</button>
+      <button class="btn-primary" style="padding:7px 14px;font-size:12px" onclick="closeCalendar()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══ MODAL ÉDITION GLOBALE ══ -->
+<div id="editModal" class="modal-overlay" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(26,26,46,.45);align-items:center;justify-content:center">
+  <div id="editModalInner" class="modal" style="width:100%;max-width:min(560px,96vw);max-height:90vh;overflow-y:auto;padding:24px 26px;background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow-xl)"></div>
+</div>
+
+<!-- ══ TOASTS ══ -->
+<div id="toast-container" style="position:fixed;bottom:calc(76px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:9000;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none"></div>
+
+
+<!-- Backdrop for closing edit mode -->
+<div id="edit-mode-backdrop"></div>
+
+<!-- ═══════════════════════════════════════════════════════
+     TRIP MAP — Carte intelligente du voyage
+     Géocode hôtels + lieux via Nominatim (OSM), place des
+     marqueurs Leaflet, détecte iOS pour Maps natif.
+════════════════════════════════════════════════════════ -->
+
+<!-- ══ TRANSPORT CHOICE MODAL ══ -->
+<div id="transport-choice-overlay" onclick="closeTransportChoiceOnBg(event)">
+  <div id="transport-choice-box">
+    <div class="tc-header">
+      <div class="tc-title">Ajouter à Transports</div>
+      <div class="tc-sub">Choisissez le type à ajouter</div>
+    </div>
+    <div class="tc-cards">
+      <button class="tc-card tc-card-trajet" onclick="pickTransport('trajet')">
+        <div class="tc-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><rect x="3" y="6" width="18" height="13" rx="2"/><line x1="3" y1="11" x2="21" y2="11"/><circle cx="7.5" cy="20" r="1.5"/><circle cx="16.5" cy="20" r="1.5"/></svg></div>
+        <div class="tc-card-body">
+          <div class="tc-card-label">Ajouter un Trajet</div>
+          <div class="tc-card-desc">Vol, Train, Bus, Bateau…</div>
+        </div>
+        <div class="tc-card-arrow">›</div>
+      </button>
+      <button class="tc-card tc-card-pass" onclick="pickTransport('pass')">
+        <div class="tc-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M2 12h20"/><circle cx="7" cy="12" r="1.5"/></svg></div>
+        <div class="tc-card-body">
+          <div class="tc-card-label">Ajouter un Pass</div>
+          <div class="tc-card-desc">JR Pass, Navigo, Eurail…</div>
+        </div>
+        <div class="tc-card-arrow">›</div>
+      </button>
+    </div>
+    <button class="tc-cancel" onclick="closeTransportChoiceModal()">Annuler</button>
+  </div>
+</div>
+
+<!-- ══ OVERLAY MODAL FORMULAIRES ══ -->
+<div id="form-modal-overlay" onclick="closeFormModalOnBg(event)"></div>
+
+<!-- ══════════════════════════════════════════════════════════
+     MODULES — Phase A · Ordre de chargement strict
+════════════════════════════════════════════════════════════ -->
+
+<!-- 1. Données statiques (zéro dépendance) -->
+<script src="./data/geo-defaults.js"></script>
+<script src="./data/transport-refs.js"></script>
+<script src="./data/finance-data.js"></script>
+
+<!-- 2. Store centralisé -->
+<script src="./js/state.js"></script>
+
+<!-- 3. Cartes (Leaflet chargé par map-world.js) -->
+<script src="./js/map-world.js"></script>
+<script src="./js/map-trip.js"></script>
+
+<!-- 4. Application principale -->
+<script src="./js/app.js"></script>
+
+<!-- 5. Phase B — Routing ferroviaire + Timeline -->
+<script src="./js/rail-router.js"></script>
+<script src="./js/timeline.js"></script>
+
+<!-- 6. Phase D — Assistant intelligent -->
+<script src="./js/smart-alerts.js"></script>
+
+<!-- 7. Phase E — Service Worker (hors-ligne) -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('./sw.js').then(function(reg) {
+      // Mise à jour silencieuse
+      reg.addEventListener('updatefound', function() {
+        var nw = reg.installing;
+        if (nw) {
+          nw.addEventListener('statechange', function() {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              nw.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        }
+      });
+    }).catch(function(e) {
+      console.warn('[SW] Enregistrement échoué:', e);
+    });
+  });
+  // Badge hors-ligne
+  window.addEventListener('online',  function(){ document.body.classList.remove('is-offline'); });
+  window.addEventListener('offline', function(){ document.body.classList.add('is-offline'); });
+  if (!navigator.onLine) document.body.classList.add('is-offline');
+}
+</script>
+
+</body>
+</html>
