@@ -817,7 +817,8 @@ var NAV_BLOCKS = [
 ];
 // Sous-vues regroupées sous l'item unique « Déplacements »
 var _DEPL = ['pass','mobilite','locations'];
-var _deplActive = 'mobilite';   // dernière sous-vue déplacement visitée
+var _deplActive = 'pass';   // partie déplacement par défaut : Pass
+var _lastNavId = null;      // dernière sous-section nav (optimisation rebuild)
 
 // ══════════════════════════════════════════════════════════════════════
 // NAVIGATION À DEUX NIVEAUX (refonte ergonomique)
@@ -984,30 +985,12 @@ function mobileGoSub(s){
   _buildMobileNav();
 }
 
-// ── SWIPE VERTICAL MAGNÉTIQUE (Pass / Transport / Location) ───────────
-// En mobile, dans « Déplacements », les 3 parties sont empilées
-// verticalement avec accrochage (scroll-snap). Un indicateur sous la
-// barre indique la partie courante (soulignée).
+// ── INDICATEUR DE PARTIES (Pass / Transport / Location) ──────────────
+// Le voyage se parcourt entièrement en swipe HORIZONTAL via le belt.
+// L'indicateur sous la barre montre la partie déplacement courante et
+// permet d'y sauter directement.
 function _isMobileView(){
   return !(window.matchMedia && window.matchMedia('(min-width:1024px)').matches);
-}
-function _scrollDeplTo(sec, smooth){
-  var sections = document.getElementById('voyage-sections');
-  var el = document.getElementById('tab-' + sec);
-  if(!sections || !el) return;
-  var delta = el.getBoundingClientRect().top - sections.getBoundingClientRect().top;
-  sections.scrollTo({ top: sections.scrollTop + delta, behavior: smooth ? 'smooth' : 'auto' });
-}
-function _enterDeplMode(target){
-  var sections = document.getElementById('voyage-sections');
-  if(!sections) return;
-  sections.classList.add('depl-mode');
-  // Attendre le reflow (colonne) avant de positionner sur la bonne partie
-  requestAnimationFrame(function(){ _scrollDeplTo(target || _deplActive || 'mobilite', false); });
-}
-function _leaveDeplMode(){
-  var sections = document.getElementById('voyage-sections');
-  if(sections) sections.classList.remove('depl-mode');
 }
 // Met à jour uniquement le soulignement des parties (sans reconstruire la nav)
 function _syncDeplParts(){
@@ -1015,10 +998,9 @@ function _syncDeplParts(){
     b.classList.toggle('active', b.getAttribute('data-part') === _deplActive);
   });
 }
-// Tap sur une partie (Pass / Transport / Location) → scroll accroché
+// Tap sur une partie (Pass / Transport / Location) → navigation horizontale directe
 function mobileGoPart(s){
-  _deplActive = s; _currentSection = s;
-  _scrollDeplTo(s, true);
+  goToSection(s);
   _syncDeplParts();
 }
 
@@ -1051,6 +1033,9 @@ function goToSection(id, btn){
     if(mapHost){
       mapHost.style.display = '';
       mapHost.classList.add('is-visible');
+      // Mobile : carte en grand format par défaut
+      if(_isMobileView()) mapHost.classList.add('is-full');
+      else mapHost.classList.remove('is-full');
       if(typeof initTripMap === 'function') initTripMap();
       setTimeout(function(){
         if(window._tripmapInstance && window._tripmapInstance.invalidateSize) window._tripmapInstance.invalidateSize();
@@ -1062,15 +1047,7 @@ function goToSection(id, btn){
 
   if(mapHost){ mapHost.style.display = 'none'; mapHost.classList.remove('is-visible'); }
   if(sections) sections.style.display = '';
-
-  var isDepl = (_DEPL.indexOf(id) !== -1);
-  if(isDepl && _isMobileView()){
-    switchSection(id, btn);     // rend la partie + état actif
-    _enterDeplMode(id);         // empile verticalement + accroche sur la partie
-  } else {
-    _leaveDeplMode();
-    switchSection(id, btn);
-  }
+  switchSection(id, btn);
   if(typeof _buildMobileNav === 'function') _buildMobileNav();
 }
 
@@ -1262,12 +1239,14 @@ function _adaptSectionsForTrip(tid){
           document.querySelectorAll('.vsn-item').forEach(function(b){
             b.classList.toggle('active', b.getAttribute('data-tab') === navId);
           });
-          var _vs = document.getElementById('voyage-sections');
-          if(_vs && _vs.classList.contains('depl-mode')){
-            if(typeof _syncDeplParts === 'function') _syncDeplParts();   // swipe vertical : juste le soulignement
+          // Optimisation : en swipant pass→transport→location (toujours dans
+          // « Déplacements »), on met juste à jour le soulignement des parties.
+          if(navId === 'deplacements' && _lastNavId === 'deplacements'){
+            if(typeof _syncDeplParts === 'function') _syncDeplParts();
           } else if(typeof _buildMobileNav === 'function'){
             _buildMobileNav();
           }
+          _lastNavId = navId;
           // Update active section class
           document.querySelectorAll('.section').forEach(function(s){
             s.classList.toggle('active', s === entry.target);
@@ -2395,31 +2374,33 @@ function renderTripsList(){
     subParts.push(tripTypeLabel);
     var subLabel = subParts.join(' · ');
 
-    // ── Données enrichies (Option 3, affichées en desktop via CSS) ──
+    // ── Statut vivant ──
     var _now = new Date(); _now.setHours(0,0,0,0);
     var _dep = parseDDMMYYYY(dateDep), _ret = parseDDMMYYYY(dateRet);
     var tState = 'nodate', tBadge = '', tBadgeCls = '';
-    if(_dep && _ret && _now >= _dep && _now <= _ret){ tState='ongoing'; tBadge='En cours'; tBadgeCls='ongoing'; }
-    else if(_dep && _dep > _now){ tState='upcoming'; tBadge='À venir'; tBadgeCls='upcoming'; }
-    else if(_ret || _dep){ tState='past'; tBadge='Terminé'; tBadgeCls='past'; }
+    if(_dep && _ret && _now >= _dep && _now <= _ret){
+      var _jour = Math.round((_now - _dep)/86400000) + 1;
+      tState='ongoing'; tBadgeCls='ongoing'; tBadge='En cours · J'+_jour;
+    } else if(_dep && _dep > _now){
+      var _dd = Math.round((_dep - _now)/86400000);
+      tState='upcoming'; tBadgeCls='upcoming';
+      tBadge = (_dd===0) ? "Aujourd'hui" : (_dd===1 ? 'Demain' : 'Dans '+_dd+' jours');
+    } else if(_ret || _dep){
+      tState='past'; tBadge='Terminé'; tBadgeCls='past';
+    }
 
     var nbJours = (_dep && _ret) ? Math.max(1, Math.round((_ret-_dep)/86400000)+1) : null;
     var nbVilles = _tripCities(tid);
     var nbTrajets = _tripLegs(tid);
-    var jCountdown = (tState==='upcoming' && _dep) ? Math.round((_dep-_now)/86400000) : null;
 
     var counters = [];
     if(nbJours)            counters.push('<div class="vc-kv"><b>'+nbJours+'</b> jours</div>');
     if(nbVilles)           counters.push('<div class="vc-kv"><b>'+nbVilles+'</b> villes</div>');
     if(nbTrajets)          counters.push('<div class="vc-kv"><b>'+nbTrajets+'</b> trajets</div>');
-    if(jCountdown!==null && jCountdown>0) counters.push('<div class="vc-kv"><b>J-'+jCountdown+'</b> départ</div>');
-    else if(t.budget>0)    counters.push('<div class="vc-kv"><b>'+Math.round(t.budget)+' €</b> budget</div>');
+    if(t.budget>0)         counters.push('<div class="vc-kv"><b>'+Math.round(t.budget)+' €</b> budget</div>');
 
-    // Dégradé de vignette dérivé du pays (stable, sans image requise)
-    var _hash = 0; var _src = (country||m.name||'Y');
-    for(var _i=0;_i<_src.length;_i++){ _hash = (_hash*31 + _src.charCodeAt(_i)) & 0xffff; }
-    var _hue = _hash % 360;
-    var thumbStyle = 'background:linear-gradient(135deg,hsl('+_hue+',42%,52%),hsl('+((_hue+40)%360)+',46%,38%));';
+    // Vignette : dégradé Sakura constant (plus de couleur par pays)
+    var thumbStyle = 'background:linear-gradient(135deg,var(--sakura),var(--brand-dark,#b04a63));';
 
     // ── Créer la carte ──
     var card = document.createElement('div');
@@ -2447,12 +2428,11 @@ function renderTripsList(){
     var inner = document.createElement('div');
     inner.className = 'voy-card-inner';
     inner.innerHTML =
-        '<div class="voy-thumb" style="'+thumbStyle+'">'
-          + (tBadge ? '<span class="voy-thumb-badge vtb-'+tBadgeCls+'">'+tBadge+'</span>' : '')
-        + '</div>'
+        '<div class="voy-thumb" style="'+thumbStyle+'"></div>'
       + '<div class="voy-col-name">'
           + '<span class="voy-col-name-text">'+(m.name||'Voyage')+'</span>'
           + '<span class="voy-col-name-country">'+subLabel+'</span>'
+          + (tBadge ? '<span class="voy-live-badge vlb-'+tBadgeCls+'">'+tBadge+'</span>' : '')
           + (counters.length ? '<div class="voy-counters">'+counters.join('')+'</div>' : '')
         + '</div>'
       + '<div class="voy-col-dates">'
@@ -3674,7 +3654,7 @@ function toggleAutoTheme(enabled){
 function applyAutoTheme(){
   if(!_autoTheme) return;
   var isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  applyTheme(isDark ? 'nuit' : 'standard');
+  applyTheme(isDark ? 'dark' : 'standard');
 }
 
 // Écouter les changements de thème système
@@ -5791,7 +5771,7 @@ function renderPasses(){
   if(!el) return;
   el.style.display='';
   if(!passes.length){
-    el.innerHTML='<div class="empty-state"><div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M2 12h20"/><circle cx="7" cy="12" r="1.5"/></svg></div><div class="es-title">Aucun pass enregistré</div><div class="es-sub">Ajoute ton JR Pass ou autre pass ferroviaire ci-dessous.</div></div>';
+    el.innerHTML='<div class="empty-state"><div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M2 12h20"/><circle cx="7" cy="12" r="1.5"/></svg></div><div class="es-title">Aucun pass enregistré</div><div class="es-sub">Ajoute ton JR Pass ou autre pass ferroviaire ci-dessous.</div><button class="es-cta" onclick="pickTransport(\'pass\')">+ Ajouter un pass</button></div>';
     return;
   }
   el.innerHTML=passes.map(function(p){
@@ -6261,9 +6241,10 @@ function renderMobilite(){
 
   if(!mobilites.length){
     el.innerHTML='<div class="empty-state">'
-      +'<div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="8" width="12" height="13" rx="2"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/><line x1="12" y1="12" x2="12" y2="16"/></svg></div>'
-      +'<div style="font-weight:500;margin-bottom:4px">Aucun trajet enregistré</div>'
-      +'<div style="font-size:12px;color:var(--ink-hint)">Vols, trains, bus, ferries… tout ici.</div>'
+      +'<div class="es-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="8" width="12" height="13" rx="2"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/><line x1="12" y1="12" x2="12" y2="16"/></svg></div>'
+      +'<div class="es-title">Aucun trajet enregistré</div>'
+      +'<div class="es-sub">Vols, trains, bus, ferries… ajoute ton premier trajet.</div>'
+      +'<button class="es-cta" onclick="pickTransport(\'trajet\')">+ Ajouter un trajet</button>'
       +'</div>';
     return;
   }
@@ -6775,9 +6756,10 @@ function renderLocations(){
   el.style.display=''; // toujours réafficher — toggleForm peut avoir mis display:none
   if(!locations.length){
     el.innerHTML='<div class="empty-state">'
-      +'<div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 17H3a2 2 0 0 1-2-2v-4l3-7h14l3 7v4a2 2 0 0 1-2 2h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><line x1="9" y1="17" x2="15" y2="17"/></svg></div>'
-      +'<div style="font-weight:500;margin-bottom:4px">Aucune location</div>'
-      +'<div style="font-size:12px;color:var(--ink-hint)">Voitures, scooters, vélos en location.</div>'
+      +'<div class="es-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 17H3a2 2 0 0 1-2-2v-4l3-7h14l3 7v4a2 2 0 0 1-2 2h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><line x1="9" y1="17" x2="15" y2="17"/></svg></div>'
+      +'<div class="es-title">Aucune location</div>'
+      +'<div class="es-sub">Voitures, scooters, vélos en location.</div>'
+      +'<button class="es-cta" onclick="openAddTop(\'form-location\')">+ Ajouter une location</button>'
       +'</div>';
     return;
   }
@@ -6974,7 +6956,7 @@ function setTotalNuits(){
 function renderHotels(){
   var el=document.getElementById('hotels-list');
   el.style.display='';
-  if(!hotels.length){el.innerHTML='<div class="empty-state"><div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28"><rect x="2" y="6" width="20" height="16" rx="2"/><path d="M2 12h20"/><rect x="7" y="16" width="3" height="6"/><rect x="14" y="16" width="3" height="6"/></svg></div><div class="es-title">Aucun hébergement enregistré</div><div class="es-sub">Ajoute tes hôtels et Airbnb pour suivre ton planning.</div></div>';renderNightsSummary();return;}
+  if(!hotels.length){el.innerHTML='<div class="empty-state"><div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28"><rect x="2" y="6" width="20" height="16" rx="2"/><path d="M2 12h20"/><rect x="7" y="16" width="3" height="6"/><rect x="14" y="16" width="3" height="6"/></svg></div><div class="es-title">Aucun hébergement enregistré</div><div class="es-sub">Ajoute tes hôtels et Airbnb pour suivre ton planning.</div><button class="es-cta" onclick="openAddTop(\'form-hotel\')">+ Ajouter un hébergement</button></div>';renderNightsSummary();return;}
   el.innerHTML=hotels.map(function(h){
     var c=getVilleColor(h.ville);
     // Ligne adresse élégante : rue + "Ville, Pays" avec badge pays

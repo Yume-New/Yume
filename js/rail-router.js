@@ -1,28 +1,21 @@
 // ══════════════════════════════════════════════════════════════════════
-// rail-router.js — Routage ferroviaire réel via Overpass (OSM) + A*
-// Yume Travel Manager · Phase C
+// rail-router.js — Routing ferroviaire réel via API Overpass (OSM)
+// Yume Travel Manager · Phase B
 //
-// STRATÉGIE : Corridor étroit + Graphe + A* (Phase C)
-//   1. Requête Overpass dans un POLYGONE étroit (~±13 km) le long de
-//      l'axe dep→arr — 10 à 50× moins de données qu'un bbox (fini les
-//      timeouts de la Phase B).
-//   2. `out body; >; out skel qt;` → topologie réelle (IDs de nœuds),
-//      indispensable pour la connectivité du graphe.
-//   3. Construction du graphe nœud→nœud, snap des gares sur les nœuds
-//      les plus proches, calcul du chemin par A* (heuristique haversine).
-//   4. AUCUN dessin ici : le chemin est renvoyé via options.onRoute(pts).
-//      map-trip.js est l'unique propriétaire du rendu Leaflet (filtres,
-//      nettoyage inter-voyages, tooltips).
+// STRATÉGIE : Corridor Network (Phase B)
+//   On query Overpass pour tous les rails dans le bbox dep→arr,
+//   on simplifie avec Douglas-Peucker, on dessine le réseau réel.
+//   Résultat : les vraies voies ferrées apparaissent au lieu d'une
+//   ligne droite pointillée.
 //
-// RETRY : si le corridor étroit échoue (réseau OSM incomplet, détour
-//   important), une 2e tentative est faite avec un corridor élargi.
+// LIMITES CONNUES
+//   - Affiche TOUT le réseau dans le corridor (voies parallèles incluses)
+//   - Pas de routing exact (chemin précis = Phase C via graph traversal)
+//   - Désactivé si distance > MAX_DIST_KM (trop de données Overpass)
 //
-// DÉPENDANCES : aucune dépendance Leaflet — module de données pur.
-// EXPOSE      : window.RailRouter.fetchRoute(mobilite, options)
-//               window.RailRouter.config
-//
-// COMPAT      : fetchAndDraw/clearAll de la Phase B sont supprimés.
-//               map-trip.js (Phase C) est le seul appelant.
+// DÉPENDANCES : state.js, map-trip.js (L doit être chargé, _map exposé)
+// EXPOSE      : window.RailRouter.fetchAndDraw(mobilite, mapInstance)
+//               window.RailRouter.clearAll(mapInstance)
 // ══════════════════════════════════════════════════════════════════════
 
 (function () {
@@ -30,39 +23,68 @@
 
 // ── §1 CONFIGURATION ──────────────────────────────────────────────────
 var CFG = {
-  // Distance max dep→arr au-delà de laquelle on ne tente pas (km).
-  // Le corridor étroit rend les longues distances viables.
-  MAX_DIST_KM:      1500,
-  // Demi-largeur du corridor (degrés ≈ 111 km/°) — 1re tentative
-  CORRIDOR_HALF:    0.12,
-  // Demi-largeur élargie — 2e tentative (retry)
-  CORRIDOR_HALF_2:  0.28,
-  // Échantillonnage de l'axe du corridor (km entre points)
-  CORRIDOR_STEP_KM: 25,
+  // Distance max au-delà de laquelle on ne query pas Overpass (km)
+  MAX_DIST_KM:    800,
+  // Buffer autour du bbox (degrés) — adapté selon la distance
+  BUFFER_SHORT:   0.4,   // < 150 km
+  BUFFER_MEDIUM:  0.6,   // 150–600 km
+  BUFFER_LONG:    0.9,   // 600–800 km
+  // Douglas-Peucker : tolérance de simplification (degrés)
+  DP_EPSILON:     0.004,
   // Timeout Overpass (secondes)
-  OVERPASS_TIMEOUT: 30,
-  // Endpoints Overpass — miroir de secours
+  OVERPASS_TIMEOUT: 25,
+  // Endpoint Overpass — miroir de secours disponible
   OVERPASS_URLS: [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter'
   ],
-  // Distance max gare→nœud du graphe pour le snap (km)
-  SNAP_MAX_KM:      25,
-  // Douglas-Peucker : tolérance fine (le chemin est précis, on ne
-  // simplifie que pour alléger le polyline)
-  DP_EPSILON:       0.0008,
-  // Cache localStorage : nombre max d'itinéraires conservés
-  CACHE_MAX:        40
+  // Styles de tracé
+  STYLE_NETWORK: {
+    color:   '#8899aa',
+    weight:  1.2,
+    opacity: 0.45,
+    // Pas de dashArray — les vraies voies sont des lignes continues
+  },
+  STYLE_ROUTE: {
+    color:   '#2d5e8c',
+    weight:  3.0,
+    opacity: 0.80,
+  },
 };
 
-var CACHE_PREFIX = 'yrail2:';
-var CACHE_INDEX  = 'yrail2:index';
+// ── §2 CACHE ───────────────────────────────────────────────────────────
+// Clé : "lat1,lng1,lat2,lng2" arrondi à 2 décimales
+// Valeur : tableau de segments [[lat,lng], ...][]
+var _memCache = {};
+
+function _cacheKey(la1, lo1, la2, lo2) {
+  return [la1, lo1, la2, lo2].map(function (v) {
+    return Math.round(v * 100) / 100;
+  }).join(',');
+}
+
+function _cachePut(key, segments) {
+  _memCache[key] = segments;
+  try {
+    sessionStorage.setItem('yrail:' + key, JSON.stringify(segments));
+  } catch (e) {}
+}
+
+function _cacheGet(key) {
+  if (_memCache[key]) return _memCache[key];
+  try {
+    var raw = sessionStorage.getItem('yrail:' + key);
+    if (raw) { _memCache[key] = JSON.parse(raw); return _memCache[key]; }
+  } catch (e) {}
+  return null;
+}
 
 
-// ── §2 GÉODÉSIE UTILITAIRE ────────────────────────────────────────────
+// ── §3 GÉODÉSIE UTILITAIRE ────────────────────────────────────────────
 
+// Distance Haversine en km entre deux points GPS
 function _haversineKm(la1, lo1, la2, lo2) {
-  var R   = 6371;
+  var R  = 6371;
   var dLa = (la2 - la1) * Math.PI / 180;
   var dLo = (lo2 - lo1) * Math.PI / 180;
   var a   = Math.sin(dLa / 2) * Math.sin(dLa / 2)
@@ -71,110 +93,79 @@ function _haversineKm(la1, lo1, la2, lo2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-
-// ── §3 CACHE — mémoire + localStorage (persistant) ───────────────────
-var _memCache = {};
-
-function _cacheKey(la1, lo1, la2, lo2) {
-  return [la1, lo1, la2, lo2].map(function (v) {
-    return Math.round(v * 1000) / 1000;
-  }).join(',');
-}
-
-function _cacheGet(key) {
-  if (_memCache[key]) return _memCache[key];
-  try {
-    var raw = localStorage.getItem(CACHE_PREFIX + key);
-    if (raw) { _memCache[key] = JSON.parse(raw); return _memCache[key]; }
-  } catch (e) {}
-  return null;
-}
-
-function _cachePut(key, pts) {
-  _memCache[key] = pts;
-  try {
-    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(pts));
-    // Index LRU : prune au-delà de CACHE_MAX entrées
-    var idx = [];
-    try { idx = JSON.parse(localStorage.getItem(CACHE_INDEX) || '[]'); } catch (e2) {}
-    idx = idx.filter(function (k) { return k !== key; });
-    idx.push(key);
-    while (idx.length > CFG.CACHE_MAX) {
-      var old = idx.shift();
-      try { localStorage.removeItem(CACHE_PREFIX + old); } catch (e3) {}
-    }
-    localStorage.setItem(CACHE_INDEX, JSON.stringify(idx));
-  } catch (e) {
-    // Quota plein → on purge tout le cache rail et on réessaie une fois
-    try {
-      var i, keys = [];
-      for (i = 0; i < localStorage.length; i++) {
-        var k = localStorage.key(i);
-        if (k && k.indexOf(CACHE_PREFIX) === 0) keys.push(k);
-      }
-      keys.forEach(function (k) { localStorage.removeItem(k); });
-      localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(pts));
-    } catch (e4) {}
-  }
-}
-
-
-// ── §4 CORRIDOR POLYGONAL ─────────────────────────────────────────────
-// Construit un polygone fermé suivant l'axe dep→arr, de demi-largeur
-// `half` degrés. Format Overpass : "lat lon lat lon ..." (espace-séparé).
-// ─────────────────────────────────────────────────────────────────────
-function _buildCorridorPoly(la1, lo1, la2, lo2, half) {
+// Calcule le bbox avec buffer adaptatif
+function _buildBbox(la1, lo1, la2, lo2) {
   var distKm = _haversineKm(la1, lo1, la2, lo2);
-  var steps  = Math.max(2, Math.ceil(distKm / CFG.CORRIDOR_STEP_KM));
+  var buf = distKm < 150  ? CFG.BUFFER_SHORT
+          : distKm < 600  ? CFG.BUFFER_MEDIUM
+          :                 CFG.BUFFER_LONG;
 
-  // Vecteur directeur en "degrés-plan" (lng corrigé par cos(latMoy))
-  var latMid = (la1 + la2) / 2;
-  var cosLat = Math.max(0.2, Math.cos(latMid * Math.PI / 180));
-  var dLat   = la2 - la1;
-  var dLng   = (lo2 - lo1) * cosLat;
-  var len    = Math.sqrt(dLat * dLat + dLng * dLng) || 1e-9;
+  var south = Math.min(la1, la2) - buf;
+  var north = Math.max(la1, la2) + buf;
+  var west  = Math.min(lo1, lo2) - buf;
+  var east  = Math.max(lo1, lo2) + buf;
 
-  // Normale unitaire (perpendiculaire à l'axe)
-  var nLat = -dLng / len;
-  var nLng =  dLat / len / cosLat;   // re-déprojeter la composante lng
-  var uLat =  dLat / len;            // unitaire le long de l'axe (lat)
-  var uLng = (lo2 - lo1) / len;      // approx. le long de l'axe (lng brut)
+  // Clamp valeurs géographiques
+  south = Math.max(south, -85);
+  north = Math.min(north,  85);
+  west  = Math.max(west, -180);
+  east  = Math.min(east,  180);
 
-  // Étendre légèrement l'axe aux deux extrémités (gares en bordure)
-  var ext = half * 0.8;
+  return { south: south, north: north, west: west, east: east, distKm: distKm };
+}
 
-  var sideA = [], sideB = [];
-  for (var i = 0; i <= steps; i++) {
-    var t   = i / steps;
-    var cla = la1 + (la2 - la1) * t;
-    var clo = lo1 + (lo2 - lo1) * t;
-    if (i === 0)     { cla -= uLat * ext; clo -= uLng * ext; }
-    if (i === steps) { cla += uLat * ext; clo += uLng * ext; }
-    sideA.push([cla + nLat * half, clo + nLng * half]);
-    sideB.push([cla - nLat * half, clo - nLng * half]);
+
+// ── §4 DOUGLAS-PEUCKER ────────────────────────────────────────────────
+// Simplifie un tableau de points [lat, lng] avec une tolérance epsilon.
+// Réduit drastiquement le nombre de segments affichés sans perte visuelle.
+// ─────────────────────────────────────────────────────────────────────
+function _dpSimplify(pts, eps) {
+  if (pts.length <= 2) return pts;
+
+  // Distance point P→segment AB (en coordonnées planes approx.)
+  function _perpDist(p, a, b) {
+    var dx = b[1] - a[1], dy = b[0] - a[0];
+    var lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.sqrt(Math.pow(p[0]-a[0],2) + Math.pow(p[1]-a[1],2));
+    var t = ((p[1]-a[1])*dx + (p[0]-a[0])*dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    return Math.sqrt(Math.pow(p[0]-(a[0]+t*dy),2) + Math.pow(p[1]-(a[1]+t*dx),2));
   }
-  sideB.reverse();
 
-  var ring = sideA.concat(sideB);
-  ring.push(ring[0]); // fermer le polygone
+  // Trouver le point le plus éloigné de la ligne start→end
+  var maxDist = 0, maxIdx = 0;
+  var first = pts[0], last = pts[pts.length - 1];
+  for (var i = 1; i < pts.length - 1; i++) {
+    var d = _perpDist(pts[i], first, last);
+    if (d > maxDist) { maxDist = d; maxIdx = i; }
+  }
 
-  return ring.map(function (p) {
-    return p[0].toFixed(4) + ' ' + p[1].toFixed(4);
-  }).join(' ');
+  if (maxDist > eps) {
+    var left  = _dpSimplify(pts.slice(0, maxIdx + 1), eps);
+    var right = _dpSimplify(pts.slice(maxIdx), eps);
+    return left.slice(0, -1).concat(right);
+  }
+  return [first, last];
 }
 
 
 // ── §5 REQUÊTE OVERPASS ───────────────────────────────────────────────
-// `out body; >; out skel qt;` : ways avec refs de nœuds + nœuds avec
-// coordonnées → permet de reconstruire la TOPOLOGIE (connectivité).
+// Requête optimisée : `out geom qt` = géométrie + tri spatial rapide.
+// On filtre les voies ferrées principales (pas les voies de garage).
 // ─────────────────────────────────────────────────────────────────────
-function _buildQuery(poly) {
-  var railFilter = '"railway"~"^(rail|light_rail|narrow_gauge)$"';
+function _buildQuery(bbox) {
+  // Tags ferroviaires pertinents — on exclut les voies de service
+  // ("siding", "yard", "spur") qui pollueraient le visuel
+  var railFilter = '"railway"~"^(rail|light_rail|narrow_gauge|subway)$"';
   var noService  = '["service"!~"siding|yard|spur|crossover"]';
+
   return '[out:json][timeout:' + CFG.OVERPASS_TIMEOUT + '];'
-    + 'way[' + railFilter + ']' + noService
-    + '(poly:"' + poly + '");'
-    + 'out body;>;out skel qt;';
+    + 'way[' + railFilter + ']' + noService + '('
+    + bbox.south.toFixed(4) + ','
+    + bbox.west.toFixed(4)  + ','
+    + bbox.north.toFixed(4) + ','
+    + bbox.east.toFixed(4)
+    + ');out geom qt;';
 }
 
 function _fetchOverpass(query, cb) {
@@ -193,274 +184,216 @@ function _fetchOverpass(query, cb) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     })
-    .then(function (data) { cb(data); })
-    .catch(function () { tryNext(); });
+    .then(function (data) {
+      cb(data);
+    })
+    .catch(function () {
+      tryNext();
+    });
   }
 
   tryNext();
 }
 
 
-// ── §6 GRAPHE FERROVIAIRE ─────────────────────────────────────────────
-// nodes : { id → [lat, lng] }
-// adj   : { id → [{ to: id, w: km }] }
+// ── §6 PARSEUR OVERPASS → SEGMENTS ───────────────────────────────────
+// Convertit la réponse Overpass en tableau de polylines simplifiées.
+// Chaque way devient un tableau de [lat, lng] simplifié par DP.
 // ─────────────────────────────────────────────────────────────────────
-function _buildGraph(data) {
-  if (!data || !data.elements) return null;
-
-  var nodes = Object.create(null);
-  var ways  = [];
+function _parseWays(data) {
+  if (!data || !data.elements) return [];
+  var segments = [];
 
   data.elements.forEach(function (el) {
-    if (el.type === 'node') {
-      nodes[el.id] = [el.lat, el.lon];
-    } else if (el.type === 'way' && el.nodes && el.nodes.length >= 2) {
-      ways.push(el.nodes);
-    }
+    if (el.type !== 'way' || !el.geometry || el.geometry.length < 2) return;
+
+    // Convertir geometry en [lat, lng][]
+    var pts = el.geometry.map(function (g) { return [g.lat, g.lon]; });
+
+    // Simplifier
+    var simplified = _dpSimplify(pts, CFG.DP_EPSILON);
+    if (simplified.length >= 2) segments.push(simplified);
   });
 
-  if (!ways.length) return null;
+  return segments;
+}
 
-  var adj = Object.create(null);
 
-  // IMPORTANT : IDs normalisés en STRING. Les clés d'objet JS sont des
-  // strings (for…in), alors que les refs Overpass sont numériques —
-  // sans normalisation, la comparaison stricte de l'A* échouerait.
-  function _addEdge(a, b, w) {
-    a = String(a); b = String(b);
-    (adj[a] = adj[a] || []).push({ to: b, w: w });
-    (adj[b] = adj[b] || []).push({ to: a, w: w });
-  }
+// ── §7 DESSIN SUR LA CARTE ────────────────────────────────────────────
+// On garde une référence aux layers pour pouvoir les supprimer.
+var _drawnLayers = []; // { mobiliteId, layers: L.polyline[] }
 
-  ways.forEach(function (refs) {
-    for (var i = 1; i < refs.length; i++) {
-      var a = refs[i - 1], b = refs[i];
-      var pa = nodes[a], pb = nodes[b];
-      if (!pa || !pb) continue;
-      _addEdge(a, b, _haversineKm(pa[0], pa[1], pb[0], pb[1]));
-    }
+function _drawSegments(segments, mobiliteId, mapInstance) {
+  if (!mapInstance || !segments.length) return;
+  var layers = [];
+
+  segments.forEach(function (seg) {
+    // Découper à l'antiméridien (même logique que map-trip.js)
+    var subsegments = _splitAntimeridianLocal(seg);
+    subsegments.forEach(function (sub) {
+      if (sub.length < 2) return;
+      var poly = L.polyline(sub, CFG.STYLE_NETWORK);
+      poly.addTo(mapInstance);
+      layers.push(poly);
+    });
   });
 
-  return { nodes: nodes, adj: adj };
+  _drawnLayers.push({ mobiliteId: mobiliteId, layers: layers });
 }
 
-// Nœud du graphe le plus proche d'un point (scan linéaire — suffisant)
-function _nearestNode(graph, lat, lng) {
-  var bestId = null, bestD = Infinity;
-  for (var id in graph.adj) {            // uniquement les nœuds connectés
-    var p = graph.nodes[id];
-    if (!p) continue;
-    var d = _haversineKm(lat, lng, p[0], p[1]);
-    if (d < bestD) { bestD = d; bestId = id; }
+// Split antimeridian local (dupliqué depuis map-trip.js pour autonomie)
+function _splitAntimeridianLocal(pts) {
+  if (!pts.length) return [pts];
+  var segs = [[pts[0]]];
+  for (var i = 1; i < pts.length; i++) {
+    if (Math.abs(pts[i][1] - pts[i-1][1]) > 180) segs.push([]);
+    segs[segs.length - 1].push(pts[i]);
   }
-  return { id: bestId, distKm: bestD };
+  return segs;
 }
 
-
-// ── §7 A* — file de priorité (tas binaire min) ───────────────────────
-function _Heap() {
-  this.a = [];
+function _clearMobiliteRail(mobiliteId, mapInstance) {
+  _drawnLayers = _drawnLayers.filter(function (entry) {
+    if (entry.mobiliteId !== mobiliteId) return true;
+    entry.layers.forEach(function (l) {
+      if (mapInstance) { try { mapInstance.removeLayer(l); } catch(e) {} }
+    });
+    return false;
+  });
 }
-_Heap.prototype.push = function (item) {
-  var a = this.a;
-  a.push(item);
-  var i = a.length - 1;
-  while (i > 0) {
-    var p = (i - 1) >> 1;
-    if (a[p].f <= a[i].f) break;
-    var tmp = a[p]; a[p] = a[i]; a[i] = tmp;
-    i = p;
-  }
-};
-_Heap.prototype.pop = function () {
-  var a = this.a;
-  if (!a.length) return null;
-  var top = a[0];
-  var last = a.pop();
-  if (a.length) {
-    a[0] = last;
-    var i = 0, n = a.length;
-    for (;;) {
-      var l = 2 * i + 1, r = l + 1, m = i;
-      if (l < n && a[l].f < a[m].f) m = l;
-      if (r < n && a[r].f < a[m].f) m = r;
-      if (m === i) break;
-      var tmp = a[m]; a[m] = a[i]; a[i] = tmp;
-      i = m;
-    }
-  }
-  return top;
-};
 
-function _astar(graph, startId, goalId) {
-  var nodes = graph.nodes, adj = graph.adj;
-  var goal  = nodes[goalId];
-  if (!goal || !nodes[startId]) return null;
-
-  var gScore   = Object.create(null);
-  var cameFrom = Object.create(null);
-  var closed   = Object.create(null);
-
-  gScore[startId] = 0;
-  var open = new _Heap();
-  var s = nodes[startId];
-  open.push({ id: startId, f: _haversineKm(s[0], s[1], goal[0], goal[1]) });
-
-  while (true) {
-    var cur = open.pop();
-    if (!cur) return null;               // file vide → pas de chemin
-    var cid = cur.id;
-    if (cid === goalId) break;           // chemin trouvé
-    if (closed[cid]) continue;           // entrée périmée du tas
-    closed[cid] = true;
-
-    var edges = adj[cid] || [];
-    for (var i = 0; i < edges.length; i++) {
-      var e = edges[i];
-      if (closed[e.to]) continue;
-      var tentative = gScore[cid] + e.w;
-      if (gScore[e.to] === undefined || tentative < gScore[e.to]) {
-        gScore[e.to]   = tentative;
-        cameFrom[e.to] = cid;
-        var p = nodes[e.to];
-        open.push({ id: e.to, f: tentative + _haversineKm(p[0], p[1], goal[0], goal[1]) });
-      }
-    }
-  }
-
-  // Reconstruction du chemin
-  var path = [goalId];
-  var c = goalId;
-  while (cameFrom[c] !== undefined) {
-    c = cameFrom[c];
-    path.push(c);
-  }
-  path.reverse();
-  return path.map(function (id) { return nodes[id]; });
+function clearAll(mapInstance) {
+  _drawnLayers.forEach(function (entry) {
+    entry.layers.forEach(function (l) {
+      if (mapInstance) { try { mapInstance.removeLayer(l); } catch(e) {} }
+    });
+  });
+  _drawnLayers = [];
 }
 
 
-// ── §8 DOUGLAS-PEUCKER (simplification du chemin final) ──────────────
-function _dpSimplify(pts, eps) {
-  if (pts.length <= 2) return pts;
-
-  function _perpDist(p, a, b) {
-    var dx = b[1] - a[1], dy = b[0] - a[0];
-    var lenSq = dx * dx + dy * dy;
-    if (lenSq === 0) return Math.sqrt(Math.pow(p[0]-a[0],2) + Math.pow(p[1]-a[1],2));
-    var t = ((p[1]-a[1])*dx + (p[0]-a[0])*dy) / lenSq;
-    t = Math.max(0, Math.min(1, t));
-    return Math.sqrt(Math.pow(p[0]-(a[0]+t*dy),2) + Math.pow(p[1]-(a[1]+t*dx),2));
-  }
-
-  var maxDist = 0, maxIdx = 0;
-  var first = pts[0], last = pts[pts.length - 1];
-  for (var i = 1; i < pts.length - 1; i++) {
-    var d = _perpDist(pts[i], first, last);
-    if (d > maxDist) { maxDist = d; maxIdx = i; }
-  }
-
-  if (maxDist > eps) {
-    var left  = _dpSimplify(pts.slice(0, maxIdx + 1), eps);
-    var right = _dpSimplify(pts.slice(maxIdx), eps);
-    return left.slice(0, -1).concat(right);
-  }
-  return [first, last];
-}
-
-
-// ── §9 API PUBLIQUE ───────────────────────────────────────────────────
+// ── §8 API PUBLIQUE ───────────────────────────────────────────────────
 
 /**
- * fetchRoute(mobilite, options)
- * Calcule l'itinéraire ferroviaire réel dep→arr. Module de données pur :
- * aucun dessin — le rendu appartient à map-trip.js.
+ * fetchAndDraw(mobilite, mapInstance, options)
+ * Récupère la géométrie ferroviaire pour un trajet train et la trace.
  *
- * @param {Object}   mobilite    Doit avoir type:'train' + depLat/depLng/arrLat/arrLng
+ * @param {Object}   mobilite    Objet mobilite Yume (doit avoir depLat/depLng/arrLat/arrLng)
+ * @param {Object}   mapInstance Instance Leaflet active
  * @param {Object}   [options]
- * @param {Function} [options.onRoute(pts)]      pts = [[lat,lng], …] du trajet réel
- * @param {Function} [options.onFallback(reason)] échec → l'appelant garde son fallback
- * @param {Function} [options.onStart]           début de la requête réseau
+ * @param {Function} [options.onStart]    Appelé au début de la requête
+ * @param {Function} [options.onDone]     Appelé quand le tracé est terminé
+ * @param {Function} [options.onFallback] Appelé si Overpass échoue (géocodage à la volée)
  */
-function fetchRoute(mobilite, options) {
+function fetchAndDraw(mobilite, mapInstance, options) {
   options = options || {};
-  var fail = function (reason) {
-    if (typeof console !== 'undefined') {
-      console.debug('[RailRouter]', (mobilite && mobilite.dep) || '?', '→',
-        (mobilite && mobilite.arr) || '?', ':', reason);
-    }
-    if (options.onFallback) options.onFallback(reason);
-  };
 
   // ── Guards ────────────────────────────────────────────────────────
-  if (!mobilite || mobilite.type !== 'train') { fail('not-train'); return; }
+  if (!mobilite || mobilite.type !== 'train') return;
+  if (!mapInstance) return;
 
-  var la1 = parseFloat(mobilite.depLat), lo1 = parseFloat(mobilite.depLng);
-  var la2 = parseFloat(mobilite.arrLat), lo2 = parseFloat(mobilite.arrLng);
+  var la1 = mobilite.depLat, lo1 = mobilite.depLng;
+  var la2 = mobilite.arrLat, lo2 = mobilite.arrLng;
 
-  if (isNaN(la1) || isNaN(lo1) || isNaN(la2) || isNaN(lo2)) {
-    fail('no-coords'); return;
-  }
-
-  var distKm = _haversineKm(la1, lo1, la2, lo2);
-  if (distKm > CFG.MAX_DIST_KM) { fail('distance-exceeded'); return; }
-  if (distKm < 0.5)             { fail('too-short');         return; }
-
-  // ── Cache hit ─────────────────────────────────────────────────────
-  var key    = _cacheKey(la1, lo1, la2, lo2);
-  var cached = _cacheGet(key);
-  if (cached && cached.length >= 2) {
-    if (options.onRoute) options.onRoute(cached);
+  if (!la1 || !lo1 || !la2 || !lo2) {
+    // Pas de coordonnées → on ne peut pas faire de bbox
+    if (options.onFallback) options.onFallback('no-coords');
     return;
   }
 
+  var bbox = _buildBbox(la1, lo1, la2, lo2);
+
+  // ── Distance trop grande → pas de requête ─────────────────────────
+  if (bbox.distKm > CFG.MAX_DIST_KM) {
+    if (options.onFallback) options.onFallback('distance-exceeded');
+    return;
+  }
+
+  var cacheKey = _cacheKey(la1, lo1, la2, lo2);
+
+  // ── Cache hit ─────────────────────────────────────────────────────
+  var cached = _cacheGet(cacheKey);
+  if (cached) {
+    // Supprimer l'ancien tracé pour ce mobilite si existant
+    _clearMobiliteRail(mobilite.id, mapInstance);
+    _drawSegments(cached, mobilite.id, mapInstance);
+    if (options.onDone) options.onDone({ fromCache: true, segments: cached.length });
+    return;
+  }
+
+  // ── Requête Overpass ──────────────────────────────────────────────
   if (options.onStart) options.onStart();
 
-  // ── Tentative 1 (corridor étroit) puis 2 (corridor élargi) ───────
-  _attempt(CFG.CORRIDOR_HALF, function (pts1, reason1) {
-    if (pts1) { _deliver(pts1); return; }
-    // Erreur réseau pure → inutile de réessayer plus large
-    if (reason1 === 'overpass-error') { fail(reason1); return; }
-    _attempt(CFG.CORRIDOR_HALF_2, function (pts2, reason2) {
-      if (pts2) { _deliver(pts2); return; }
-      fail(reason2);
+  var query = _buildQuery(bbox);
+  _fetchOverpass(query, function (data) {
+    if (!data) {
+      if (options.onFallback) options.onFallback('overpass-error');
+      return;
+    }
+
+    var segments = _parseWays(data);
+    if (!segments.length) {
+      if (options.onFallback) options.onFallback('no-data');
+      return;
+    }
+
+    _cachePut(cacheKey, segments);
+    _clearMobiliteRail(mobilite.id, mapInstance);
+    _drawSegments(segments, mobilite.id, mapInstance);
+
+    if (options.onDone) options.onDone({ fromCache: false, segments: segments.length });
+  });
+}
+
+
+// ── §9 INTÉGRATION AUTOMATIQUE ────────────────────────────────────────
+// Quand map-trip.js charge les routes, on enrichit les trains avec les
+// vraies voies. On s'abonne à 'trip:snapshot' et 'trip:restore'.
+// ─────────────────────────────────────────────────────────────────────
+function _enrichTrainsOnMap() {
+  // Attendre que la carte voyage soit initialisée
+  if (typeof window.initTripMap !== 'function') return;
+
+  // Récupérer l'instance Leaflet de la carte voyage
+  // (exposée via window._tripmapInstance définie ci-dessous)
+  var mapInstance = window._tripmapInstance;
+  if (!mapInstance) return;
+
+  var mobs = (typeof mobilites !== 'undefined') ? mobilites : [];
+  mobs.forEach(function (m) {
+    if (m.type !== 'train') return;
+    if (!m.depLat || !m.arrLat) return;
+
+    fetchAndDraw(m, mapInstance, {
+      onFallback: function (reason) {
+        // Fallback silencieux — map-trip.js a déjà tracé la ligne droite
+        if (typeof console !== 'undefined') {
+          console.debug('[RailRouter] Fallback pour', m.dep, '→', m.arr, ':', reason);
+        }
+      }
     });
   });
-
-  function _attempt(half, done) {
-    var poly  = _buildCorridorPoly(la1, lo1, la2, lo2, half);
-    var query = _buildQuery(poly);
-
-    _fetchOverpass(query, function (data) {
-      if (!data)            { done(null, 'overpass-error'); return; }
-
-      var graph = _buildGraph(data);
-      if (!graph)           { done(null, 'no-data'); return; }
-
-      var nDep = _nearestNode(graph, la1, lo1);
-      var nArr = _nearestNode(graph, la2, lo2);
-      if (!nDep.id || !nArr.id)        { done(null, 'no-data');      return; }
-      if (nDep.distKm > CFG.SNAP_MAX_KM
-       || nArr.distKm > CFG.SNAP_MAX_KM) { done(null, 'snap-too-far'); return; }
-
-      var path = _astar(graph, nDep.id, nArr.id);
-      if (!path || path.length < 2)    { done(null, 'no-path'); return; }
-
-      done(_dpSimplify(path, CFG.DP_EPSILON), null);
-    });
-  }
-
-  function _deliver(pts) {
-    _cachePut(key, pts);
-    if (options.onRoute) options.onRoute(pts);
-  }
 }
+
+// Abonnements — on enrichit après chaque restauration/snapshot si la
+// carte voyage est active
+YumeState.on('trip:restore', function () {
+  setTimeout(_enrichTrainsOnMap, 500); // petit délai pour laisser la carte s'initialiser
+});
+
+YumeState.on('trip:snapshot', function () {
+  var futur = document.getElementById('page-futur');
+  if (futur && futur.classList.contains('active')) {
+    setTimeout(_enrichTrainsOnMap, 200);
+  }
+});
 
 
 // ── Exposer l'API publique ────────────────────────────────────────────
 window.RailRouter = {
-  fetchRoute: fetchRoute,
-  config:     CFG   // permet d'ajuster les seuils sans toucher au code
+  fetchAndDraw: fetchAndDraw,
+  clearAll:     clearAll,
+  config:       CFG,   // permet de modifier les seuils sans toucher au code
 };
 
 })(); // fin IIFE rail-router

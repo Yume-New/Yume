@@ -497,27 +497,19 @@ function initLeafletMap() {
 
   if (!_initDone) {
     // ── Créer la carte une seule fois ──────────────────────────────
-    // FIX répétition : monde UNIQUE. Le pan est borné aux limites du
-    // monde (maxBounds + viscosité maximale = butée ferme) et les
-    // tuiles ne se répètent plus horizontalement (noWrap). Fini les
-    // copies de carte vides à gauche/droite des tracés.
     _map = L.map('leaflet-map', {
       center: [20, 10],
       zoom: 2,
-      minZoom: 2,
+      minZoom: 1,
       maxZoom: 8,
       worldCopyJump: false,
-      zoomControl: true,
-      maxBounds: [[-85, -180], [85, 180]],
-      maxBoundsViscosity: 1.0
+      zoomControl: true
     });
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         + ' contributors © <a href="https://carto.com/attributions">CARTO</a>',
       subdomains: 'abcd',
-      noWrap: true,
-      bounds: [[-85, -180], [85, 180]],
       maxZoom: 19
     }).addTo(_map);
 

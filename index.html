@@ -33,7 +33,7 @@
 <meta name="description" content="Yume — Tes voyages, ta mémoire. Application de voyage hors-ligne."/>
 <meta name="theme-color" content="#e8748a"/>
 <!-- theme-color adapté au dark mode -->
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e1c18"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141420"/>
 
 <!-- ═══ POLICES GOOGLE ═══ -->
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
@@ -47,6 +47,11 @@
   <!-- ═══ FOUC PREVENTION ═══ -->
   <script>(function(){
     var t=localStorage.getItem('yume_theme')||'standard';
+    // Migration : on ne garde que Clair (standard) et Sombre (dark).
+    if(t!=='standard' && t!=='dark'){
+      t = (t==='nuit'||t==='encre') ? 'dark' : 'standard';
+      try{ localStorage.setItem('yume_theme', t); }catch(e){}
+    }
     document.documentElement.setAttribute('data-theme',t);
   })();</script>
 </head>
@@ -79,14 +84,15 @@
     <!-- Option 1 : Bandeau de statistiques cumulées (desktop) -->
     <div id="home-stats-grid" aria-hidden="false"></div>
 
-    <button id="btn-new-voyage" onclick="openCreateModal()">
-      <span class="bv-plus">＋</span><span>Nouveau voyage</span>
-    </button>
-    <!-- Mini-stats (mobile) : remplace le bandeau blanc du haut -->
+    <!-- Mini-stats (mobile) : en haut, centrées, au-dessus du bouton -->
     <div id="home-mini-stats" aria-hidden="true">
       <span class="hms-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13"><path d="M21 16l-3-8-3 3-5-5-3 3 2 3-4 2 1 2 5-1 1 3 3-1 1 3 3-3z"/></svg><b id="hms-voyages">0</b> voyages</span>
       <span class="hms-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg><b id="hms-pays">0</b> pays</span>
     </div>
+
+    <button id="btn-new-voyage" onclick="openCreateModal()">
+      <span class="bv-plus">＋</span><span>Nouveau voyage</span>
+    </button>
     <div class="home-section-row">
       <div class="home-section-label">Mes voyages</div>
       <button id="trips-edit-toggle" type="button" onclick="toggleTripsEdit()">Modifier</button>
@@ -1348,55 +1354,15 @@
     <div class="theme-grid" id="theme-grid-manual">
       <div class="theme-card theme-standard" data-theme="standard" onclick="applyTheme('standard')">
         <div class="tc-check"></div>
-        <div class="tc-name">Sakura</div>
+        <div class="tc-name">Clair</div>
         <div class="tc-palette">
           <div class="tc-swatch"></div><div class="tc-swatch"></div>
           <div class="tc-swatch"></div><div class="tc-swatch"></div>
         </div>
       </div>
-      <div class="theme-card theme-nature" data-theme="nature" onclick="applyTheme('nature')">
+      <div class="theme-card theme-dark" data-theme="dark" onclick="applyTheme('dark')">
         <div class="tc-check"></div>
-        <div class="tc-name">Forêt</div>
-        <div class="tc-palette">
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-        </div>
-      </div>
-      <div class="theme-card theme-mer" data-theme="mer" onclick="applyTheme('mer')">
-        <div class="tc-check"></div>
-        <div class="tc-name">Océan</div>
-        <div class="tc-palette">
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-        </div>
-      </div>
-      <div class="theme-card theme-nuit" data-theme="nuit" onclick="applyTheme('nuit')">
-        <div class="tc-check"></div>
-        <div class="tc-name">Nuit</div>
-        <div class="tc-palette">
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-        </div>
-      </div>
-      <div class="theme-card theme-indigo" data-theme="indigo" onclick="applyTheme('indigo')">
-        <div class="tc-check"></div>
-        <div class="tc-name">Indigo</div>
-        <div class="tc-palette">
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-        </div>
-      </div>
-      <div class="theme-card theme-terre" data-theme="terre" onclick="applyTheme('terre')">
-        <div class="tc-check"></div>
-        <div class="tc-name">Terre</div>
-        <div class="tc-palette">
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-        </div>
-      </div>
-      <div class="theme-card theme-encre" data-theme="encre" onclick="applyTheme('encre')">
-        <div class="tc-check"></div>
-        <div class="tc-name">Encre</div>
+        <div class="tc-name">Sombre</div>
         <div class="tc-palette">
           <div class="tc-swatch"></div><div class="tc-swatch"></div>
           <div class="tc-swatch"></div><div class="tc-swatch"></div>
@@ -1692,13 +1658,8 @@
     <!-- Thème -->
     <div class="psp-label">Thème</div>
     <div class="theme-grid" id="psp-theme-grid">
-      <div class="theme-chip tc-standard active" data-theme="standard" onclick="applyThemeFromProfil('standard')">Sakura</div>
-      <div class="theme-chip tc-nature" data-theme="nature" onclick="applyThemeFromProfil('nature')">Forêt</div>
-      <div class="theme-chip tc-mer"    data-theme="mer"    onclick="applyThemeFromProfil('mer')">Océan</div>
-      <div class="theme-chip tc-nuit"   data-theme="nuit"   onclick="applyThemeFromProfil('nuit')">Nuit</div>
-      <div class="theme-chip tc-indigo" data-theme="indigo" onclick="applyThemeFromProfil('indigo')">Indigo</div>
-      <div class="theme-chip tc-terre"  data-theme="terre"  onclick="applyThemeFromProfil('terre')">Terre</div>
-      <div class="theme-chip tc-encre"  data-theme="encre"  onclick="applyThemeFromProfil('encre')">Encre</div>
+      <div class="theme-chip tc-standard active" data-theme="standard" onclick="applyThemeFromProfil('standard')">Clair</div>
+      <div class="theme-chip tc-dark"     data-theme="dark"     onclick="applyThemeFromProfil('dark')">Sombre</div>
     </div>
 
     <!-- Dossier de voyage — export PDF (visible uniquement si un voyage est ouvert) -->

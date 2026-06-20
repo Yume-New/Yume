@@ -64,7 +64,7 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --sakura:#d6536f;--sakura-light:#fbe9ee;--sakura-dark:#b03a55;
-  --gold:#a87708;--gold-light:#faf0d8;--teal:#1f7a5a;--slate:#26527c;
+  --gold:var(--sakura);--gold-light:var(--sakura-light);--teal:var(--sakura);--slate:var(--ink-muted);
   --ink:#14141f;--ink-muted:#494960;--ink-hint:#7d7d94;
   --surface:#fff;--surface-2:#f2efe8;--surface-3:#e6e1d6;
   --border:rgba(20,20,31,.16);
@@ -1966,7 +1966,7 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
 }
 .conv-manual-rate input{
   width:90px;padding:5px 8px;font-size:12px;border:1px solid rgba(201,146,26,.4);
-  border-radius:var(--r-sm);background:#fff;color:var(--ink);outline:none;
+  border-radius:var(--r-sm);background:var(--surface);color:var(--ink);outline:none;
   font-family:'DM Sans',sans-serif
 }
 .conv-manual-rate button{
@@ -2211,8 +2211,8 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
    visibles (.16), gris textuels assombris, accents approfondis. */
 :root[data-theme="standard"], :root {
   --sakura:#d6536f; --sakura-light:#fbe9ee; --sakura-dark:#b03a55;
-  --gold:#a87708;   --gold-light:#faf0d8;
-  --teal:#1f7a5a;   --slate:#26527c;
+  --gold:var(--sakura);   --gold-light:var(--sakura-light);
+  --teal:var(--sakura);   --slate:var(--ink-muted);
   --ink:#14141f;    --ink-muted:#494960; --ink-hint:#7d7d94;
   --surface:#fff;   --surface-2:#f2efe8; --surface-3:#e6e1d6;
   --border:rgba(20,20,31,.16);
@@ -2225,6 +2225,25 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
   --body-bg:var(--surface-2);
 
   --brand:var(--sakura); --brand-dark:var(--sakura-dark); --on-brand:#fff;}
+
+/* ── MODE SOMBRE — Sakura sur surfaces encre (seul thème sombre) ── */
+:root[data-theme="dark"]{
+  --sakura:#e86a86; --sakura-light:rgba(232,106,134,.16); --sakura-dark:#c8556f;
+  --gold:var(--sakura);   --gold-light:var(--sakura-light);
+  --teal:var(--sakura);   --slate:var(--ink-muted);
+  --ink:#ececf2;    --ink-muted:#a6a6bc; --ink-hint:#74748e;
+  --surface:#1d1d28; --surface-2:#141420; --surface-3:#2a2a3a;
+  --border:rgba(255,255,255,.13);
+  --shadow-sm:0 1px 4px rgba(0,0,0,.35);
+  --shadow-md:0 4px 16px rgba(0,0,0,.45);
+  --shadow-xl:0 12px 40px rgba(0,0,0,.6);
+  --nav-bg:#1d1d28; --nav-active:var(--sakura);
+  --btn-primary-bg:var(--sakura); --btn-primary-text:#fff;
+  --progress-fill:linear-gradient(90deg,var(--sakura),var(--sakura-dark));
+  --body-bg:var(--surface-2);
+  --brand:var(--sakura); --brand-dark:var(--sakura-dark); --on-brand:#fff;
+  --surface-rgb:29,29,40; --bg-overlay-rgb:20,20,32;
+}
 
 /* Thème Nature — CONTRASTE RENFORCÉ : cartes blanc pur sur fond
    végétal soutenu, verts approfondis, bordures visibles. */
@@ -2487,10 +2506,14 @@ input, select, textarea {
   border: 1.5px solid rgba(0,0,0,.08);
 }
 /* Palettes hard-codées pour l'aperçu (ne dépendent pas du thème actif) */
-.theme-standard .tc-swatch:nth-child(1) { background:#e8748a }
-.theme-standard .tc-swatch:nth-child(2) { background:#c9921a }
-.theme-standard .tc-swatch:nth-child(3) { background:#2d8c6b }
-.theme-standard .tc-swatch:nth-child(4) { background:#1a1a2e }
+.theme-standard .tc-swatch:nth-child(1) { background:#d6536f }
+.theme-standard .tc-swatch:nth-child(2) { background:#fbe9ee }
+.theme-standard .tc-swatch:nth-child(3) { background:#f2efe8 }
+.theme-standard .tc-swatch:nth-child(4) { background:#14141f }
+.theme-dark .tc-swatch:nth-child(1)     { background:#e86a86 }
+.theme-dark .tc-swatch:nth-child(2)     { background:#2a2a3a }
+.theme-dark .tc-swatch:nth-child(3)     { background:#1d1d28 }
+.theme-dark .tc-swatch:nth-child(4)     { background:#141420 }
 .theme-nature .tc-swatch:nth-child(1)   { background:#3d7a4a }
 .theme-nature .tc-swatch:nth-child(2)   { background:#8a6a2a }
 .theme-nature .tc-swatch:nth-child(3)   { background:#2d6b4e }
@@ -2961,7 +2984,8 @@ input, select, textarea {
 @media (max-width:1023px){
   #home-mini-stats{
     display:flex; gap:8px; flex-wrap:wrap;
-    padding:4px 2px 0;
+    justify-content:center;          /* centrées */
+    padding:6px 2px 14px;            /* espace sous les pills → bouton plus bas */
   }
   .hms-pill{
     display:inline-flex; align-items:center; gap:6px;
@@ -3461,35 +3485,9 @@ input, select, textarea {
   .vmn-part.active{ color:var(--brand); font-weight:600; border-bottom-color:var(--brand); }
 
   /* Switcher horizontal Pass/Transport/Location masqué en mobile :
-     remplacé par le swipe vertical + l'indicateur .vmn-parts. */
+     remplacé par l'indicateur .vmn-parts (le swipe horizontal du belt
+     traverse directement les 3 parties). */
   .depl-switch{ display:none !important; }
-
-  /* MODE VERTICAL MAGNÉTIQUE — les 3 parties empilées avec accrochage.
-     Activé via .depl-mode sur #voyage-sections (mobile uniquement).
-     NB : les sections vivent dans #tab-belt (flex horizontal width:max-content)
-     qu'il faut casser en bloc pleine largeur. */
-  #voyage-sections.depl-mode{
-    display:block !important;
-    overflow-x:hidden; overflow-y:auto;
-    scroll-snap-type:y proximity;
-    -webkit-overflow-scrolling:touch;
-    scroll-behavior:smooth;
-  }
-  #voyage-sections.depl-mode #tab-belt{
-    display:block !important;
-    width:100% !important; min-width:0 !important;
-    transform:none !important;
-  }
-  #voyage-sections.depl-mode .section{ display:none !important; }
-  #voyage-sections.depl-mode #tab-pass,
-  #voyage-sections.depl-mode #tab-mobilite,
-  #voyage-sections.depl-mode #tab-locations{
-    display:block !important;
-    width:100% !important; min-width:0 !important; max-width:none !important;
-    flex:none !important;
-    scroll-snap-align:start;
-    min-height:calc(100vh - 168px);   /* ~1 écran par partie → accrochage net */
-  }
 }
 
 /* ── Cards premium pour tous les items ── */
@@ -3890,6 +3888,13 @@ body::-webkit-scrollbar,
 /* État plein écran : on masque la liste + la légende, la carte prend tout */
 #voyage-map-host.is-full #tripmap-list-wrap{ display:none !important; }
 #voyage-map-host.is-full #tripmap-legend-bar{ display:none !important; }
+/* Mobile : le grand format est le défaut. On GARDE la barre filtres
+   (Tout/Logements/… + Position/Recentrer) et on masque seulement la liste ;
+   la carte (flex:1) remplit tout l'espace restant. */
+@media (max-width:1023px){
+  #voyage-map-host.is-full #tripmap-legend-bar{ display:flex !important; }
+  #voyage-map-host.is-full #tripmap-wrap{ height:auto !important; flex:1 1 auto; }
+}
 /* Mobile/tablette : en plein écran la carte prend toute la hauteur dispo
    (sur desktop, la règle grille #voyage-content … height:auto prime). */
 #voyage-map-host.is-full #tripmap-wrap{
@@ -4093,7 +4098,7 @@ body::-webkit-scrollbar,
 
 /* Boutons d'action en mode édition */
 
-.vca-btn.edit  {background:#fff;color:var(--ink);border:1.5px solid var(--border)}
+.vca-btn.edit  {background:var(--surface);color:var(--ink);border:1.5px solid var(--border)}
 
 /* Overlay d'édition rapide sur la carte */
 .vce-row{
@@ -4147,7 +4152,7 @@ body::-webkit-scrollbar,
 /* ── Boutons d'action (long-press) ── */
 /* Conteneur flottant AU-DESSUS de la carte */
 
-.vca-btn.edit  { background:#fff;color:var(--ink);border:1.5px solid var(--border); }
+.vca-btn.edit  { background:var(--surface);color:var(--ink);border:1.5px solid var(--border); }
 
 /* Mode édition : shake + bordure rose */
 
@@ -4591,7 +4596,7 @@ body::-webkit-scrollbar,
     position:absolute;
     bottom:0; left:0;
     height:3px;
-    background:#fff;
+    background:var(--surface);
     border-radius:2px 2px 0 0;
     opacity:0;
     transform:translateX(0);
@@ -5178,6 +5183,31 @@ body::-webkit-scrollbar,
 /* Défaut (avant media desktop) : enrichissements masqués */
 .voy-thumb{ display:none; }
 .voy-counters{ display:none; }
+
+/* Badge de statut vivant — visible sur mobile ET desktop */
+.voy-live-badge{
+  display:inline-block; align-self:flex-start;
+  margin-top:5px;
+  font-size:11px; font-weight:600; line-height:1.4;
+  padding:2px 9px; border-radius:20px;
+  letter-spacing:.01em; white-space:nowrap;
+}
+.vlb-ongoing{ background:var(--sakura); color:#fff; }
+.vlb-upcoming{ background:var(--sakura-light); color:var(--brand); }
+.vlb-past{ background:rgba(125,125,148,.16); color:var(--ink-hint); }
+
+/* ── Micro-transitions (sobres) ── */
+.voy-card{ transition:transform .14s ease, box-shadow .18s ease; }
+.voy-card:not(.is-editing):active{ transform:scale(.985); }
+.add-btn, .voy-act-btn, .tmap-act, .vmn-sub, .vmn-sec, .vmn-part,
+.depl-seg, .lgs-btn, .tmap-filter, #btn-new-voyage, #trips-edit-toggle{
+  transition:transform .12s ease, background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.add-btn:active, .voy-act-btn:active, .tmap-act:active,
+#btn-new-voyage:active, .vmn-sub:active{ transform:scale(.95); }
+@media (prefers-reduced-motion: reduce){
+  *{ transition:none !important; animation:none !important; scroll-behavior:auto !important; }
+}
 /* Repli des voyages au-delà des 3 plus récents (tous viewports) */
 .voy-card.voy-hidden{ display:none !important; }
 #voy-showmore{
