@@ -1588,6 +1588,41 @@ function loadProfilPage(){
   if(pvEl) pvEl.textContent = nbV;
   if(ppEl) ppEl.textContent = nbP;
 
+  // Carte « prochain voyage » (3e carte stats)
+  (function(){
+    var nextCard = document.getElementById('profil-next-card');
+    var nnEl = document.getElementById('profil-next-name');
+    var nsEl = document.getElementById('profil-next-state');
+    var ids = Object.keys(allTrips || {});
+    if(!ids.length){
+      if(nnEl) nnEl.textContent = '—';
+      if(nsEl) nsEl.textContent = 'aucun';
+      if(nextCard) nextCard.onclick = null;
+      return;
+    }
+    var now = new Date(); now.setHours(0,0,0,0);
+    var best=null, bestScore=Infinity, bestState='nodate';
+    ids.forEach(function(id){
+      var mm = (allTrips[id] && allTrips[id].meta) || {};
+      var dep = mm.dateDep ? parseDDMMYYYY(mm.dateDep) : null;
+      var ret = mm.dateRet ? parseDDMMYYYY(mm.dateRet) : null;
+      var st, sc;
+      if(dep && ret && now >= dep && now <= ret){ st='ongoing';  sc=-1e15; }
+      else if(dep && dep > now)                 { st='upcoming'; sc=dep-now; }
+      else if(ret || dep)                       { st='past';     sc=1e15+(now-(ret||dep)); }
+      else                                      { st='nodate';   sc=2e15; }
+      if(sc < bestScore){ bestScore=sc; best=id; bestState=st; }
+    });
+    var bm = (allTrips[best] && allTrips[best].meta) || {};
+    var title = bm.country || bm.name || 'Voyage';
+    var state = bestState==='ongoing' ? 'en cours'
+              : bestState==='upcoming' ? 'à venir'
+              : bestState==='past' ? 'terminé' : 'à planifier';
+    if(nnEl) nnEl.textContent = title;
+    if(nsEl) nsEl.textContent = state;
+    if(nextCard) nextCard.onclick = function(){ openTrip(best); };
+  })();
+
   // Ancienneté (date d'installation en localStorage)
   var installed = localStorage.getItem('yume_installed_at');
   if(!installed){
@@ -2032,53 +2067,54 @@ function renderHomeHero(){
   var ret = m.dateRet ? parseDDMMYYYY(m.dateRet) : null;
   var DAY = 86400000;
 
-  var kicker='', sub='', pct=-1;
+  // ── Textes selon l'état ──
+  var MOIS = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  function _d(d){ return d ? (d.getDate()+' '+MOIS[d.getMonth()]) : ''; }
+  var kicker = 'Prochaine aventure', pill = '', pillCls = 'upcoming';
   if(bestState === 'ongoing'){
     var total = Math.max(1, Math.round((ret - dep)/DAY));
     var jour  = Math.min(total, Math.round((now - dep)/DAY) + 1);
-    kicker = 'Voyage en cours';
-    sub    = 'Jour ' + jour + ' / ' + total;
-    pct    = Math.max(0, Math.min(100, Math.round((now - dep)/(ret - dep)*100)));
+    kicker = 'Voyage en cours'; pillCls = 'ongoing'; pill = 'En cours · J'+jour;
   } else if(bestState === 'upcoming'){
     var j = Math.round((dep - now)/DAY);
-    kicker = 'Prochain départ';
-    sub    = j === 0 ? "C'est aujourd'hui !" : 'Départ dans ' + j + ' jour' + (j>1?'s':'');
+    kicker = 'Prochaine aventure'; pillCls = 'upcoming';
+    pill = (j===0) ? "Aujourd'hui" : (j===1 ? 'Demain' : 'Dans '+j+' jours');
   } else if(bestState === 'past'){
-    kicker = 'Dernier voyage';
-    sub    = 'Terminé';
+    kicker = 'Dernier voyage'; pillCls = 'past'; pill = 'Terminé';
   } else {
-    kicker = 'Voyage';
-    sub    = 'Dates à définir';
+    kicker = 'Mon voyage'; pill = '';
   }
 
-  var datesLine = (m.dateDep || '') + (m.dateRet ? ' → ' + m.dateRet : '');
+  var pname = (localStorage.getItem('yume_profile_name') || '').trim();
+  var hello = pname ? ('Bonjour ' + pname) : 'Bonjour';
+  var title = m.country || m.name || 'Mon voyage';
+  var datesLine = (dep && ret) ? (_d(dep) + ' — ' + _d(ret)) : (dep ? _d(dep) : 'Dates à définir');
+  var isGroup = !!(m.groupMode === true && Array.isArray(m.members) && m.members.length >= 2);
+  var travel = isGroup ? ('Groupe · ' + m.members.length) : 'Solo';
 
-  // Budget : dépensé (somme des transactions en €) vs budget défini
-  var budgetLine = '';
-  var spent = (trip.transactions || []).reduce(function(s2,t){
-    return s2 + (parseFloat(t.amount) || 0);
-  }, 0);
-  if(trip.budget > 0){
-    var rest = trip.budget - spent;
-    budgetLine = Math.round(spent) + ' € dépensés · '
-      + (rest >= 0 ? Math.round(rest) + ' € restants' : Math.round(-rest) + ' € de dépassement');
-  } else if(spent > 0){
-    budgetLine = Math.round(spent) + ' € dépensés';
-  }
+  var ICO_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  var ICO_CAL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="14" height="14"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>';
+  var ICO_USER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="14" height="14"><circle cx="12" cy="8" r="4"/><path d="M5 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg>';
+  var ICO_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="19" height="19"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>';
 
   el.innerHTML = ''
-    + '<div class="hh-main">'
-      + '<div class="hh-kicker">' + kicker + ' <span class="hh-sub">· ' + sub + '</span></div>'
-      + '<div class="hh-name">'  + (m.name || 'Mon voyage') + '</div>'
-      + '<div class="hh-meta">'  + datesLine
-        + (m.pays ? ' · ' + m.pays : '')
-        + (budgetLine ? ' · ' + budgetLine : '')
+    + '<div class="hh-bg" aria-hidden="true"></div>'
+    + '<div class="hh-top">'
+      + '<div class="hh-greet"><span class="hh-hi">' + hello + '</span>'
+      + '<span class="hh-kicker">' + kicker + '</span></div>'
+      + '<button class="hh-bell" onclick="openSettings && openSettings()" aria-label="Notifications">' + ICO_BELL + '</button>'
+    + '</div>'
+    + '<div class="hh-body">'
+      + (pill ? '<span class="hh-pill hh-pill-'+pillCls+'">' + ICO_CLOCK + ' ' + pill + '</span>' : '')
+      + '<div class="hh-name">' + title + '</div>'
+      + '<div class="hh-meta">'
+        + '<span>' + ICO_CAL + ' ' + datesLine + '</span>'
+        + '<span>' + ICO_USER + ' ' + travel + '</span>'
       + '</div>'
-      + (pct >= 0 ? '<div class="hh-track"><div class="hh-fill" style="width:'+pct+'%"></div></div>' : '')
     + '</div>'
     + '<button class="hh-open" onclick="openTrip(\'' + best + '\')">'
-      + 'Ouvrir'
-      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'
+      + '<span>Ouvrir le voyage</span>'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'
     + '</button>';
   el.style.display = '';
 }
@@ -2399,8 +2435,8 @@ function renderTripsList(){
     if(nbTrajets)          counters.push('<div class="vc-kv"><b>'+nbTrajets+'</b> trajets</div>');
     if(t.budget>0)         counters.push('<div class="vc-kv"><b>'+Math.round(t.budget)+' €</b> budget</div>');
 
-    // Vignette : dégradé Sakura constant (plus de couleur par pays)
-    var thumbStyle = 'background:linear-gradient(135deg,var(--sakura),var(--brand-dark,#b04a63));';
+    // Vignette : aplat teinté (theme-aware) — pâle en clair, sourd en sombre
+    var thumbStyle = 'background:var(--sakura-light);';
 
     // ── Créer la carte ──
     var card = document.createElement('div');
@@ -2432,6 +2468,7 @@ function renderTripsList(){
       + '<div class="voy-col-name">'
           + '<span class="voy-col-name-text">'+(m.name||'Voyage')+'</span>'
           + '<span class="voy-col-name-country">'+subLabel+'</span>'
+          + '<span class="voy-meta-line">'+(dateLabel||'')+(dateLabel?' \u00b7 ':'')+(isGroup?('Groupe \u00b7 '+m.members.length):'Solo')+'</span>'
           + (tBadge ? '<span class="voy-live-badge vlb-'+tBadgeCls+'">'+tBadge+'</span>' : '')
           + (counters.length ? '<div class="voy-counters">'+counters.join('')+'</div>' : '')
         + '</div>'
@@ -2448,7 +2485,8 @@ function renderTripsList(){
               + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="15" height="15"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>'
             + '</button>'
           + '</div>'
-        + '</div>';
+        + '</div>'
+      + '<div class="voy-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M9 6l6 6-6 6"/></svg></div>';
     card.appendChild(inner);
 
     // ══════════════════════════════════════════════════════
@@ -3654,7 +3692,9 @@ function toggleAutoTheme(enabled){
 function applyAutoTheme(){
   if(!_autoTheme) return;
   var isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  applyTheme(isDark ? 'dark' : 'standard');
+  var isGreen = (_currentTheme === 'vert' || _currentTheme === 'vert-dark');
+  if(isGreen){ applyTheme(isDark ? 'vert-dark' : 'vert'); }
+  else       { applyTheme(isDark ? 'dark' : 'standard'); }
 }
 
 // Écouter les changements de thème système
