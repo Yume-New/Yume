@@ -30,6 +30,7 @@ function _migrateAllTrips(){
     if(!Array.isArray(t.trains))      t.trains      = [];
     if(!Array.isArray(t.hotels))      t.hotels      = [];
     if(!Array.isArray(t.lieux))       t.lieux       = [];
+    if(!Array.isArray(t.documents))   t.documents   = [];
     if(!Array.isArray(t.transactions))t.transactions= [];
     if(typeof t.budget !== 'number') t.budget = 0;
     if(typeof t.totalNuits !== 'number') t.totalNuits = 30;
@@ -804,14 +805,14 @@ window.goToMapPin = function(type, id){
 
 
 var _currentSection = 'mobilite';
-var SECTION_ORDER = ['pass','mobilite','locations','hotels','lieux','timeline','budget','convertir'];
+var SECTION_ORDER = ['pass','mobilite','locations','hotels','lieux','documents','timeline','budget','convertir'];
 
 // Navigation À PLAT (Design C) : une seule barre verticale à gauche,
 // toutes les destinations visibles, séparées en 3 blocs par usage —
 // Préparer / Suivre / Argent. 'carte' n'est pas une section du belt
 // (c'est #voyage-map-host), elle est gérée à part dans goToSection().
 var NAV_BLOCKS = [
-  { title:'Organiser le voyage', items:['deplacements','hotels','lieux'] },
+  { title:'Organiser le voyage', items:['deplacements','hotels','lieux','documents'] },
   { title:'Suivi du voyage',     items:['timeline','carte'] },
   { title:'Dépenses du voyage',  items:['budget','convertir'] }
 ];
@@ -827,7 +828,7 @@ var _lastNavId = null;      // dernière sous-section nav (optimisation rebuild)
 // La Carte (#page-futur) devient le 4e groupe, intégré au voyage.
 // ══════════════════════════════════════════════════════════════════════
 var SECTION_GROUPS = {
-  logistique: { label:'Logistique', subs:['pass','mobilite','locations','hotels'] },
+  logistique: { label:'Logistique', subs:['pass','mobilite','locations','hotels','documents'] },
   activites:  { label:'Activités',  subs:['lieux','timeline'] },
   finance:    { label:'Finance',    subs:['budget','convertir'] },
   carte:      { label:'Carte',      subs:[] }
@@ -848,7 +849,7 @@ function _visibleSubs(groupId){
 
 var SUB_META = {
   pass:'Pass', mobilite:'Transports', locations:'Locations', hotels:'Hébergements',
-  lieux:'Lieux', timeline:'Planning', alertes:'Alertes',
+  lieux:'Lieux', documents:'Documents', timeline:'Planning', alertes:'Alertes',
   budget:'Budget', convertir:'Convertir',
   deplacements:'Déplacements'
 };
@@ -866,7 +867,8 @@ var SUB_ICONS = {
   budget:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1.3"/>',
   convertir:'<path d="M4 9h13l-3-3M20 15H7l3 3"/>',
   carte:'<path d="M9 4 3 7v13l6-3 6 3 6-3V4l-6 3z"/><path d="M9 4v13M15 7v13"/>',
-  deplacements:'<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8.2 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.8"/>'
+  deplacements:'<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8.2 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.8"/>',
+  documents:'<path d="M14 3v5a1 1 0 0 0 1 1h5"/><path d="M9 4H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M9 13h6M9 17h4"/>'
 };
 function _subIcon(s){
   var p = SUB_ICONS[s] || '<circle cx="12" cy="12" r="9"/>';
@@ -1006,7 +1008,7 @@ function mobileGoPart(s){
 
 // Affiche TOUTES les sections du belt (nav à plat). 'alertes' reste masquée.
 function _exposeAllSections(){
-  ['pass','mobilite','locations','hotels','lieux','timeline','alertes','budget','convertir']
+  ['pass','mobilite','locations','hotels','lieux','documents','timeline','alertes','budget','convertir']
     .forEach(function(s){
       var el = document.getElementById('tab-' + s);
       if(!el) return;
@@ -1018,7 +1020,7 @@ function _exposeAllSections(){
 // 'deplacements' résout vers la dernière sous-vue (pass/transport/location),
 // sinon on montre le belt de sections et on bascule dessus.
 function goToSection(id, btn){
-  if(id === 'deplacements'){ id = _deplActive || 'mobilite'; }
+  if(id === 'deplacements'){ id = 'pass'; _deplActive = 'pass'; }
   // L'item de nav surligné est « Déplacements » pour les 3 sous-vues
   var navId = (_DEPL.indexOf(id) !== -1) ? 'deplacements' : id;
   document.querySelectorAll('#voyage-subsection-nav .vsn-item').forEach(function(b){
@@ -1033,9 +1035,9 @@ function goToSection(id, btn){
     if(mapHost){
       mapHost.style.display = '';
       mapHost.classList.add('is-visible');
-      // Mobile : carte en grand format par défaut
-      if(_isMobileView()) mapHost.classList.add('is-full');
-      else mapHost.classList.remove('is-full');
+      // Vue normale : carte + liste des trajets en dessous.
+      // Le bouton « agrandir » bascule en vrai plein écran (is-fullscreen).
+      mapHost.classList.remove('is-full');
       if(typeof initTripMap === 'function') initTripMap();
       setTimeout(function(){
         if(window._tripmapInstance && window._tripmapInstance.invalidateSize) window._tripmapInstance.invalidateSize();
@@ -1168,9 +1170,11 @@ function switchSection(id, btn){
     _sectionRendered[id] = true;
     if(id === 'hotels' && typeof renderHotels === 'function'){ renderHotels(); }
     if(id === 'lieux'  && typeof renderLieux   === 'function'){ renderLieux(); }
+    if(id === 'documents' && typeof renderDocuments === 'function'){ renderDocuments(); }
   } else {
     // Déjà rendu mais on force quand même pour lieux (toggle visité en temps réel)
     if(id === 'lieux'  && typeof renderLieux   === 'function'){ renderLieux(); }
+    if(id === 'documents' && typeof renderDocuments === 'function'){ renderDocuments(); }
   }
 
   if(id === 'budget' && typeof updateBudget   === 'function') updateBudget();
@@ -1203,8 +1207,8 @@ function _adaptSectionsForTrip(tid){
 
   // Mettre à jour SECTION_ORDER dynamiquement
   SECTION_ORDER = isFrance
-    ? ['pass','mobilite','locations','hotels','lieux','timeline','budget']
-    : ['pass','mobilite','locations','hotels','lieux','timeline','budget','convertir'];
+    ? ['pass','mobilite','locations','hotels','lieux','documents','timeline','budget']
+    : ['pass','mobilite','locations','hotels','lieux','documents','timeline','budget','convertir'];
 
   // Reconstruire les sous-onglets du groupe courant (le filtrage France
   // retire « Convertir » de Finance).
@@ -1263,8 +1267,11 @@ function _adaptSectionsForTrip(tid){
             _sectionRendered[id] = true;
             if(id === 'hotels' && typeof renderHotels === 'function') renderHotels();
             if(id === 'lieux'  && typeof renderLieux  === 'function') renderLieux();
+            if(id === 'documents' && typeof renderDocuments === 'function') renderDocuments();
           } else if(id === 'lieux' && typeof renderLieux === 'function'){
             renderLieux(); // toujours re-rendre pour toggle visité
+          } else if(id === 'documents' && typeof renderDocuments === 'function'){
+            renderDocuments();
           }
         }
       });
@@ -1558,6 +1565,7 @@ function renderExplorer(){
 // PROFIL — chargement et sauvegarde
 // ══════════════════════════════════════════════════════
 function loadProfilPage(){
+  if(typeof renderGlobalDocs==='function') renderGlobalDocs();
   // Nom
   var name = localStorage.getItem('yume_profile_name') || '';
   var nameEl = document.getElementById('profil-display-name');
@@ -3576,7 +3584,9 @@ function exportData(){
     exportedAt: new Date().toISOString(),
     profile: { name: _profileName },
     trips: allTrips,
-    pdfStore: window.pdfStore || {}
+    pdfStore: window.pdfStore || {},
+    globalDocs: (function(){ try{ return JSON.parse(localStorage.getItem('yume_global_docs')||'[]'); }catch(e){ return []; } })(),
+    globalPdfs: window.globalPdfStore || {}
   };
   var json = JSON.stringify(payload, null, 2);
   var blob = new Blob([json], {type:'application/json'});
@@ -3612,6 +3622,8 @@ function importData(fileInput){
       //    structurées (factorisé dans _migrateAllTrips). ──
       if(typeof _migrateAllTrips === 'function') _migrateAllTrips();
       if(data.pdfStore) window.pdfStore = data.pdfStore;
+      if(data.globalDocs){ try{ localStorage.setItem('yume_global_docs', JSON.stringify(data.globalDocs)); }catch(e){} }
+      if(data.globalPdfs){ window.globalPdfStore = data.globalPdfs; try{ localStorage.setItem('yume_global_pdfs', JSON.stringify(data.globalPdfs)); }catch(e){} }
       if(data.profile && data.profile.name){
         _profileName = data.profile.name;
         localStorage.setItem('yume_profile_name', _profileName);
@@ -3748,7 +3760,7 @@ function renderDonutChart(catTotals, total){
   var circumference = 2 * Math.PI * R;
   var offset = 0;
   var segments = entries.map(function(e,i){
-    var color = getCatColor(e[0], i);   // ← couleur unifiée via catColors
+    var color = _catColor(e[0]);   // couleur coordonnée (même que barres/points)
     var pct = e[1] / total;
     var arc = pct * circumference;
     var seg = '<circle cx="'+cx+'" cy="'+cy+'" r="'+R+'"'
@@ -3756,10 +3768,10 @@ function renderDonutChart(catTotals, total){
       +' stroke-width="'+stroke+'"'
       +' stroke-dasharray="'+arc.toFixed(2)+' '+(circumference-arc).toFixed(2)+'"'
       +' stroke-dashoffset="'+(-offset).toFixed(2)+'">'
-      +'<title>'+e[0]+' — '+Math.round(pct*100)+'%</title>'
+      +'<title>'+_catClean(e[0])+' — '+Math.round(pct*100)+'%</title>'
       +'</circle>';
     offset += arc;
-    return {seg:seg, name:e[0], pct:Math.round(pct*100), color:color};
+    return {seg:seg, name:_catClean(e[0]), pct:Math.round(pct*100), color:color};
   });
 
   var svgInner = segments.map(function(s){return s.seg;}).join('');
@@ -4489,7 +4501,7 @@ function toggleForm(id){
   };
 
   // Liste des formulaires qui passent en MODAL (les autres restent inline)
-  var MODAL_FORMS = ['form-mobilite','form-location','form-hotel','form-lieu','form-vol','form-train'];
+  var MODAL_FORMS = ['form-mobilite','form-location','form-hotel','form-lieu','form-vol','form-train','form-tx','form-doc'];
 
   if(isOpening){
     if(MODAL_FORMS.indexOf(id) !== -1){
@@ -4767,7 +4779,7 @@ function openTimelineDetail(cat, id){
   } else if(cat === 'lieu'){
     obj = byId(typeof lieux!=='undefined'?lieux:[]); if(!obj) return _tlFallback('lieux');
     kind='lieu'; editFn='editLieu'; typeLabel='Lieu à visiter'; color='#16a085';
-    title = (obj.emoji?obj.emoji+' ':'')+(obj.nom||'—');
+    title = obj.nom || '—';
     var lAddr = obj.rue ? (obj.rue+(obj.cp?' '+obj.cp:'')+', '+(obj.ville||'')+(obj.pays?', '+obj.pays:''))
                         : (obj.fullAddress||obj.adresse||'');
     rows += _tlRow('Catégorie', obj.categorie);
@@ -4791,6 +4803,24 @@ function openTimelineDetail(cat, id){
     rows += _tlRow('Note', obj.note);
     pdfId = obj.pdfId;
 
+  } else if(cat === 'location'){
+    obj = byId(typeof locations!=='undefined'?locations:[]); if(!obj) return _tlFallback('locations');
+    kind='location'; editFn='editLocation'; typeLabel='Location'; color='#2980b9';
+    var LL={voiture:'Voiture',scooter:'Scooter',moto:'Moto',velo:'Vélo',van:'Van'};
+    var locLbl=(typeof LOC_LABELS!=='undefined'&&LOC_LABELS[obj.type])||LL[obj.type]||obj.type;
+    title = obj.modele || locLbl || 'Location';
+    rows += _tlRow('Type', locLbl);
+    rows += _tlRow('Loueur', obj.loueur);
+    rows += _tlRow('Prise en charge', (obj.dateDep||'')+(obj.heureDep?' à '+obj.heureDep:''));
+    rows += _tlRow('Restitution', (obj.dateRet||'')+(obj.heureRet?' à '+obj.heureRet:''));
+    rows += _tlRow('Lieu de prise', obj.lieuDep);
+    rows += _tlRow('Lieu de restitution', obj.lieuRet);
+    rows += _tlRow('N° réservation', obj.resa);
+    rows += _tlRow('Caution', obj.caution);
+    rows += _tlRow('Statut', obj.statut);
+    rows += _tlRow('Note', obj.note);
+    pdfId = obj.pdfId;
+
   } else { return; }
 
   var pdfHtml = _tlPdfBtn(pdfId);
@@ -4809,6 +4839,7 @@ function openTimelineDetail(cat, id){
     + '<div class="modal-footer">'
       + '<button class="btn-ghost" onclick="closeModal()">Fermer</button>'
       + '<div class="modal-actions">'
+        + (kind==='lieu' ? '<button class="btn-ghost" onclick="toggleLieuVisitedFromModal('+(typeof id==='number'?id:('\''+id+'\''))+')">'+(obj.visited?'Marquer non visité':'Marquer visité')+'</button>' : '')
         + '<button class="btn-primary" onclick="closeModal();'+editFn+'('+(typeof id==='number'?id:('\''+id+'\''))+')">Modifier</button>'
       + '</div>'
     + '</div>'
@@ -4819,6 +4850,29 @@ function openTimelineDetail(cat, id){
 // Repli si l'objet est introuvable : on renvoie vers la section concernée
 function _tlFallback(section){
   if(typeof switchSection === 'function') switchSection(section);
+}
+// Clic sur une carte (pass/transport/location/hôtel/lieu) → modale détail.
+// En mode édition (body.emode-*), on laisse les boutons d'édition agir.
+function openCardDetail(cat, id){
+  if(document.body.className.indexOf('emode-') !== -1) return;
+  if(typeof openTimelineDetail === 'function') openTimelineDetail(cat, id);
+}
+// Garde-fou : un clic sur un élément interactif interne (bouton PDF, copier,
+// carte, édition…) ne doit pas ouvrir la modale détail.
+function _cardDetailClick(ev, cat, id){
+  if(ev && ev.target && ev.target.closest &&
+     ev.target.closest('.copyable,.pdf-view-btn,.pdf-del-btn,.edit-item-btn,.hotel-map-btn,.loc-key-badge,button,a,input,select,label')) return;
+  openCardDetail(cat, id);
+}
+// Basculer « visité » depuis la modale détail d'un lieu, puis ré-afficher la modale à jour.
+function toggleLieuVisitedFromModal(id){
+  id = isNaN(+id) ? id : +id;
+  var l = (typeof lieux!=='undefined'?lieux:[]).filter(function(o){ return o.id == id; })[0];
+  if(!l) return;
+  l.visited = !l.visited;
+  if(typeof snapshotCurrentTrip==='function') snapshotCurrentTrip();
+  if(typeof renderLieux==='function') renderLieux();
+  openTimelineDetail('lieu', id);
 }
 
 function sel(id,val){
@@ -5442,7 +5496,7 @@ function renderVols(){
           +v.escales.map(function(esc,i){
             return '<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">'
               +'<span style="font-weight:600">'+esc.aeroport+'</span>'
-              +(esc.duree?'<span style="color:var(--ink-muted)">⏱ '+esc.duree+'</span>':'')
+              +(esc.duree?'<span style="color:var(--ink-muted)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="10" height="10" style="vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> '+esc.duree+'</span>':'')
               +(esc.numero?'<span style="color:var(--ink-hint)">'+esc.numero+'</span>':'')
             +'</div>';
           }).join('')
@@ -5830,7 +5884,7 @@ function renderPasses(){
         +(emodes&&emodes.passes ? '<button class="pdf-del-btn" data-pid="'+p.pdfId+'" data-passid="'+p.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>' : '')
       +'</div>';
     }
-    return '<div class="pass-card item-wrap epass" style="position:relative">'
+    return '<div class="pass-card item-wrap epass" style="position:relative" onclick="_cardDetailClick(event,\'pass\','+p.id+')">'
       +'<div class="pass-title">'+p.nom+' <span class="badge '+sc+'">'+p.statut+'</span></div>'
       +(validite?'<div class="pass-info">'+validite+(p.numero?' · N° <span class="copyable" data-copy="'+(p.numero+'').replace(/"/g,'&quot;')+'">'+p.numero+'</span>':'')+(p.prix?' · '+p.prix+' €':'')+'</div>':'')
       +(p.numero&&!validite?'<div class="pass-info">N° <span class="copyable" data-copy="'+(p.numero+'').replace(/"/g,'&quot;')+'">'+p.numero+'</span>'+(p.prix?' · '+p.prix+' €':'')+'</div>':'')
@@ -5926,7 +5980,7 @@ function renderTrains(){
       +'<div class="tdate-badge"><div class="tdate-day">'+(t.jour||'—')+'</div><div class="tdate-month">'+(t.mois?t.mois.toUpperCase():'')+'</div></div>'
       +'<div class="train-info">'
         +'<div class="train-route">'+t.route+'</div>'
-        +'<div class="train-detail">'+(t.train?t.train+' · ':'')+(t.dep?'Départ '+t.dep:'')+(t.arr?' · Arrivée '+t.arr:'')+(t.duree?' · ⏱ '+t.duree:'')+'</div>'
+        +'<div class="train-detail">'+(t.train?t.train+' · ':'')+(t.dep?'Départ '+t.dep:'')+(t.arr?' · Arrivée '+t.arr:'')+(t.duree?' · <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="10" height="10" style="vertical-align:-1px"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> '+t.duree:'')+'</div>'
         +(t.siege?'<div class="train-detail">Siège '+t.siege+(t.voiture?' · Voiture '+t.voiture:'')+'</div>':'')
       +'</div>'
       +'<span class="badge '+bc+'">'+t.statut+'</span>'
@@ -6085,8 +6139,8 @@ function deleteTrain(id){id=isNaN(+id)?id:+id;
 // transport classiques fournis en référence : remplissage solide,
 // formes reconnaissables d'un coup d'œil, grille 24px commune.
 var MOB_ICONS = {
-  vol:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="18" height="18"><path d="M21.5 15.5l-8-2.2V6.5a1.5 1.5 0 00-3 0v6.8l-8 2.2v1.8l8-1.6v3.4l-2.2 1.4v1.3l3.7-.9 3.7.9v-1.3L13.5 20v-3.4l8 1.6v-1.8z"/></svg>',
-  train:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="18" height="18"><path d="M7 2.5h10a3 3 0 013 3V15a3 3 0 01-3 3h-.4l1.9 2.7a.7.7 0 01-1.1.8L14.6 18H9.4l-2.8 3.5a.7.7 0 01-1.1-.8L7.4 18H7a3 3 0 01-3-3V5.5a3 3 0 013-3zm-.5 4v4.5h11V6.5h-11zM8.5 15.4a1.3 1.3 0 100-2.6 1.3 1.3 0 000 2.6zm7 0a1.3 1.3 0 100-2.6 1.3 1.3 0 000 2.6z"/></svg>',
+  vol:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>',
+  train:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="19" height="19"><path d="M8 4v3a4 4 0 0 0 8 0V4"/><path d="M9 18.5A5 5 0 0 1 4 13.5v-3a8 8 0 0 1 16 0v3a5 5 0 0 1-5 5z"/><circle cx="9.2" cy="13.4" r="1" fill="currentColor" stroke="none"/><circle cx="14.8" cy="13.4" r="1" fill="currentColor" stroke="none"/><path d="m8 18.5-2 3"/><path d="m16 18.5 2 3"/></svg>',
   bus:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="18" height="18"><path d="M6 2.8h12a2.5 2.5 0 012.5 2.5V16a2 2 0 01-1.3 1.9l1.3 2.4a.65.65 0 01-1.15.6L18 18.2H6l-1.4 2.7a.65.65 0 01-1.15-.6l1.3-2.4A2 2 0 013.5 16V5.3A2.5 2.5 0 016 2.8zm-.5 4V11h13V6.8h-13zM7.5 15.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4zm9 0a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4z"/></svg>',
   bateau:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="18" height="18"><path d="M11 2.6h2v1.6h2.5a1 1 0 011 1V9l3 .9a1 1 0 01.68 1.23l-1.43 5A2 2 0 0117.83 17H6.17a2 2 0 01-1.92-1.45l-1.43-5A1 1 0 013.5 9.3L6.5 8.4V5.2a1 1 0 011-1H11V2.6zM8.5 6.2v1.6L12 6.8l3.5 1V6.2h-7z"/><path d="M2.5 19.2q2.3 1.8 4.75 0t4.75 0 4.75 0 4.75 0v1.9q-2.3 1.8-4.75 0t-4.75 0-4.75 0-4.75 0v-1.9z"/></svg>',
   covoiturage:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="18" height="18"><path d="M5 11l1.5-4.2A2 2 0 018.4 5.5h7.2a2 2 0 011.9 1.3L19 11h.5a1.5 1.5 0 011.5 1.5V16a1 1 0 01-1 1h-1v1.3a1.2 1.2 0 01-2.4 0V17H7.4v1.3a1.2 1.2 0 01-2.4 0V17H4a1 1 0 01-1-1v-3.5A1.5 1.5 0 014.5 11H5zm2.2-.4h9.6l-1-2.8a.6.6 0 00-.6-.4H8.8a.6.6 0 00-.6.4l-1 2.8zM6.5 14.5a1.1 1.1 0 100-2.2 1.1 1.1 0 000 2.2zm11 0a1.1 1.1 0 100-2.2 1.1 1.1 0 000 2.2z"/></svg>',
@@ -6099,7 +6153,7 @@ var MOB_LABELS = {
   covoiturage:'Covoiturage', metro:'Métro / RER', taxi:'Taxi / VTC', pass:'Pass'
 };
 var MOB_COLORS = {
-  vol:'#e8748a', train:'#2d5e8c', bus:'#2d8c6b', bateau:'#2d8c8c',
+  vol:'#c2607f', train:'#4264d0', bus:'#2d8c6b', bateau:'#2d8c8c',
   covoiturage:'#c9921a', metro:'#7c5cbf', taxi:'#c9921a', pass:'#5c6bc0'
 };
 var MOB_STATUT_OK = ['Confirmé','Réservé','Activé'];
@@ -6392,7 +6446,7 @@ function renderMobilite(){
         +(d2.length?'<div style="font-size:11px;color:var(--ink-hint);padding:0 0 2px 28px">'+d2.join(' · ')+'</div>':'')
       +'</div>'
       +'<div class="mob-meta" style="margin-top:5px">'
-        +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+m.statut+'</span>'
+        +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+(statutOk?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ':'')+m.statut+'</span>'
         +(m.note?'<span class="mob-tag">'+m.note+'</span>':'')
         +passCoverHtml
       +'</div>';
@@ -6402,24 +6456,24 @@ function renderMobilite(){
         +(details.length?'<div class="mob-detail">'+details.join(' · ')+'</div>':'')
         +escalesHtml
         +'<div class="mob-meta">'
-          +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+m.statut+'</span>'
+          +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+(statutOk?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ':'')+m.statut+'</span>'
           +(m.note?'<span class="mob-tag">'+m.note+'</span>':'')
           +passCoverHtml
         +'</div>';
     }
 
-    return '<div class="mob-item item-wrap emobilite'+((m.type==='vol'&&m.segment2)?' has-seg2':'')+'">'
-      +'<div class="mob-icon '+m.type+'" style="background:'+color+'18;border-color:'+color+'44" title="Transport">'+icon+'</div>'
+    return '<div class="mob-item item-wrap emobilite'+((m.type==='vol'&&m.segment2)?' has-seg2':'')+'" onclick="_cardDetailClick(event,\'transport\','+m.id+')">'
+      +'<div class="mob-icon '+m.type+'" style="background:'+color+'18;border-color:'+color+'44;color:'+color+'" title="Transport">'+icon+'</div>'
       +'<div class="mob-body">'+bodyHtml+'</div>'
       +(m.type!=='vol'||!m.segment2
         ?'<div class="mob-right">'
           +(m.heureDep?'<div class="mob-time">'+m.heureDep+(m.heureArr?' → '+m.heureArr:'')+'</div>':'')
           +(m.date?'<div class="mob-date">'+m.date+'</div>':'')
-          +(m.duree?'<div class="mob-duree">⏱ '+m.duree+'</div>':'')
+          +(m.duree?'<div class="mob-duree"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="11" height="11"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> '+m.duree+'</div>':'')
         +'</div>'
         :'<div class="mob-right">'
           +(m.date?'<div class="mob-date">'+m.date+'</div>':'')
-          +(m.duree?'<div class="mob-duree">⏱ '+m.duree+'</div>':'')
+          +(m.duree?'<div class="mob-duree"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="11" height="11"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> '+m.duree+'</div>':'')
         +'</div>'
       )
       +'<button class="edit-item-btn" onclick="event.stopPropagation();editMobilite('+m.id+')"></button>'
@@ -6805,9 +6859,10 @@ function renderLocations(){
   }
   el.innerHTML=locations.map(function(l){
     var icon=LOC_ICONS[l.type]||'—';
-    return '<div class="loc-card item-wrap elocations">'
+    var lcolor=(typeof LOC_COLORS!=='undefined'&&LOC_COLORS[l.type])||'#7a8290';
+    return '<div class="loc-card item-wrap elocations" onclick="_cardDetailClick(event,\'location\','+l.id+')">'
       +'<div class="loc-card-header">'
-        +'<div class="loc-icon" title="Location">'+icon+'<span class="loc-key-badge"></span></div>'
+        +'<div class="loc-icon" style="background:'+lcolor+'18;color:'+lcolor+'" title="Location">'+icon+'<span class="loc-key-badge"></span></div>'
         +'<div style="flex:1;min-width:0">'
           +'<div class="loc-title">'+(l.modele||LOC_LABELS[l.type]||'Location')+'</div>'
           +'<div class="loc-sub">'+(l.loueur?l.loueur+' · ':'')+(l.statut||'Confirmée')+'</div>'
@@ -6856,7 +6911,7 @@ function addLocation(){
   toggleForm('form-location');
   renderLocations();
   snapshotCurrentTrip();
-  showToast(LOC_ICONS[loc.type]+' ajoutée', 'success');
+  showToast((LOC_LABELS[loc.type]||'Location')+' ajoutée', 'success');
 }
 
 function editLocation(id){id=isNaN(+id)?id:+id;
@@ -6974,6 +7029,7 @@ function _syncTotalNuits(){
 
 function renderNightsSummary(){
   document.getElementById('nuits-total-input').value=totalNuits;
+  var _ntn=document.getElementById('nights-total-num'); if(_ntn)_ntn.textContent=totalNuits;
   var vm={};
   hotels.forEach(function(h){var k=h.ville;vm[k]=(vm[k]||0)+_hotelNights(h);});
   var entries=Object.keys(vm).map(function(k){return [k,vm[k]];});
@@ -7013,15 +7069,21 @@ function renderHotels(){
       adresseLine = '<div class="hotel-adresse">'+h.adresse
         +'<button class="map-pin-link" onclick="event.stopPropagation();goToMapPin(\'hotel\','+h.id+')" title="Voir sur la carte"><svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' width=\'13\' height=\'13\'><path d=\'M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z\'/><line x1=\'9\' y1=\'3\' x2=\'9\' y2=\'17\'/><line x1=\'15\' y1=\'6.5\' x2=\'15\' y2=\'20.5\'/></svg></button></div>';
     }
-    return '<div class="hotel-item item-wrap ehotel">'
-      +'<div class="hotel-stripe" style="background:'+c+'"></div>'
-      +'<div style="flex:1">'
-        +'<div class="hotel-name">'+h.nom+'</div>'
-        +'<div class="hotel-info">'+(h.checkin?h.checkin+' → '+h.checkout+' · ':'')+(h.type?h.type+' · ':'')+h.ville+'</div>'
-        +adresseLine
-        +(h.resa?'<div class="hotel-ref" style="color:'+c+'">Résa : <span class="copyable" data-copy="'+(h.resa+'').replace(/"/g,'&quot;')+'">'+h.resa+'</span></div>':'')
+    var _nh=_hotelNights(h);
+    var _bits=[];
+    if(h.checkin && h.checkout) _bits.push(h.checkin+' → '+h.checkout);
+    else if(h.checkin) _bits.push(h.checkin);
+    if(_nh) _bits.push(_nh+' nuit'+(_nh>1?'s':''));
+    if(h.ville || h.pays) _bits.push((h.ville||'')+(h.pays?'<span class="pays-tag">'+h.pays+'</span>':''));
+    return '<div class="hotel-item item-wrap ehotel" style="border-left-color:'+c+'" onclick="_cardDetailClick(event,\'hotel\','+h.id+')">'
+      +'<div class="hotel-main">'
+        +'<div class="hotel-top">'
+          +'<div class="hotel-name">'+h.nom+'</div>'
+          +'<button class="hotel-map-btn" onclick="event.stopPropagation();goToMapPin(\'hotel\','+h.id+')" title="Voir sur la carte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z"/><line x1="9" y1="3" x2="9" y2="17"/><line x1="15" y1="6.5" x2="15" y2="20.5"/></svg></button>'
+        +'</div>'
+        +(_bits.length?'<div class="hotel-info">'+_bits.join(' · ')+'</div>':'')
+        +(h.resa?'<div class="hotel-ref" style="color:'+c+'">Résa · <span class="copyable" data-copy="'+(h.resa+'').replace(/"/g,'&quot;')+'">'+h.resa+'</span></div>':'')
       +'</div>'
-      +'<div class="hotel-nights">'+(_hotelNights(h)?_hotelNights(h)+' nuits':'')+'</div>'
       +'<button class="edit-item-btn" onclick="event.stopPropagation();editHotel('+h.id+')"></button>'
     +'</div>';
   }).join('');
@@ -7188,26 +7250,26 @@ function _renderLieuCard(l){
   var locLine = l.ville + (l.pays ? ', <span style="color:var(--ink-hint)">' + l.pays + '</span>' : '');
   var adresseDetail = '';
   if(l.rue){ adresseDetail = '<div class="place-adresse">' + l.rue + (l.cp ? ' ' + l.cp : '') + ', ' + l.ville + (l.pays ? ', ' + l.pays : '') + '</div>'; }
-  var catBadge = l.categorie ? '<div class="lieu-cat-badge ' + _lieuCatClass(l.categorie) + '">' + l.categorie + '</div>' : '';
+  var meta = _lieuCatMeta(l.categorie);
+  var catBadge = l.categorie ? '<span class="lieu-cat-badge" style="background:' + meta.tint + ';color:' + meta.color + '">' + l.categorie + '</span>' : '';
+  var visBadge = l.visited ? '<span class="place-visited"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="10" height="10"><polyline points="20 6 9 17 4 12"/></svg> Visit\u00e9</span>' : '';
 
   card.innerHTML =
-    '<div style="display:flex;align-items:flex-start;gap:10px">'
-      + '<div class="place-emoji">' + (l.emoji || '') + '</div>'
-      + '<div style="flex:1;min-width:0">'
-        + '<div class="place-name">' + l.nom + '</div>'
-        + '<div class="place-city">' + locLine + mapBtn + '</div>'
-        + catBadge + horaires + adresseDetail
+    '<div class="place-row">'
+      + '<div class="place-chip" style="background:' + meta.tint + ';color:' + meta.color + '">' + meta.svg + '</div>'
+      + '<div class="place-body">'
+        + '<div class="place-head"><span class="place-name">' + l.nom + '</span>' + visBadge + '</div>'
+        + '<div class="place-sub"><span class="place-city">' + locLine + mapBtn + '</span>' + catBadge + '</div>'
+        + horaires + adresseDetail
         + (l.note ? '<div class="place-note">' + l.note + '</div>' : '')
-        + (l.visited ? '<div class="place-check">Visité</div>' : '')
         + pdfHtml
       + '</div>'
     + '</div>'
     + '<button class="edit-item-btn" onclick="event.stopPropagation();editLieu(' + l.id + ')"></button>';
 
-  card.onclick = function(){
+  card.onclick = function(e){
     if(emodes && emodes.lieux) return;
-    var found = lieux.find(function(x){ return x.id === l.id; });
-    if(found){ found.visited = !found.visited; snapshotCurrentTrip(); renderLieux(); }
+    _cardDetailClick(e, 'lieu', l.id);
   };
   return card;
 }
@@ -7308,6 +7370,19 @@ function _lieuCatIcon(cat){
   // anciens littéraux \\U0001… (style Python) ne s'interprétaient pas
   // en JS et apparaissaient en brut (« U0001f4cd ») — supprimés.
   return '';
+}
+function _lieuCatSvg(cat){
+  var P={
+    'Temples':'<path d="M4 8h16M5 8v12M19 8v12M3 8l9-4 9 4M8 20v-6h8v6"/>',
+    'Parcs':'<path d="M12 3L6 12h12L12 3zM9.5 12L5 18h14l-4.5-6M12 18v3"/>',
+    'Randonn\u00e9es':'<path d="M3 20l6-11 4 6 1.5-2.5L21 20z"/><circle cx="8" cy="6" r="1.6"/>',
+    'Restaurants':'<path d="M7 3v18M5 3v5a2 2 0 0 0 4 0V3M17 3c-1.6 1.2-2.2 4-2.2 6.2 0 1.8 1 2.8 2.2 2.8v9"/>',
+    'Mus\u00e9es':'<path d="M3 21h18M5 21V10M9.5 21V10M14.5 21V10M19 21V10M3 10h18L12 3 3 10z"/>',
+    'Shopping':'<path d="M6 8h12l-1 12H7L6 8zM9 8V6a3 3 0 0 1 6 0v2"/>',
+    'Onsen':'<path d="M4 13h16M4 13c0 4.4 3.6 8 8 8s8-3.6 8-8M8.5 4.5c.8.9.8 1.6 0 2.5s-.8 1.6 0 2.5M12 4c.8.9.8 1.6 0 2.5s-.8 1.6 0 2.5M15.5 4.5c.8.9.8 1.6 0 2.5s-.8 1.6 0 2.5"/>'
+  };
+  var d = P[cat] || '<path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>';
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="19" height="19">'+d+'</svg>';
 }
 function _normalizeLieuVille(v){
   if(!v)return v;
@@ -7761,8 +7836,21 @@ var catColors={
   'Activités'  :'#5C6BC0',   // Bleu indigo
   'Shopping'   :'#9575CD',   // Violet doux
   'Santé'      :'#FF7043',   // Orange corail
-  '📱 Divers'     :'#78909C'    // Gris bleuté
+  'Divers'     :'#78909C'    // Gris bleuté
 };
+// Nettoie une valeur de catégorie de son emoji de préfixe : "🍱 Repas" → "Repas"
+function _catClean(cat){
+  cat = String(cat==null?'':cat);
+  var sp = cat.indexOf(' ');
+  if(sp > 0){
+    var first = cat.slice(0, sp);
+    if(!/[a-zA-ZÀ-ÿ]/.test(first)) return cat.slice(sp+1).trim();
+  }
+  return cat.trim();
+}
+function _catColor(cat){
+  return catColors[_catClean(cat)] || '#9aa3b0';
+}
 
 // ── Conversion universelle devise locale → EUR ──
 // Utilise convRate (1 EUR = convRate LOCAL) en priorité,
@@ -7812,6 +7900,7 @@ function addTransaction(){
   }
   updateBudget();
   snapshotCurrentTrip();
+  if(typeof toggleForm === 'function'){ var _tf=document.getElementById('form-tx'); if(_tf && _tf.classList.contains('open')) toggleForm('form-tx'); }
 }
 
 function deleteTransaction(id){
@@ -7845,8 +7934,8 @@ function updateBudget(){
     else{
       var mx=Math.max.apply(null,Object.values(catTotals));
       catEl.innerHTML='<div>'+Object.entries(catTotals).sort(function(a,b){return b[1]-a[1];}).map(function(e){
-        var cColor = (catColors[e[0]]||'var(--sakura)');
-        return '<div class="cat-row"><div class="cat-name"><span class="tx-cat-dot" style="background:'+cColor+'"></span>'+e[0]+'</div><div class="cat-bar-track"><div class="cat-bar-fill" style="width:'+Math.round((e[1]/mx)*100)+'%;background:'+cColor+'"></div></div><div class="cat-amount" style="color:'+cColor+'">'+e[1].toLocaleString('fr-FR',{minimumFractionDigits:2})+' €</div></div>';
+        var cColor = _catColor(e[0]);
+        return '<div class="cat-row"><div class="cat-name"><span class="tx-cat-dot" style="background:'+cColor+'"></span>'+_catClean(e[0])+'</div><div class="cat-bar-track"><div class="cat-bar-fill" style="width:'+Math.round((e[1]/mx)*100)+'%;background:'+cColor+'"></div></div><div class="cat-amount" style="color:'+cColor+'">'+e[1].toLocaleString('fr-FR',{minimumFractionDigits:2})+' €</div></div>';
       }).join('')+'</div>';
     }
   }
@@ -7856,7 +7945,7 @@ function updateBudget(){
   if(!transactions.length){txEl.innerHTML='<div class="empty-state"><div class="empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v2m0 8v2m-4-4h8"/></svg></div><div>Aucune transaction</div></div>';}
   else{
     txEl.innerHTML=transactions.slice().reverse().map(function(t){
-      var tColor = (typeof catColors!=='undefined' && catColors[t.cat]) || '#888';
+      var tColor = _catColor(t.cat);
       var isLocal = t.devise && t.devise !== 'EUR';
       // Infos devise pour le symbole correct
       var devInfo = (typeof CURRENCY_INFO!=='undefined' && CURRENCY_INFO[t.devise]) || null;
@@ -7883,7 +7972,7 @@ function updateBudget(){
       return '<div class="tx-item">'
         +'<div class="tx-body">'
           +'<div class="tx-desc">'+t.desc+deviseBadge+'</div>'
-          +'<div class="tx-cat"><span class="tx-cat-dot" style="background:'+tColor+'"></span> '+t.cat+'</div>'
+          +'<div class="tx-cat"><span class="tx-cat-dot" style="background:'+tColor+'"></span>'+_catClean(t.cat)+'</div>'
         +'</div>'
         +'<div class="tx-right">'
           +'<div class="tx-amount" style="font-size:15px;font-weight:600;color:var(--ink)">-'+eurStr+'</div>'
@@ -8506,7 +8595,7 @@ function attachPdfToForm(hiddenId, fileInput){
 }
 
 function openPdf(pdfId){
-  var entry = window.pdfStore[pdfId];
+  var entry = window.pdfStore[pdfId] || (window.globalPdfStore && window.globalPdfStore[pdfId]);
   if(!entry){ alert('PDF introuvable. Le document a peut-être été supprimé ou la page a été rechargée.'); return; }
   try {
     // Méthode 1 : Blob URL (la plus fiable, ouvre un vrai PDF viewer)
@@ -9993,3 +10082,609 @@ document.addEventListener('DOMContentLoaded', function(){
   }, 500);
 });
 
+
+
+// ══════════════════════════════════════════════════════════════════════
+// SOUS-SECTION DOCUMENTS — coffre-fort local (Liste / Catégories)
+// Données : globale `documents` (siloée par voyage via state.js).
+// ══════════════════════════════════════════════════════════════════════
+var _docView = 'cat';   // 'liste' | 'cat' — défaut Catégories
+
+// Catégories (ordre + libellé + icône filaire). 'passeport' est replié
+// sous « Identité » pour le regroupement et la grille.
+var DOC_CAT = {
+  passeport:{ label:'Passeport',  group:'identite' },
+  identite: { label:'Identité',   group:'identite' },
+  visa:     { label:'Visa',       group:'visa' },
+  assurance:{ label:'Assurance',  group:'assurance' },
+  billets:  { label:'Billets',    group:'billets' },
+  sante:    { label:'Santé',      group:'sante' },
+  autre:    { label:'Autre',      group:'autre' }
+};
+var DOC_GROUP = {
+  identite: { label:'Identité',  icon:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="2"/><path d="M13 9h5M13 13h5M5.5 16h6"/>' },
+  visa:     { label:'Visa',      icon:'<rect x="5" y="3" width="14" height="18" rx="2"/><circle cx="12" cy="10" r="2.4"/><path d="M9 15h6"/>' },
+  assurance:{ label:'Assurance', icon:'<path d="M12 3l7 3v6c0 4.2-3 7.4-7 9-4-1.6-7-4.8-7-9V6z"/><path d="M9.5 12l1.8 1.8L15 10"/>' },
+  billets:  { label:'Billets',   icon:'<path d="M4 9a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M14 7v10"/>' },
+  sante:    { label:'Santé',     icon:'<path d="M12 20s-6-4.4-6-9a3.6 3.6 0 0 1 6-2.6A3.6 3.6 0 0 1 18 11c0 4.6-6 9-6 9z"/><path d="M9.5 11h5M12 8.5v5"/>' },
+  autre:    { label:'Autre',     icon:'<path d="M14 3v5a1 1 0 0 0 1 1h5"/><path d="M9 4H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M9 13h6M9 17h4"/>' }
+};
+var DOC_GROUP_ORDER = ['identite','visa','assurance','billets','sante','autre'];
+
+function _docEsc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function _docVal(id){ var e=document.getElementById(id); return e ? e.value : ''; }
+function _docSet(id,v){ var e=document.getElementById(id); if(e) e.value = (v==null?'':v); }
+function _docGroupKey(d){ var c=(d&&d.cat)||'autre'; return (DOC_CAT[c]&&DOC_CAT[c].group)||'autre'; }
+function _docIcon(cat){
+  var g=_docGroupKey({cat:cat});
+  var p=(DOC_GROUP[g]&&DOC_GROUP[g].icon)||DOC_GROUP.autre.icon;
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">'+p+'</svg>';
+}
+function _docFmtExpiry(ym){
+  var m=/^(\d{4})-(\d{2})$/.exec(ym||''); if(!m) return ym||'';
+  return m[2]+'/'+m[1];
+}
+function _docSpaced(n){ return String(n||'').replace(/\s+/g,'').replace(/(.{4})/g,'$1 ').trim(); }
+function _docValidity(d){
+  if(!d || !d.expiry) return { state:'none' };
+  var m=/^(\d{4})-(\d{2})$/.exec(d.expiry); if(!m) return { state:'none' };
+  var end=new Date(+m[1], +m[2], 0); end.setHours(23,59,59,999);
+  var now=new Date(); now.setHours(0,0,0,0);
+  var days=Math.round((end-now)/86400000);
+  if(days < 0)  return { state:'expired', days:days };
+  if(days <= 60) return { state:'warn', days:days };
+  return { state:'valid', days:days };
+}
+function _docBadge(v){
+  if(!v || v.state==='none') return '';
+  if(v.state==='valid')   return '<span class="doc-badge doc-badge-valid"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> Valide</span>';
+  if(v.state==='warn')    return '<span class="doc-badge doc-badge-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg> '+v.days+'j</span>';
+  return '<span class="doc-badge doc-badge-exp">Expiré</span>';
+}
+
+function setDocView(v, btn){
+  _docView = (v==='cat') ? 'cat' : 'liste';
+  document.querySelectorAll('#doc-view-switch .lgs-btn').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-docview')===_docView);
+  });
+  renderDocuments();
+}
+
+function renderDocuments(){
+  var host=document.getElementById('doc-render');
+  if(!host) return;
+  // Le formulaire d'ajout reste fermé tant qu'on n'appuie pas sur « Ajouter »
+  var _f=document.getElementById('form-doc'); if(_f) _f.classList.remove('open');
+  document.querySelectorAll('#doc-view-switch .lgs-btn').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-docview')===_docView);
+  });
+  host.innerHTML = (_docView==='cat') ? _renderDocCats() : _renderDocList();
+}
+
+function _docSecure(foot){
+  return '<div class="doc-secure'+(foot?' doc-secure-foot':'')+'">'
+    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="16" height="16"><path d="M12 3l7 3v6c0 4.2-3 7.4-7 9-4-1.6-7-4.8-7-9V6z"/><path d="M9.5 12l1.8 1.8L15 10"/></svg>'
+    + '<span>Chiffrés et stockés sur votre appareil.'+(foot?'':' Jamais partagés sans votre accord.')+'</span></div>';
+}
+
+function _docRow(d){
+  var v=_docValidity(d), sub=[];
+  if(d.number) sub.push('N° '+_docEsc(d.number));
+  if(d.expiry) sub.push('exp. '+_docFmtExpiry(d.expiry));
+  var perso=!!d.__personal;
+  var click=perso ? "openGlobalDocModal('"+d.id+"')" : "editDoc('"+d.id+"')";
+  var g=_docGroupKey(d), c=_docColor(g);
+  return '<div class="doc-row'+(perso?' doc-row-perso':'')+'" onclick="'+click+'">'
+    + '<span class="doc-row-ico" data-cat="'+g+'" style="background:'+c+'1e;color:'+c+'">'+_docIcon(d.cat)+'</span>'
+    + '<div class="doc-row-body"><div class="doc-row-name">'+_docEsc(d.name||'Document')
+      + (perso?' <span class="doc-perso-badge">Personnel</span>':'')+'</div>'
+    + (sub.length?'<div class="doc-row-sub">'+sub.join(' \u00b7 ')+'</div>':'')+'</div>'
+    + _docBadge(v) + '</div>';
+}
+// Documents du voyage + documents personnels (transverses), ces derniers marqués __personal.
+function _allDocs(){
+  var arr=(typeof documents!=='undefined'&&documents?documents.slice():[]);
+  var g=(typeof getGlobalDocs==='function')?getGlobalDocs():[];
+  g.forEach(function(x){
+    arr.push({ id:x.id, name:x.name, cat:x.cat, number:x.number, expiry:x.expiry, pdfId:x.pdfId, __personal:true });
+  });
+  return arr;
+}
+
+function _renderDocList(){
+  var html = _docSecure(false);
+  html += '<button class="doc-add-big" onclick="openDocAdd()">'
+    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="18" height="18"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>'
+    + ' Ajouter un document</button>';
+  var all=_allDocs();
+  if(!all.length){
+    html += '<div class="doc-empty">Aucun document pour l\'instant.</div>';
+    return html;
+  }
+  var groups={}, present=[];
+  all.forEach(function(d){ var k=_docGroupKey(d); if(!groups[k]){groups[k]=[];present.push(k);} groups[k].push(d); });
+  DOC_GROUP_ORDER.forEach(function(k){
+    if(!groups[k]) return;
+    var arr=groups[k];
+    html += '<div class="doc-group-title">'+(DOC_GROUP[k]?DOC_GROUP[k].label:k).toUpperCase()+' \u00b7 '+arr.length+'</div>';
+    html += '<div class="doc-section">';
+    arr.forEach(function(d){ html += _docRow(d); });
+    html += '</div>';
+  });
+  return html;
+}
+
+function _renderDocCats(){
+  var html='';
+  var all=_allDocs();
+  // Carte vedette : 1er passeport, sinon 1re pièce d'identité
+  var hero=null, i;
+  for(i=0;i<all.length;i++){ if(all[i].cat==='passeport'){ hero=all[i]; break; } }
+  if(!hero){ for(i=0;i<all.length;i++){ if(_docGroupKey(all[i])==='identite'){ hero=all[i]; break; } } }
+  if(hero){
+    var hv=_docValidity(hero);
+    var heroClick=hero.__personal ? ("openGlobalDocModal('"+hero.id+"')") : ("editDoc('"+hero.id+"')");
+    html += '<div class="doc-hero" onclick="'+heroClick+'">'
+      + '<span class="doc-hero-ico">'+_docIcon(hero.cat)+'</span>'
+      + '<div class="doc-hero-kicker">'+_docEsc((DOC_CAT[hero.cat]?DOC_CAT[hero.cat].label:'Document')).toUpperCase()+'</div>'
+      + '<div class="doc-hero-name">'+_docEsc(hero.name||'Document')+'</div>'
+      + '<div class="doc-hero-foot">'
+        + '<span class="doc-hero-num">'+(hero.number?_docEsc(_docSpaced(hero.number)):'')+'</span>'
+        + (hero.expiry?'<span class="doc-hero-exp">Expire '+_docFmtExpiry(hero.expiry)+'</span>':'')
+        + _docBadge(hv)
+      + '</div></div>';
+  }
+  // Alerte expiration la plus urgente (expiré ou < 60 j)
+  var urgent=null;
+  all.forEach(function(d){
+    var v=_docValidity(d);
+    if(v.state==='warn' || v.state==='expired'){
+      if(!urgent || v.days < urgent.v.days){ urgent={ d:d, v:v }; }
+    }
+  });
+  if(urgent){
+    var ud=urgent.d, uv=urgent.v;
+    var msg = uv.state==='expired'
+      ? (_docEsc(ud.name||'Un document')+' a expiré')
+      : (_docEsc(ud.name||'Un document')+' expire dans '+uv.days+' jours');
+    html += '<div class="doc-alert" onclick="setDocView(\'liste\')">'
+      + '<span class="doc-alert-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg></span>'
+      + '<div class="doc-alert-body"><div class="doc-alert-title">'+msg+'</div>'
+      + '<div class="doc-alert-sub">Pense à le renouveler avant le départ</div></div>'
+      + '<span class="doc-alert-chev">\u203a</span></div>';
+  }
+  // Grille catégories
+  var counts={};
+  all.forEach(function(d){ var k=_docGroupKey(d); counts[k]=(counts[k]||0)+1; });
+  html += '<div class="doc-cats-title">Catégories</div>';
+  html += '<div class="doc-tiles">';
+  DOC_GROUP_ORDER.forEach(function(k){
+    var n=counts[k]||0; if(!n) return;
+    var _tc=_docColor(k);
+    html += '<div class="doc-tile" onclick="openDocCategory(\''+k+'\')">'
+      + '<span class="doc-tile-ico" data-cat="'+k+'" style="background:'+_tc+'1e;color:'+_tc+'">'+_docIcon(k)+'</span>'
+      + '<div class="doc-tile-name">'+(DOC_GROUP[k]?DOC_GROUP[k].label:k)+'</div>'
+      + '<div class="doc-tile-count">'+n+' doc'+(n>1?'s':'')+'</div></div>';
+  });
+  html += '<div class="doc-tile doc-tile-add" onclick="openDocAdd()">'
+    + '<span class="doc-tile-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>'
+    + '<div class="doc-tile-name">Ajouter</div></div>';
+  html += '</div>';
+  html += _docSecure(true);
+  return html;
+}
+
+function _resetDocForm(){
+  _docSet('doc-name',''); _docSet('doc-cat','passeport'); _docSet('doc-number','');
+  _docSet('doc-expiry',''); _docSet('doc-file',''); _docSet('doc-edit-id','');
+  var del=document.getElementById('doc-del-btn'); if(del) del.style.display='none';
+  var fb=document.getElementById('doc-file-badge'); if(fb) fb.innerHTML='';
+}
+
+function openDocAdd(){
+  _resetDocForm();
+  if(typeof openAddTop==='function') openAddTop('form-doc');
+}
+
+function editDoc(id){
+  var d=null; for(var i=0;i<documents.length;i++){ if(documents[i].id===id){ d=documents[i]; break; } }
+  if(!d) return;
+  _docSet('doc-name',d.name); _docSet('doc-cat',d.cat||'autre'); _docSet('doc-number',d.number||'');
+  _docSet('doc-expiry',d.expiry||''); _docSet('doc-file',d.file||''); _docSet('doc-edit-id',d.id);
+  var del=document.getElementById('doc-del-btn'); if(del) del.style.display='';
+  var fb=document.getElementById('doc-file-badge');
+  if(fb) fb.innerHTML = d.file ? '<span class="doc-file-tag">Fichier joint</span>' : '';
+  if(typeof openAddTop==='function') openAddTop('form-doc');
+}
+
+function saveDoc(){
+  var name=_docVal('doc-name').trim();
+  if(!name){ alert('Donne un nom au document.'); return; }
+  var rec={
+    id: _docVal('doc-edit-id') || ('doc_'+Date.now()+'_'+Math.floor(Math.random()*1000)),
+    name: name,
+    cat: _docVal('doc-cat')||'autre',
+    number: _docVal('doc-number').trim(),
+    expiry: _docVal('doc-expiry'),
+    file: _docVal('doc-file')
+  };
+  var editId=_docVal('doc-edit-id');
+  if(editId){
+    var idx=documents.findIndex(function(x){ return x.id===editId; });
+    if(idx!==-1) documents[idx]=rec; else documents.push(rec);
+  } else {
+    documents.push(rec);
+  }
+  if(typeof snapshotCurrentTrip==='function') snapshotCurrentTrip();
+  _resetDocForm();
+  if(typeof toggleForm==='function') toggleForm('form-doc');
+  renderDocuments();
+}
+
+function deleteDoc(){
+  var id=_docVal('doc-edit-id'); if(!id) return;
+  if(!confirm('Supprimer ce document ?')) return;
+  documents = documents.filter(function(x){ return x.id!==id; });
+  if(typeof snapshotCurrentTrip==='function') snapshotCurrentTrip();
+  _resetDocForm();
+  if(typeof toggleForm==='function') toggleForm('form-doc');
+  renderDocuments();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  DOCUMENTS PERSONNELS (globalDocs) — transverses à tous les voyages.
+//  Stockés en localStorage (yume_global_docs), HORS silo voyage : aucune
+//  fuite entre voyages, pas de snapshot/restore. Métadonnées seules (pas
+//  de PDF en v1 : pdfStore est par-voyage, un PDF global nécessiterait un
+//  store dédié — chantier de suivi).
+// ══════════════════════════════════════════════════════════════════════
+function _loadGlobalDocs(){
+  try{ var raw=localStorage.getItem('yume_global_docs'); return raw?JSON.parse(raw):[]; }
+  catch(e){ return []; }
+}
+function _saveGlobalDocs(arr){
+  try{ localStorage.setItem('yume_global_docs', JSON.stringify(arr||[])); }catch(e){}
+}
+// Exposé pour le futur affichage en lecture seule dans les voyages
+window.getGlobalDocs = _loadGlobalDocs;
+
+function renderGlobalDocs(){
+  var host=document.getElementById('global-docs-list');
+  var docs=_loadGlobalDocs();
+  var cnt=document.getElementById('gdoc-count'); if(cnt) cnt.textContent=docs.length;
+  if(!host) return;
+  if(!docs.length){
+    host.innerHTML='<div class="gdoc-empty">Aucun document personnel pour l\'instant. Ajoute ta carte d\'identité, ton passeport… ils resteront disponibles dans tous tes voyages.</div>';
+    return;
+  }
+  host.innerHTML=docs.map(function(d){
+    var badge=_docBadge(_docValidity(d));
+    var hasPdf=d.pdfId && window.globalPdfStore && window.globalPdfStore[d.pdfId];
+    var sub=(DOC_CAT[d.cat]?DOC_CAT[d.cat].label:'Document')+(d.number?' \u00b7 '+d.number:'');
+    var gc=_docColor(_docGroupKey(d));
+    return '<div class="gdoc-row" onclick="openGlobalDocModal(\''+d.id+'\')">'
+      +'<span class="gdoc-ico" data-cat="'+_docGroupKey(d)+'" style="background:'+gc+'1e;color:'+gc+'">'+_docIcon(d.cat)+'</span>'
+      +'<div class="gdoc-body">'
+        +'<div class="gdoc-name">'+_docEsc(d.name)+'</div>'
+        +'<div class="gdoc-sub">'+_docEsc(sub)+'</div>'
+      +'</div>'
+      +(hasPdf?'<span class="gdoc-clip" title="Fichier joint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M21 12.5 12.5 21a4 4 0 0 1-6-6l8-8a2.5 2.5 0 0 1 4 4l-8 8a1 1 0 0 1-1.5-1.5L16 11"/></svg></span>':'')
+      +(badge?'<span class="gdoc-badge-wrap">'+badge+'</span>':'')
+      +'<svg class="gdoc-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="9 18 15 12 9 6"/></svg>'
+    +'</div>';
+  }).join('');
+}
+
+function openGlobalDocModal(id){
+  var docs=_loadGlobalDocs();
+  var d = id ? docs.filter(function(x){ return x.id==id; })[0] : null;
+  var selStyle='flex:1;min-width:0;padding:9px 12px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none';
+  var catOpts=Object.keys(DOC_CAT).map(function(k){
+    return '<option value="'+k+'"'+((d&&d.cat===k)?' selected':'')+'>'+_docEsc(DOC_CAT[k].label)+'</option>';
+  }).join('');
+  var existingPdf='';
+  if(d && d.pdfId && window.globalPdfStore && window.globalPdfStore[d.pdfId]){
+    var _pn=_docEsc(window.globalPdfStore[d.pdfId].name||'Document');
+    existingPdf='<button type="button" class="pdf-view-btn" onclick="openPdf(\''+d.pdfId+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> '+_pn+'</button>'
+      +'<button type="button" class="pdf-del-btn" onclick="_gdocPdfRemove()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>';
+  }
+  var html='<div class="tld">'
+    +'<div class="tld-head"><span class="tld-dot" style="background:var(--sakura)"></span>'
+      +'<div class="tld-head-txt"><div class="tld-type">Document personnel</div>'
+      +'<div class="tld-title">'+(d?_docEsc(d.name):'Nouveau document')+'</div></div></div>'
+    +'<div class="modal-form">'
+      + modalField('Nom', mInput('gdoc-name', d?d.name:'', 'ex : Passeport, Carte d\'identit\u00e9'))
+      + modalField('Cat\u00e9gorie', '<select id="gdoc-cat" style="'+selStyle+'">'+catOpts+'</select>')
+      + modalField('N\u00b0 / r\u00e9f\u00e9rence', mInput('gdoc-number', d?d.number:'', ''))
+      + modalField('Expiration', '<input type="month" id="gdoc-expiry" value="'+(d?_docEsc(d.expiry||''):'')+'" style="'+selStyle+'"/>')
+      + '<div class="modal-field w-full"><label>Fichier (PDF ou image)</label>'
+        + '<div id="gdoc-pdf-badge" class="pdf-action-row" style="margin-bottom:6px">'+existingPdf+'</div>'
+        + '<input type="hidden" id="gdoc-pdfid" value="'+(d&&d.pdfId?_docEsc(d.pdfId):'')+'"/>'
+        + '<label class="pdf-btn">Choisir un fichier<input type="file" accept="image/*,.pdf,application/pdf" onchange="attachGlobalPdf(this)"/></label>'
+      + '</div>'
+    +'</div>'
+    +'<div class="modal-footer">'
+      +(d?'<button class="btn-danger" onclick="deleteGlobalDoc(\''+d.id+'\')">Supprimer</button>':'<span></span>')
+      +'<div class="modal-actions">'
+        +'<button class="btn-ghost" onclick="closeModal()">Annuler</button>'
+        +'<button class="btn-primary" onclick="saveGlobalDoc('+(d?'\''+d.id+'\'':'null')+')">Enregistrer</button>'
+      +'</div>'
+    +'</div></div>';
+  openModal(html);
+}
+
+function saveGlobalDoc(id){
+  var name=(_docVal('gdoc-name')||'').trim();
+  if(!name){ alert('Donne un nom au document.'); return; }
+  var rec={
+    id: id || ('g'+Date.now()),
+    name: name,
+    cat: _docVal('gdoc-cat')||'autre',
+    number: (_docVal('gdoc-number')||'').trim(),
+    expiry: _docVal('gdoc-expiry')||'',
+    pdfId: _docVal('gdoc-pdfid')||''
+  };
+  var docs=_loadGlobalDocs();
+  if(id){
+    var i=docs.findIndex(function(x){ return x.id==id; });
+    if(i>=0) docs[i]=rec; else docs.push(rec);
+  } else { docs.push(rec); }
+  _saveGlobalDocs(docs);
+  closeModal();
+  renderGlobalDocs();
+  if(typeof renderDocuments==='function') renderDocuments();
+}
+
+function deleteGlobalDoc(id){
+  if(!confirm('Supprimer ce document personnel ?')) return;
+  var docs=_loadGlobalDocs();
+  var d=docs.filter(function(x){ return x.id==id; })[0];
+  if(d && d.pdfId && window.globalPdfStore && window.globalPdfStore[d.pdfId]){
+    delete window.globalPdfStore[d.pdfId]; _saveGlobalPdfStore();
+  }
+  _saveGlobalDocs(docs.filter(function(x){ return x.id!=id; }));
+  closeModal();
+  renderGlobalDocs();
+  if(typeof renderDocuments==='function') renderDocuments();
+}
+
+// ── Store PDF global pour les documents personnels (persistant, hors voyage) ──
+window.globalPdfStore = (function(){
+  try{ var r=localStorage.getItem('yume_global_pdfs'); return r?JSON.parse(r):{}; }
+  catch(e){ return {}; }
+})();
+function _saveGlobalPdfStore(){
+  try{ localStorage.setItem('yume_global_pdfs', JSON.stringify(window.globalPdfStore||{})); return true; }
+  catch(e){ alert('Espace de stockage insuffisant pour enregistrer ce fichier. Essaie une image plus l\u00e9g\u00e8re (max ~3 Mo).'); return false; }
+}
+function attachGlobalPdf(fileInput){
+  var file=fileInput.files[0]; if(!file) return;
+  if(file.size > 3*1024*1024){ alert('Fichier trop lourd (max 3 Mo pour un document personnel).'); fileInput.value=''; return; }
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var id='gpdf_'+Date.now();
+    window.globalPdfStore[id]={ name:file.name, data:e.target.result };
+    if(!_saveGlobalPdfStore()){ delete window.globalPdfStore[id]; return; }
+    var hid=document.getElementById('gdoc-pdfid'); if(hid) hid.value=id;
+    _renderGdocPdfBadge(id);
+  };
+  reader.readAsDataURL(file);
+}
+function _renderGdocPdfBadge(pdfId){
+  var b=document.getElementById('gdoc-pdf-badge'); if(!b) return;
+  if(!pdfId || !window.globalPdfStore[pdfId]){ b.innerHTML=''; return; }
+  var nm=_docEsc(window.globalPdfStore[pdfId].name||'Document');
+  b.innerHTML='<button type="button" class="pdf-view-btn" onclick="openPdf(\''+pdfId+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> '+nm+'</button>'
+    +'<button type="button" class="pdf-del-btn" onclick="_gdocPdfRemove()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>';
+}
+function _gdocPdfRemove(){
+  var hid=document.getElementById('gdoc-pdfid'); if(hid) hid.value='';
+  _renderGdocPdfBadge('');
+}
+
+// ── Lieux : icône + couleur par catégorie (chip et tag coordonnés) ──
+function _lieuIconSvg(key){
+  var P={
+    temple:'<path d="M4 7h16M5 4.5l.7 2.5h12.6L19 4.5M6 7v13M18 7v13M6 11h12M9 20v-5h6v5"/>',
+    tree:'<path d="M12 3L7 11h10L12 3zM9.2 11L5.5 17h13L14.8 11M12 17v4"/>',
+    mountain:'<path d="M3 20l6-11 4 6 1.6-2.6L21 20z"/><circle cx="8" cy="6.2" r="1.5"/>',
+    food:'<path d="M7 3v18M5 3v5a2 2 0 0 0 4 0V3M17 3c-1.6 1.2-2.2 4-2.2 6.2 0 1.8 1 2.8 2.2 2.8v9"/>',
+    museum:'<path d="M3 21h18M5 21V10M9.5 21V10M14.5 21V10M19 21V10M3 10h18L12 3 3 10z"/>',
+    bag:'<path d="M6 8h12l-1 12H7L6 8zM9 8V6a3 3 0 0 1 6 0v2"/>',
+    onsen:'<path d="M4 13h16M4 13c0 4.4 3.6 8 8 8s8-3.6 8-8M8.5 5c.8.9.8 1.6 0 2.5s-.8 1.6 0 2.5M12 4.5c.8.9.8 1.6 0 2.5s-.8 1.6 0 2.5M15.5 5c.8.9.8 1.6 0 2.5s-.8 1.6 0 2.5"/>',
+    castle:'<path d="M4 21V8l3 1.6L9.5 8 12 9.6 14.5 8 17 9.6 20 8v13zM4 21h16M9.5 21v-4h5v4"/>',
+    beach:'<path d="M12 3a8 8 0 0 1 8 8H4a8 8 0 0 1 8-8zM12 11v8M3.5 21c1.4-1 2.8-1 4.2 0s2.8 1 4.2 0 2.8-1 4.6 0"/>',
+    camera:'<path d="M4 8a2 2 0 0 1 2-2h1.5L9 4h6l1.5 2H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.4"/>',
+    market:'<path d="M4 9h16l-1.2-4H5.2L4 9zM5.2 9v11h13.6V9M9 20v-6h6v6"/>',
+    gallery:'<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M7 15.5l3.2-3.2 2.3 2.3 2.8-3.6L19 15"/><circle cx="9" cy="9" r="1.3"/>',
+    pin:'<path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>'
+  };
+  var d=P[key]||P.pin;
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="19" height="19">'+d+'</svg>';
+}
+function _lieuCatMeta(cat){
+  var M={
+    'Temples':{c:'#e0662a',i:'temple'},
+    'Parcs':{c:'#2e9c54',i:'tree'},
+    'Randonn\u00e9es':{c:'#1f8a4c',i:'mountain'},
+    'Restaurants':{c:'#d24a7a',i:'food'},
+    'Mus\u00e9es':{c:'#3a51c6',i:'museum'},
+    'Shopping':{c:'#9357c9',i:'bag'},
+    'Onsen':{c:'#0f9a88',i:'onsen'},
+    'Ch\u00e2teaux':{c:'#8a6d3b',i:'castle'},
+    'Plages':{c:'#159fc4',i:'beach'},
+    'Points de vue':{c:'#2a7fd4',i:'camera'},
+    'March\u00e9s':{c:'#e0892a',i:'market'},
+    'Galeries':{c:'#7a52c4',i:'gallery'}
+  };
+  var m=M[cat]||{c:'#8a93a3',i:'pin'};
+  return { color:m.c, tint:m.c+'1e', svg:_lieuIconSvg(m.i) };
+}
+
+// ── Couleur par catégorie de document (code couleur maquette) ──
+function _docColor(g){
+  var C={ identite:'#2a7fd4', visa:'#c08a1e', assurance:'#d24a7a', billets:'#d23a52', sante:'#7a52c4', autre:'#8a93a3' };
+  return C[g] || '#8a93a3';
+}
+
+// ── Profil : replier/déplier la liste des documents personnels ──
+function toggleGlobalDocs(){
+  var panel=document.getElementById('gdoc-panel');
+  var btn=document.getElementById('gdoc-toggle');
+  if(!panel||!btn) return;
+  if(panel.hasAttribute('hidden')){ panel.removeAttribute('hidden'); btn.setAttribute('aria-expanded','true'); btn.classList.add('open'); }
+  else { panel.setAttribute('hidden',''); btn.setAttribute('aria-expanded','false'); btn.classList.remove('open'); }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  BIBLIOTHÈQUE D'ICÔNES CENTRALE (style Lucide, trait fin)
+//  Source unique pour : transport, locations, pass, lieux, documents,
+//  pastilles timeline. Trait = currentColor (hérite de la puce).
+// ════════════════════════════════════════════════════════════════
+var LU = {
+  // ── Transport ──
+  'plane':'<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+  'train-front':'<path d="M8 3.5V7a4 4 0 0 0 8 0V3.5"/><path d="M9 19a5 5 0 0 1-5-5v-3.5a8 8 0 0 1 16 0V14a5 5 0 0 1-5 5z"/><path d="m8 19-2 3"/><path d="m16 19 2 3"/><circle cx="9" cy="13.5" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="13.5" r="1" fill="currentColor" stroke="none"/>',
+  'bus':'<rect x="3" y="5" width="18" height="12" rx="2.5"/><path d="M3 11h18"/><path d="M7 5V3M17 5V3"/><circle cx="7.5" cy="17" r="1.6"/><circle cx="16.5" cy="17" r="1.6"/>',
+  'ship':'<path d="M12 10.2V14"/><path d="M12 2v3"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/><path d="M19.4 20A11.6 11.6 0 0 0 21 14l-8.2-3.6a2 2 0 0 0-1.6 0L3 14a11.6 11.6 0 0 0 1.6 6"/><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1s1.2 1 2.5 1c2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>',
+  'car-front':'<path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.65 5H8.35a2 2 0 0 0-1.9 1.3L5 10 3 8"/><rect x="3" y="10" width="18" height="8" rx="2"/><path d="M5 18v2M19 18v2"/><circle cx="7.5" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="14" r="1" fill="currentColor" stroke="none"/>',
+  'metro':'<path d="M2 22V12a10 10 0 1 1 20 0v10"/><path d="M15 6.8v1.4a3 3 0 0 1-6 0V6.8"/><path d="M10 19a4 4 0 0 1-4-4v-3a6 6 0 1 1 12 0v3a4 4 0 0 1-4 4Z"/><path d="m9 19-2 3"/><path d="m15 19 2 3"/><circle cx="10" cy="15" r=".9" fill="currentColor" stroke="none"/><circle cx="14" cy="15" r=".9" fill="currentColor" stroke="none"/>',
+  'taxi':'<path d="m21 9-2 2-1.4-3.5A2 2 0 0 0 15.7 6H8.3a2 2 0 0 0-1.9 1.5L5 11 3 9"/><rect x="3" y="11" width="18" height="8" rx="2"/><path d="M5 19v2M19 19v2"/><rect x="9" y="2.5" width="6" height="3" rx=".6"/><circle cx="7.5" cy="15" r="1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="15" r="1" fill="currentColor" stroke="none"/>',
+
+  // ── Pass ──
+  'ticket':'<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 11v2"/><path d="M13 17v2"/>',
+  'credit-card':'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+  'receipt':'<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/>',
+  'wallet':'<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+
+  // ── Véhicules (location) ──
+  'scooter':'<circle cx="5.5" cy="16.5" r="3"/><circle cx="18.5" cy="16.5" r="2.5"/><path d="M8.5 16.5h6l2.5-6"/><path d="M14 10.5h3.5"/><path d="M6 13l1.5-4H11l1.2 3.4"/>',
+  'bike':'<circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>',
+  'caravan':'<rect x="2" y="7" width="16" height="9" rx="2"/><rect x="4.5" y="9.5" width="4" height="3.5" rx=".6"/><path d="M11 16V9.5"/><path d="M18 16h2a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2h-2"/><circle cx="8" cy="17.5" r="1.8"/><path d="M2 16h4"/>',
+  'sailboat':'<path d="M22 18H2a4 4 0 0 0 4 4h12a4 4 0 0 0 4-4Z"/><path d="M21 14 10 2 3 14h18Z"/><path d="M10 2v16"/>',
+  'building-2':'<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/>',
+
+  // ── Catégories de lieux ──
+  'landmark':'<line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/>',
+  'trees':'<path d="M10 10v.2A3 3 0 0 1 8.9 16H5a3 3 0 0 1-1-5.8V10a3 3 0 0 1 6 0Z"/><path d="M7 16v6"/><path d="M13 19v3"/><path d="M12 19h8.3a1 1 0 0 0 .7-1.7L18 14h.3a1 1 0 0 0 .7-1.7L16 9h.2a1 1 0 0 0 .8-1.7L13 3l-1.4 1.5"/>',
+  'footprints':'<path d="M4 16v-2.4C4 11.5 3 10.5 3 8c0-2.7 1.5-6 4.5-6C9.4 2 10 3.8 10 5.5c0 3.1-2 5.7-2 8.7V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.4c0-2.1 1-3.1 1-5.6 0-2.7-1.5-6-4.5-6C14.6 6 14 7.8 14 9.5c0 3.1 2 5.7 2 8.7V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/>',
+  'utensils':'<path d="M3 2v7c0 1.1.9 2 2 2s2-.9 2-2V2"/><path d="M5 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>',
+  'palette':'<path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.3a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".9" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r=".9" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r=".9" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r=".9" fill="currentColor" stroke="none"/>',
+  'shopping-bag':'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  'onsen':'<path d="M3 13h18"/><path d="M3.5 13a8.5 8.5 0 0 0 17 0"/><path d="M8.5 5c.7.8.7 1.6 0 2.4M12 4.5c.7.8.7 1.6 0 2.4M15.5 5c.7.8.7 1.6 0 2.4"/><circle cx="9.5" cy="15.5" r=".7" fill="currentColor" stroke="none"/><circle cx="14.5" cy="15.5" r=".7" fill="currentColor" stroke="none"/><path d="M10.3 17.5a2.4 2.4 0 0 0 3.4 0"/>',
+  'castle':'<path d="M22 20v-9H2v9a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1Z"/><path d="M18 11V4H6v7"/><path d="M15 22v-4a3 3 0 0 0-6 0v4"/><path d="M22 11V9M2 11V9M6 4V2M10 4V2M14 4V2M18 4V2"/>',
+  'umbrella':'<path d="M22 12a10 10 0 0 0-20 0Z"/><path d="M12 12v8a2 2 0 0 0 4 0"/><path d="M12 2v1"/>',
+  'binoculars':'<path d="M10 10h4"/><path d="M9 7V4a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v3"/><path d="M19 7V4a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v3"/><path d="M9.5 7h5v8.5a2.5 2.5 0 0 1-5 0Z"/><path d="M9.5 11h-3A2.5 2.5 0 0 0 4 13.5v2a2.5 2.5 0 0 0 5 0"/><path d="M14.5 11h3a2.5 2.5 0 0 1 2.5 2.5v2a2.5 2.5 0 0 1-5 0"/>',
+  'store':'<path d="m3 7 3-4h12l3 4"/><path d="M4 7v13a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/><path d="M3 7h18"/><path d="M9 21v-6h6v6"/>',
+  'image':'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+
+  // ── Documents ──
+  'book-user':'<path d="M15 13a3 3 0 1 0-6 0"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><circle cx="12" cy="8" r="2"/>',
+  'id-card':'<path d="M16 10h2M16 14h2"/><path d="M6.2 15a3 3 0 0 1 5.6 0"/><circle cx="9" cy="11" r="2"/><rect x="2" y="5" width="20" height="14" rx="2"/>',
+  'stamp':'<path d="M5 22h14"/><path d="M19.3 13.7A2.5 2.5 0 0 0 17.5 13h-11A2.5 2.5 0 0 0 4 15.5V17a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1.5c0-.7-.3-1.3-.7-1.8Z"/><path d="M14 13V8.5C14 7 15 7 15 5a3 3 0 0 0-6 0c0 2 1 2 1 3.5V13"/>',
+  'shield':'<path d="M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.7 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.5 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1Z"/>',
+  'heart-pulse':'<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z"/><path d="M3.2 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.3"/>',
+  'file-text':'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8M16 13H8M16 17H8"/>',
+
+  // ── Timeline divers ──
+  'bed':'<path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/>',
+  'map-pin':'<path d="M20 10c0 4.4-5.4 9-8 11-2.6-2-8-6.6-8-11a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+  'log-in':'<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>',
+  'log-out':'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'
+};
+
+// Helper : renvoie un <svg> trait complet pour une icône nommée
+function _lu(n, s, w){
+  var p = LU[n] || LU['file-text'];
+  s = s || 19; w = w || 1.7;
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+w+'" stroke-linecap="round" stroke-linejoin="round" width="'+s+'" height="'+s+'">'+p+'</svg>';
+}
+
+// ── Recâblage : transport ──
+MOB_ICONS = {
+  vol:_lu('plane'), train:_lu('train-front'), bus:_lu('bus'), bateau:_lu('ship'),
+  covoiturage:_lu('car-front'), metro:_lu('metro'), taxi:_lu('taxi'), pass:_lu('ticket')
+};
+MOB_COLORS = {
+  vol:'#c2607f', train:'#4264d0', bus:'#2d8c6b', bateau:'#2d8c8c',
+  covoiturage:'#7c5cbf', metro:'#4f5bd5', taxi:'#c9921a', pass:'#c9a227'
+};
+
+// ── Recâblage : locations (véhicules) ──
+LOC_ICONS = {
+  voiture:_lu('car-front'), scooter:_lu('scooter'), velo:_lu('bike'),
+  camping:_lu('caravan'), bateau:_lu('sailboat'), loueur:_lu('building-2')
+};
+var LOC_COLORS = {
+  voiture:'#4264d0', scooter:'#4264d0', velo:'#4264d0',
+  camping:'#4264d0', bateau:'#2d8c8c', loueur:'#7a8290'
+};
+
+// ── Recâblage : pass (catégories) ──
+var PASS_ICONS = { rail:_lu('ticket'), urban:_lu('credit-card'), vignette:_lu('receipt'), autre:_lu('wallet') };
+var PASS_COLORS = { rail:'#c9921a', urban:'#c9921a', vignette:'#c9921a', autre:'#c9921a' };
+
+// ── Recâblage : documents (icône par catégorie + couleur par groupe) ──
+var DOC_ICON = {
+  passeport:'book-user', identite:'id-card', visa:'stamp',
+  assurance:'shield', billets:'ticket', sante:'heart-pulse', autre:'file-text'
+};
+function _docIcon(cat){
+  return _lu(DOC_ICON[cat] || 'file-text', 18);
+}
+function _docColor(g){
+  var C={ identite:'#2a7fd4', visa:'#c08a1e', assurance:'#2e9c54', billets:'#d23a52', sante:'#7a52c4', autre:'#8a93a3' };
+  return C[g] || '#8a93a3';
+}
+
+// ── Recâblage : catégories de lieux (icône + couleur coordonnées) ──
+function _lieuCatMeta(cat){
+  var M={
+    'Temples':{c:'#cf4d6f',i:'landmark'},
+    'Parcs':{c:'#2e9c54',i:'trees'},
+    'Randonn\u00e9es':{c:'#2e9c54',i:'footprints'},
+    'Restaurants':{c:'#c79a2e',i:'utensils'},
+    'Mus\u00e9es':{c:'#8a52c4',i:'palette'},
+    'Shopping':{c:'#d24a7a',i:'shopping-bag'},
+    'Onsen':{c:'#169c93',i:'onsen'},
+    'Ch\u00e2teaux':{c:'#c79a2e',i:'castle'},
+    'Plages':{c:'#169c93',i:'umbrella'},
+    'Points de vue':{c:'#2a7fd4',i:'binoculars'},
+    'March\u00e9s':{c:'#2e9c54',i:'store'},
+    'Galeries':{c:'#8a52c4',i:'image'}
+  };
+  var m=M[cat]||{c:'#8a93a3',i:'map-pin'};
+  return { color:m.c, tint:m.c+'1e', svg:_lu(m.i, 19) };
+}
+
+// ── Modale d'une catégorie de documents : liste des docs du groupe,
+//    chaque doc ouvre sa fiche/édition (voyage : editDoc ; perso : openGlobalDocModal). ──
+function openDocCategory(g){
+  var meta = (typeof DOC_GROUP!=='undefined' && DOC_GROUP[g]) || {label:g};
+  var color = _docColor(g);
+  var docs = _allDocs().filter(function(d){ return _docGroupKey(d)===g; });
+  var rows = docs.map(function(d){
+    var v=_docValidity(d), perso=!!d.__personal;
+    var click = perso ? ("closeModal();openGlobalDocModal('"+d.id+"')") : ("closeModal();editDoc('"+d.id+"')");
+    var sub=[]; if(d.number) sub.push('N\u00b0 '+_docEsc(d.number)); if(d.expiry) sub.push('exp. '+_docFmtExpiry(d.expiry));
+    return '<div class="doc-row'+(perso?' doc-row-perso':'')+'" onclick="'+click+'">'
+      + '<span class="doc-row-ico" style="background:'+color+'1e;color:'+color+'">'+_docIcon(d.cat)+'</span>'
+      + '<div class="doc-row-body"><div class="doc-row-name">'+_docEsc(d.name||'Document')
+        + (perso?' <span class="doc-perso-badge">Personnel</span>':'')+'</div>'
+        + (sub.length?'<div class="doc-row-sub">'+sub.join(' \u00b7 ')+'</div>':'')+'</div>'
+      + _docBadge(v) + '</div>';
+  }).join('');
+  var html = '<div class="tld">'
+    + '<div class="tld-head"><span class="tld-dot" style="background:'+color+'"></span>'
+      + '<div class="tld-head-txt"><div class="tld-type">Cat\u00e9gorie</div><div class="tld-title">'+_docEsc(meta.label)+'</div></div></div>'
+    + '<div class="doc-cat-list" style="display:flex;flex-direction:column;gap:8px;margin:6px 0 2px">'
+      + (rows || '<div class="tld-empty">Aucun document dans cette cat\u00e9gorie.</div>')
+    + '</div>'
+    + '<div class="modal-footer"><button class="btn-ghost" onclick="closeModal()">Fermer</button>'
+      + '<button class="btn-primary" onclick="closeModal();openDocAdd()">Ajouter</button></div>'
+    + '</div>';
+  openModal(html);
+}

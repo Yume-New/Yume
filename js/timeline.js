@@ -21,43 +21,27 @@
 
 // Icônes SVG par type d'événement (inline, zéro emoji)
 var _ICONS = {
-  vol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M21 16l-3-8-3 3-5-5-3 3 2 3-4 2 1 2 5-1 1 3 3-1 1 3 3-3z"/></svg>',
-  train: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><rect x="2" y="7" width="20" height="10" rx="4"/><line x1="2" y1="12" x2="22" y2="12"/><circle cx="7" cy="17" r="1.5"/><circle cx="17" cy="17" r="1.5"/></svg>',
-  bus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><rect x="2" y="6" width="20" height="14" rx="3"/><rect x="4" y="9" width="5" height="4" rx="1"/><rect x="10" y="9" width="5" height="4" rx="1"/><circle cx="6" cy="20" r="2"/><circle cx="18" cy="20" r="2"/></svg>',
-  bateau: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M2 20h20M4 14l8-10 8 10"/><path d="M12 4v10"/><path d="M4 14h16l-2 6H6l-2-6z"/></svg>',
-  metro: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><rect x="3" y="8" width="18" height="11" rx="3"/><line x1="3" y1="13" x2="21" y2="13"/><circle cx="8" cy="19" r="1.5"/><circle cx="16" cy="19" r="1.5"/><line x1="8" y1="8" x2="8" y2="4"/><line x1="16" y1="8" x2="16" y2="4"/></svg>',
-  covoiturage: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M3 11l4-7h10l4 7"/><path d="M1 11h22v7a2 2 0 01-2 2H3a2 2 0 01-2-2v-7z"/><circle cx="7" cy="15" r="2"/><circle cx="17" cy="15" r="2"/></svg>',
-  taxi: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M3 11l4-7h10l4 7"/><path d="M1 11h22v7a2 2 0 01-2 2H3a2 2 0 01-2-2v-7z"/><circle cx="7" cy="15" r="2"/><circle cx="17" cy="15" r="2"/></svg>',
-  hotel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><rect x="2" y="6" width="20" height="16" rx="2"/><path d="M2 12h20"/><rect x="7" y="16" width="3" height="6"/><rect x="14" y="16" width="3" height="6"/></svg>',
-  lieu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>',
-  pass: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M2 12h20"/><circle cx="7" cy="12" r="1.5"/></svg>',
-  checkin:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>',
-  checkout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+  vol:_lu('plane',18), train:_lu('train-front',18), bus:_lu('bus',18), bateau:_lu('ship',18),
+  metro:_lu('metro',18), covoiturage:_lu('car-front',18), taxi:_lu('taxi',18),
+  hotel:_lu('bed',18), lieu:_lu('map-pin',18), pass:_lu('ticket',18),
+  checkin:_lu('log-in',18), checkout:_lu('log-out',18)
 };
 
 // Couleurs de pastille par catégorie
 var _COLORS = {
-  vol:          '#e8748a',
-  train:        '#2d5e8c',
-  bus:          '#2d8c6b',
-  bateau:       '#2d8c8c',
-  metro:        '#7c5cbf',
-  covoiturage:  '#c9921a',
-  taxi:         '#c9921a',
-  hotel:        '#F08080',
-  lieu:         '#5C6BC0',
-  pass:         '#c9921a',
-  checkin:      '#F08080',
-  checkout:     '#5a5a72',
+  vol:'#c2607f', train:'#4264d0', bus:'#2d8c6b', bateau:'#2d8c8c',
+  metro:'#4f5bd5', covoiturage:'#7c5cbf', taxi:'#c9921a',
+  hotel:'#F08080', lieu:'#5C6BC0', pass:'#c9a227',
+  checkin:'#F08080', checkout:'#5a5a72'
 };
 
-// Libellés type pour les en-têtes de pastille
+// Libellés type pour les en-têtes de pastille (zéro emoji)
 var _TYPE_LABEL = {
-  vol:'✈️ Vol', train:'🚄 Train', bus:'🚌 Bus', bateau:'⛴️ Ferry',
-  metro:'🚇 Métro', covoiturage:'🚗 Covoit.', taxi:'🚕 Taxi',
-  hotel:'🏨 Hébergement', lieu:'📍 Lieu', pass:'🎫 Pass',
-  checkin:'🏨 Arrivée', checkout:'🚪 Départ hôtel',
-};
+  vol:'Vol', train:'Train', bus:'Bus', bateau:'Ferry',
+  metro:'Métro', covoiturage:'Covoit.', taxi:'Taxi',
+  hotel:'Hébergement', lieu:'Lieu', pass:'Pass',
+  checkin:'Arrivée', checkout:'Départ hôtel'
+}
 
 
 // ── §2 PARSEUR DE DATE YUME (JJ/MM/AAAA) ─────────────────────────────

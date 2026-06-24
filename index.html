@@ -847,8 +847,8 @@
   <div class="edit-banner" id="ebanner-hotels">Mode édition — cliquez sur l'icône d'un hébergement pour le modifier ou le supprimer</div>
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <div style="font-size:14px;font-weight:500;color:var(--ink)">Répartition des nuitées</div>
-      <button class="btn-ghost" style="font-size:11px;padding:5px 10px" onclick="toggleForm('form-nuits')">Modifier le total</button>
+      <div class="nights-card-title">Répartition des nuitées</div>
+      <button class="nights-total-pill" onclick="toggleForm('form-nuits')" title="Modifier le total"><span id="nights-total-num">0</span> nuits</button>
     </div>
     <div class="add-form" id="form-nuits" style="padding:10px 0;margin:6px 0 0;border:none;box-shadow:none;background:transparent">
       <div class="nuits-inline-form">
@@ -1094,6 +1094,58 @@
   <div id="places-empty" class="empty-state" style="display:none"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg></div><div>Aucun lieu dans cette catégorie</div></div>
   <!-- bouton bas supprimé : ajout via « + Ajouter » en tête de section -->
 </section>
+<section class="section" id="tab-documents">
+  <div class="section-top">
+    <div class="section-top-title">Documents</div>
+    <div class="section-top-actions">
+      <button class="btn-add-top" onclick="openDocAdd()" title="Ajouter un document"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter</button>
+    </div>
+  </div>
+
+  <!-- Bascule Liste / Catégories -->
+  <div class="lieux-group-switch" id="doc-view-switch">
+    <span class="lgs-label">Affichage</span>
+    <button class="lgs-btn active" data-docview="cat" onclick="setDocView('cat',this)">Catégories</button>
+    <button class="lgs-btn" data-docview="liste" onclick="setDocView('liste',this)">Liste</button>
+  </div>
+
+  <!-- Formulaire d'ajout -->
+  <div class="add-form" id="form-doc">
+    <div class="add-form-title">Ajouter un document</div>
+    <div class="form-row">
+      <input type="text" id="doc-name" placeholder="Nom (ex : Passeport, Visa Japon…)"/>
+    </div>
+    <div class="form-row">
+      <select id="doc-cat" class="doc-select">
+        <option value="passeport">Passeport</option>
+        <option value="identite">Pièce d'identité</option>
+        <option value="visa">Visa</option>
+        <option value="assurance">Assurance</option>
+        <option value="billets">Billets</option>
+        <option value="sante">Santé</option>
+        <option value="autre">Autre</option>
+      </select>
+      <input type="text" id="doc-number" placeholder="N° / référence"/>
+    </div>
+    <div class="form-row" style="align-items:center;gap:10px">
+      <label class="doc-field-lbl">Expiration</label>
+      <input type="month" id="doc-expiry" class="doc-month"/>
+    </div>
+    <div class="form-row" style="align-items:center">
+      <button class="btn-primary" onclick="saveDoc()">Enregistrer</button>
+      <button class="btn-ghost" onclick="toggleForm('form-doc')">Annuler</button>
+      <button class="btn-ghost doc-del-btn" id="doc-del-btn" onclick="deleteDoc()" style="display:none">Supprimer</button>
+      <label class="pdf-btn" style="margin-left:auto">Fichier
+        <input type="file" accept="image/*,.pdf,application/pdf" onchange="attachPdfToForm('doc-file',this)"/>
+      </label>
+      <span id="doc-file-badge"></span>
+      <input type="hidden" id="doc-file" value=""/>
+      <input type="hidden" id="doc-edit-id" value=""/>
+    </div>
+  </div>
+
+  <div id="doc-render"></div>
+</section>
 <section class="section" id="tab-timeline">
   <div class="section-top">
     <div class="section-top-title">Planning du voyage</div>
@@ -1133,7 +1185,9 @@
   <div class="section-divider"><span>Dépenses par catégorie</span></div>
   <div class="card"><div id="cat-breakdown"><div class="empty-state" style="padding:16px 0"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg></div><div>Aucune dépense enregistrée</div></div></div></div>
   <div class="section-divider"><span>Ajouter une transaction</span></div>
-  <div class="card" style="padding:16px 20px">
+  <button class="tx-add-toggle" onclick="openAddTop('form-tx')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter une transaction</button>
+  <div class="add-form" id="form-tx" style="padding:16px 20px">
+    <div class="add-form-title">Ajouter une transaction</div>
     <div class="form-row">
       <input type="text" id="tx-desc" placeholder="Description (ex: Ramen Ichiran)" style="flex:2"/>
       <input type="number" id="tx-amount" placeholder="Montant" min="0" step="0.01"/>
@@ -1570,17 +1624,15 @@
 
   <div id="profil-scroll">
 
-    <!-- Bannière (panneau sombre chaud) + barre titre/réglages superposée -->
-    <div class="profil-banner">
-      <div class="profil-banner-bar">
-        <span class="profil-banner-title">Profil</span>
-        <button class="profil-gear" type="button" onclick="openSettingsModal()" aria-label="Paramètres">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="19" height="19"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
-      </div>
+    <!-- Barre simple : titre + réglages (plus de bannière qui masque l'avatar) -->
+    <div class="profil-topbar2">
+      <span class="profil-topbar2-title">Profil</span>
+      <button class="profil-gear" type="button" onclick="openSettingsModal()" aria-label="Paramètres">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="19" height="19"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
     </div>
 
-    <!-- Hero : avatar superposé + nom + handle + 3 cartes stats -->
+    <!-- Hero : avatar + nom + handle + 3 cartes stats -->
     <div class="profil-hero">
       <div class="profil-avatar-circle" onclick="document.getElementById('profil-avatar-input').click()" id="profil-avatar-display"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
       <input type="file" id="profil-avatar-input" accept="image/*"
@@ -1618,7 +1670,7 @@
         <span class="profil-acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="18" height="18"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></span>
         <span class="profil-acc-label">Prénom</span>
         <span class="profil-acc-val">
-          <input type="text" id="profil-fname" placeholder="Ajouter" class="profil-acc-input"
+          <input type="text" id="profil-fname" placeholder="Ajouter" class="profil-acc-input" autocomplete="off" data-lpignore="true"
             oninput="saveProfileField('fname',this.value)"/>
           <span class="profil-acc-plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
         </span>
@@ -1627,7 +1679,7 @@
         <span class="profil-acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="18" height="18"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></span>
         <span class="profil-acc-label">Email</span>
         <span class="profil-acc-val">
-          <input type="email" id="profil-email" placeholder="Ajouter" class="profil-acc-input"
+          <input type="email" id="profil-email" placeholder="Ajouter" class="profil-acc-input" autocomplete="off" data-lpignore="true"
             oninput="saveProfileField('email',this.value)"/>
           <span class="profil-acc-plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
         </span>
@@ -1636,10 +1688,25 @@
         <span class="profil-acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="18" height="18"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8 9.6a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/></svg></span>
         <span class="profil-acc-label">Téléphone</span>
         <span class="profil-acc-val">
-          <input type="tel" id="profil-phone" placeholder="Ajouter" class="profil-acc-input"
+          <input type="tel" id="profil-phone" placeholder="Ajouter" class="profil-acc-input" autocomplete="off" data-lpignore="true"
             oninput="saveProfileField('phone',this.value)"/>
           <span class="profil-acc-plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
         </span>
+      </div>
+    </div>
+
+    <!-- DOCUMENTS PERSONNELS (transverses à tous les voyages) -->
+    <div class="profil-group-title">Documents personnels</div>
+    <div class="profil-section profil-docs">
+      <button class="gdoc-toggle" id="gdoc-toggle" onclick="toggleGlobalDocs()" aria-expanded="false">
+        <span class="gdoc-toggle-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
+        <span class="gdoc-toggle-label">Mes documents</span>
+        <span class="gdoc-toggle-count" id="gdoc-count">0</span>
+        <svg class="gdoc-toggle-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+      <div class="gdoc-panel" id="gdoc-panel" hidden>
+        <div id="global-docs-list"></div>
+        <button class="gdoc-add" onclick="openGlobalDocModal(null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un document personnel</button>
       </div>
     </div>
 
@@ -1809,7 +1876,7 @@
 
 
 <!-- ══ MODAL ÉDITION GLOBALE ══ -->
-<div id="editModal" class="modal-overlay" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(26,26,46,.45);align-items:center;justify-content:center">
+<div id="editModal" class="modal-overlay" style="position:fixed;inset:0;z-index:500;background:rgba(26,26,46,.45);align-items:center;justify-content:center">
   <div id="editModalInner" class="modal" style="width:100%;max-width:min(560px,96vw);max-height:90vh;overflow-y:auto;padding:24px 26px;background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow-xl)"></div>
 </div>
 

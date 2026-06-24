@@ -2224,6 +2224,7 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
   --progress-fill:linear-gradient(90deg,var(--sakura),var(--gold));
   --body-bg:var(--surface-2);
   --hero-grad:linear-gradient(160deg,#3d2731,#241920);
+  --home-hero-grad:linear-gradient(158deg,#80525f,#48313d);
   --hero-pill-bg:#e2aebd; --hero-pill-fg:#5e2233;
   --hero-btn-bg:#fff; --hero-btn-fg:var(--sakura-dark);
   --brand:var(--sakura); --brand-dark:var(--sakura-dark); --on-brand:#fff;}
@@ -2244,6 +2245,7 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
   --progress-fill:linear-gradient(90deg,var(--sakura),var(--sakura-dark));
   --body-bg:var(--surface-2);
   --hero-grad:linear-gradient(160deg,#2a1a22,#140d11);
+  --home-hero-grad:linear-gradient(158deg,#4a3340,#1f151b);
   --hero-pill-bg:#c79caa; --hero-pill-fg:#3a121f;
   --hero-btn-bg:var(--sakura); --hero-btn-fg:#fff;
   --brand:var(--sakura); --brand-dark:var(--sakura-dark); --on-brand:#fff;
@@ -2266,6 +2268,7 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
   --progress-fill:linear-gradient(90deg,var(--sakura),var(--sakura-dark));
   --body-bg:var(--surface-2);
   --hero-grad:linear-gradient(160deg,#27382c,#15231a);
+  --home-hero-grad:linear-gradient(158deg,#41604c,#23362b);
   --hero-pill-bg:#bfdcc6; --hero-pill-fg:#1c4427;
   --hero-btn-bg:#fff; --hero-btn-fg:var(--sakura-dark);
   --brand:var(--sakura); --brand-dark:var(--sakura-dark); --on-brand:#fff;
@@ -2288,6 +2291,7 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
   --progress-fill:linear-gradient(90deg,var(--sakura),var(--sakura-dark));
   --body-bg:var(--surface-2);
   --hero-grad:linear-gradient(160deg,#1a2a20,#0d1510);
+  --home-hero-grad:linear-gradient(158deg,#2d4335,#101913);
   --hero-pill-bg:#9cc3a8; --hero-pill-fg:#143020;
   --hero-btn-bg:var(--sakura); --hero-btn-fg:#0f1712;
   --brand:var(--sakura); --brand-dark:var(--sakura-dark); --on-brand:#fff;
@@ -2708,17 +2712,17 @@ input, select, textarea {
 
 .app-header{
   background:rgba(var(--surface-rgb,255,255,255),.82) !important;
-  backdrop-filter:blur(20px) saturate(1.4) !important;
-  -webkit-backdrop-filter:blur(20px) saturate(1.4) !important;
+  backdrop-filter:blur(8px) !important;
+  -webkit-backdrop-filter:blur(8px) !important;
 }
 .app-nav{
   background:rgba(var(--surface-rgb,255,255,255),.75) !important;
-  backdrop-filter:blur(16px) !important;
-  -webkit-backdrop-filter:blur(16px) !important;
+  backdrop-filter:blur(8px) !important;
+  -webkit-backdrop-filter:blur(8px) !important;
 }
 .settings-panel{
-  backdrop-filter:blur(24px) saturate(1.5) !important;
-  -webkit-backdrop-filter:blur(24px) saturate(1.5) !important;
+  backdrop-filter:blur(12px) !important;
+  -webkit-backdrop-filter:blur(12px) !important;
   background:rgba(var(--surface-rgb,255,255,255),.94) !important;
 }
 /* Dark mode glass */
@@ -2830,8 +2834,8 @@ input, select, textarea {
   background:rgba(0,0,0,.45) !important;
 }
 .settings-panel{
-  backdrop-filter:blur(40px) saturate(1.8) brightness(1.05) !important;
-  -webkit-backdrop-filter:blur(40px) saturate(1.8) brightness(1.05) !important;
+  backdrop-filter:blur(12px) !important;
+  -webkit-backdrop-filter:blur(12px) !important;
   background:rgba(var(--surface-rgb,255,255,255),.88) !important;
   border:1px solid rgba(255,255,255,.35) !important;
   box-shadow:0 20px 80px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.1) !important;
@@ -3125,8 +3129,8 @@ input, select, textarea {
 #tab-bar{
   position:fixed;bottom:0;left:0;right:0;z-index:300;
   background:rgba(var(--surface-rgb,255,255,255),.82);
-  backdrop-filter:blur(20px) saturate(1.6);
-  -webkit-backdrop-filter:blur(20px) saturate(1.6);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
   border-top:1px solid rgba(var(--surface-rgb,255,255,255),.3);
   box-shadow:0 -1px 0 rgba(26,26,46,.08);
   display:flex;align-items:stretch;
@@ -3174,9 +3178,9 @@ input, select, textarea {
   padding:0 16px;
   height:calc(52px + env(safe-area-inset-top,0px));
   padding-top:env(safe-area-inset-top,0px);
-  background:rgba(255,255,255,.92);
-  backdrop-filter:blur(16px);
-  -webkit-backdrop-filter:blur(16px);
+  background:rgba(255,255,255,.96);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
   border-bottom:1px solid rgba(0,0,0,.1);
   font-family:'DM Sans',sans-serif;
   font-size:17px;font-weight:600;
@@ -3192,44 +3196,36 @@ input, select, textarea {
   padding-bottom:calc(80px + env(safe-area-inset-bottom,0px));
 }
 
-/* ── PROFIL : bannière (panneau sombre) + barre superposée ── */
+/* ── PROFIL : barre titre + réglages (sans bannière) ── */
 #page-profil{ background:var(--body-bg); }
-.profil-banner{
-  position:relative;
-  height:calc(140px + env(safe-area-inset-top,0px));
-  overflow:hidden;
-  background:
-    repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 2px, transparent 2px 22px),
-    var(--hero-grad);
-}
-.profil-banner-bar{
-  position:absolute; top:0; left:0; right:0;
+.profil-topbar2{
   display:flex; align-items:center; justify-content:space-between;
-  padding:env(safe-area-inset-top,0px) 18px 0;
-  height:calc(54px + env(safe-area-inset-top,0px));
+  padding:calc(env(safe-area-inset-top,0px) + 8px) 18px 8px;
+  background:var(--body-bg);
+  position:sticky; top:0; z-index:50;
 }
-.profil-banner-title{ color:#fff; font-size:19px; font-weight:700; letter-spacing:-.01em; }
+.profil-topbar2-title{ color:var(--ink); font-size:20px; font-weight:700; letter-spacing:-.01em; }
 .profil-gear{
   width:38px; height:38px; border-radius:50%;
-  border:1px solid rgba(255,255,255,.28); background:rgba(255,255,255,.14);
-  color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer;
-  -webkit-tap-highlight-color:transparent; transition:transform .12s ease;
+  border:1px solid var(--border); background:var(--surface);
+  color:var(--ink-muted); display:flex; align-items:center; justify-content:center; cursor:pointer;
+  -webkit-tap-highlight-color:transparent; transition:transform .12s ease; flex-shrink:0;
 }
 .profil-gear:active{ transform:scale(.94); }
 
-/* Hero : avatar superposé + nom + handle + cartes stats */
+/* Hero : avatar + nom + handle + cartes stats */
 .profil-hero{
   background:transparent;
-  padding:0 16px 14px;
+  padding:10px 16px 14px;
   display:flex; flex-direction:column; align-items:center;
   margin-bottom:4px;
 }
 .profil-avatar-circle{
   width:92px; height:92px; border-radius:50%;
-  margin-top:-46px;
+  margin-top:6px;
   background:linear-gradient(135deg,var(--sakura-light),var(--sakura));
   border:4px solid var(--body-bg);
-  box-shadow:0 0 0 2px var(--sakura), 0 8px 22px rgba(0,0,0,.2);
+  box-shadow:0 0 0 2px var(--sakura), 0 8px 22px rgba(0,0,0,.18);
   color:var(--sakura-dark);
   display:flex; align-items:center; justify-content:center;
   overflow:hidden; cursor:pointer; flex-shrink:0;
@@ -3978,8 +3974,35 @@ body::-webkit-scrollbar,
 }
 #tripmap-fullscreen-btn:hover{ border-color:var(--brand); color:var(--brand); }
 #tripmap-fullscreen-btn .ic-collapse{ display:none; }
-#voyage-map-host.is-full #tripmap-fullscreen-btn .ic-expand{ display:none; }
-#voyage-map-host.is-full #tripmap-fullscreen-btn .ic-collapse{ display:block; }
+#voyage-map-host.is-fullscreen #tripmap-fullscreen-btn .ic-expand{ display:none; }
+#voyage-map-host.is-fullscreen #tripmap-fullscreen-btn .ic-collapse{ display:block; }
+
+/* ── Vrai plein écran : overlay fixe couvrant tout le viewport ──
+   Spécificité 2-ID + !important pour primer sur les règles desktop
+   #voyage-content #voyage-map-host{…} et la grille .is-full. */
+#voyage-content #voyage-map-host.is-fullscreen,
+#voyage-map-host.is-fullscreen{
+  position:fixed !important; inset:0 !important; z-index:1200 !important;
+  width:100vw !important; height:100dvh !important; max-height:none !important;
+  margin:0 !important; border-radius:0 !important;
+  background:var(--surface);
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  display:flex !important; flex-direction:column !important;
+  grid-template-columns:none !important; grid-template-rows:none !important;
+}
+#voyage-content #voyage-map-host.is-fullscreen #tripmap-topbar,
+#voyage-map-host.is-fullscreen #tripmap-topbar{ display:none !important; }
+#voyage-content #voyage-map-host.is-fullscreen #tripmap-legend-bar,
+#voyage-map-host.is-fullscreen #tripmap-legend-bar{ display:flex !important; }
+#voyage-content #voyage-map-host.is-fullscreen #tripmap-list-wrap,
+#voyage-map-host.is-fullscreen #tripmap-list-wrap{ display:none !important; }
+#voyage-content #voyage-map-host.is-fullscreen #tripmap-wrap,
+#voyage-map-host.is-fullscreen #tripmap-wrap{
+  flex:1 1 auto !important; height:auto !important; min-height:0 !important; max-height:none !important;
+  grid-column:auto !important; grid-row:auto !important;
+}
+#voyage-map-host.is-fullscreen #tripmap-fullscreen-btn{ bottom:calc(18px + env(safe-area-inset-bottom,0px)); }
 /* État plein écran : on masque la liste + la légende, la carte prend tout */
 #voyage-map-host.is-full #tripmap-list-wrap{ display:none !important; }
 #voyage-map-host.is-full #tripmap-legend-bar{ display:none !important; }
@@ -4112,6 +4135,7 @@ body::-webkit-scrollbar,
 .tx-cat-dot {
   width: 8px; height: 8px; border-radius: 50%;
   display: inline-block; flex-shrink: 0;
+  margin-right: 8px; vertical-align: middle;
 }
 
 /* Sélecteur V / VA */
@@ -4556,7 +4580,7 @@ body::-webkit-scrollbar,
     position:absolute; inset:0; z-index:0;
     background:
       repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 2px, transparent 2px 22px),
-      var(--hero-grad);
+      var(--home-hero-grad, var(--hero-grad));
   }
   #home-hero .hh-bg::after{
     content:''; position:absolute; inset:0;
@@ -5713,8 +5737,10 @@ body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
 #page-explorer{ background:var(--surface-2); overflow-y:auto; }
 #explorer-scroll{
   max-width:880px;
+  width:100%;
+  box-sizing:border-box;
   margin:0 auto;
-  padding:20px clamp(16px,4vw,40px) 60px;
+  padding:34px clamp(16px,4vw,40px) 60px;
 }
 .explorer-searchbar{
   display:flex; align-items:center; gap:10px;
@@ -5818,3 +5844,338 @@ body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
   #page-voyage .app-header #app-trip-name{ color:var(--on-brand) !important; }
 }
 
+
+/* ══════════════════════════════════════════════════════════════════
+   SOUS-SECTION DOCUMENTS — coffre-fort local (Liste / Catégories)
+   DA mono-Sakura. Puces d'icône teintées accent.
+   ══════════════════════════════════════════════════════════════════ */
+#tab-documents .doc-secure{
+  display:flex; align-items:flex-start; gap:9px;
+  background:var(--sakura-light); color:var(--ink-muted);
+  border-radius:12px; padding:11px 13px; font-size:13px; line-height:1.35; margin-bottom:14px;
+}
+#tab-documents .doc-secure svg{ color:var(--sakura); flex-shrink:0; margin-top:1px; }
+#tab-documents .doc-secure-foot{ background:transparent; padding:14px 2px 2px; justify-content:center; }
+
+.doc-add-big{
+  width:100%; display:flex; align-items:center; justify-content:center; gap:8px;
+  padding:14px; border:none; border-radius:14px;
+  background:var(--sakura); color:#fff;
+  font-family:'DM Sans',sans-serif; font-size:15px; font-weight:700;
+  cursor:pointer; margin-bottom:18px; box-shadow:0 6px 18px rgba(176,58,85,.2);
+  transition:transform .12s; -webkit-tap-highlight-color:transparent;
+}
+.doc-add-big:active{ transform:scale(.99); }
+
+.doc-group-title{
+  font-size:12px; font-weight:600; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--ink-hint); margin:14px 4px 8px;
+}
+.doc-section{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; overflow:hidden; margin-bottom:8px;
+}
+.doc-row{
+  display:flex; align-items:center; gap:13px; padding:13px 14px;
+  border-bottom:1px solid var(--border); cursor:pointer; transition:background .12s;
+}
+.doc-row:last-child{ border-bottom:none; }
+.doc-row:active{ background:var(--surface-2); }
+.doc-row-ico{
+  width:38px; height:38px; border-radius:11px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--sakura-light); color:var(--sakura);
+}
+.doc-row-body{ flex:1; min-width:0; }
+.doc-row-name{ font-size:15px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.doc-row-sub{ font-size:12.5px; color:var(--ink-muted); margin-top:2px; }
+
+/* Badges de validité */
+.doc-badge{
+  display:inline-flex; align-items:center; gap:4px; white-space:nowrap; flex-shrink:0;
+  font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:20px;
+}
+.doc-badge-valid{ background:rgba(46,160,90,.14); color:#2e9c54; }
+.doc-badge-warn{ background:rgba(212,160,40,.16); color:#9a6f14; }
+.doc-badge-exp{ background:rgba(214,70,70,.14); color:#d24646; }
+:root[data-theme="dark"] .doc-badge-valid, :root[data-theme="vert-dark"] .doc-badge-valid{ color:#5fcf86; }
+:root[data-theme="dark"] .doc-badge-warn,  :root[data-theme="vert-dark"] .doc-badge-warn{ color:#e8c66a; }
+:root[data-theme="dark"] .doc-badge-exp,   :root[data-theme="vert-dark"] .doc-badge-exp{ color:#f08a8a; }
+
+/* Carte vedette (passeport) */
+.doc-hero{
+  position:relative; overflow:hidden; cursor:pointer;
+  border-radius:18px; padding:18px; margin-bottom:14px; min-height:152px;
+  display:flex; flex-direction:column; justify-content:flex-end; color:#fff;
+  background:
+    repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 2px, transparent 2px 20px),
+    linear-gradient(135deg, var(--sakura), var(--sakura-dark));
+  box-shadow:0 8px 22px rgba(176,58,85,.22);
+}
+.doc-hero-ico{
+  position:absolute; top:14px; right:14px; width:40px; height:40px; border-radius:11px;
+  background:rgba(255,255,255,.18); display:flex; align-items:center; justify-content:center; color:#fff;
+}
+.doc-hero-kicker{ font-size:11px; font-weight:700; letter-spacing:.16em; opacity:.85; }
+.doc-hero-name{ font-size:26px; font-weight:800; letter-spacing:-.01em; line-height:1.05; margin-top:2px; }
+.doc-hero-foot{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:22px; }
+.doc-hero-num{ font-family:ui-monospace,monospace; font-size:15px; letter-spacing:.16em; font-weight:600; }
+.doc-hero-exp{ font-size:12px; opacity:.85; }
+.doc-hero .doc-badge{ margin-left:auto; background:rgba(255,255,255,.22); color:#fff; }
+
+/* Bandeau alerte d'expiration */
+.doc-alert{
+  display:flex; align-items:center; gap:12px; cursor:pointer;
+  background:rgba(212,160,40,.14); border:1px solid rgba(212,160,40,.4); color:#9a6f14;
+  border-radius:14px; padding:12px 14px; margin-bottom:16px;
+}
+:root[data-theme="dark"] .doc-alert, :root[data-theme="vert-dark"] .doc-alert{ color:#e8c66a; }
+.doc-alert-ico{ flex-shrink:0; display:flex; }
+.doc-alert-body{ flex:1; min-width:0; }
+.doc-alert-title{ font-size:14px; font-weight:700; }
+.doc-alert-sub{ font-size:12px; opacity:.85; margin-top:1px; }
+.doc-alert-chev{ font-size:20px; opacity:.6; flex-shrink:0; }
+
+/* Grille catégories */
+.doc-cats-title{
+  font-size:12px; font-weight:600; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--ink-hint); margin:6px 4px 10px;
+}
+.doc-tiles{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px; }
+.doc-tile{
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  padding:14px 8px; display:flex; flex-direction:column; align-items:center; gap:5px;
+  cursor:pointer; min-height:104px; justify-content:center; text-align:center;
+  transition:transform .12s; -webkit-tap-highlight-color:transparent;
+}
+.doc-tile:active{ transform:scale(.97); }
+.doc-tile-ico{
+  width:42px; height:42px; border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--sakura-light); color:var(--sakura);
+}
+.doc-tile-name{ font-size:14px; font-weight:700; color:var(--ink); }
+.doc-tile-count{ font-size:11.5px; color:var(--ink-muted); }
+.doc-tile-add{ border:1.5px dashed var(--sakura); background:transparent; }
+.doc-tile-add .doc-tile-ico{ background:transparent; }
+.doc-tile-add .doc-tile-name{ color:var(--sakura); }
+
+.doc-empty{ text-align:center; color:var(--ink-hint); padding:24px 12px; font-size:14px; }
+
+/* Champs du formulaire Documents */
+.doc-select, .doc-month{
+  font-family:'DM Sans',sans-serif; font-size:14px; padding:10px 12px;
+  border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--ink);
+}
+.doc-field-lbl{ font-size:13px; color:var(--ink-muted); font-weight:600; }
+.doc-file-tag{ font-size:12px; color:var(--sakura); font-weight:600; }
+.doc-del-btn{ color:#d24646 !important; }
+
+/* ══════════════════════════════════════════════════════════════════
+   HÉBERGEMENTS — carte « Répartition des nuitées » + cartes hôtel
+   (scopé #tab-hotels pour primer sur les règles génériques)
+   ══════════════════════════════════════════════════════════════════ */
+#tab-hotels .card{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; padding:15px 15px 13px; margin-bottom:10px; box-shadow:none;
+}
+.nights-card-title{ font-size:15px; font-weight:700; color:var(--ink); letter-spacing:-.01em; }
+.nights-total-pill{
+  border:none; background:var(--sakura-light); color:var(--sakura);
+  font-family:'DM Sans',sans-serif; font-size:12px; font-weight:700;
+  padding:5px 11px; border-radius:20px; cursor:pointer; white-space:nowrap;
+  -webkit-tap-highlight-color:transparent; transition:transform .12s;
+}
+.nights-total-pill:active{ transform:scale(.96); }
+#tab-hotels .nights-tl{ height:14px; border-radius:8px; gap:3px; margin:12px 0; }
+#tab-hotels .nt-seg{ border-radius:4px; }
+
+/* Cartes hôtel : bordure gauche couleur ville + icône carte en haut-droite */
+#tab-hotels .hotel-item{
+  display:flex; align-items:flex-start; gap:0;
+  padding:13px 14px; background:var(--surface);
+  border:1px solid var(--border); border-left:4px solid var(--sakura);
+  border-radius:14px; margin-bottom:10px;
+  position:relative; min-width:0; overflow:hidden;
+}
+#tab-hotels .hotel-main{ flex:1; min-width:0; }
+#tab-hotels .hotel-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+#tab-hotels .hotel-name{ font-size:15px; font-weight:600; color:var(--ink); min-width:0; }
+#tab-hotels .hotel-map-btn{
+  flex:none; width:32px; height:32px; border-radius:9px; border:none;
+  background:var(--sakura-light); color:var(--sakura);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  -webkit-tap-highlight-color:transparent; transition:transform .12s;
+}
+#tab-hotels .hotel-map-btn:active{ transform:scale(.92); }
+#tab-hotels .hotel-info{ font-size:12.5px; color:var(--ink-muted); margin-top:4px; line-height:1.4; }
+#tab-hotels .hotel-info .pays-tag{
+  display:inline-block; margin-left:5px; padding:1px 7px; border-radius:10px;
+  background:var(--surface-2); color:var(--ink-hint); font-size:10.5px; font-weight:600;
+}
+#tab-hotels .hotel-ref{ font-size:12px; font-weight:600; margin-top:6px; }
+
+/* ══════════════════════════════════════════════════════════════════
+   TRANSPORT — affinage cartes (durée en pastille, badge statut + coche)
+   ══════════════════════════════════════════════════════════════════ */
+#tab-mobilite .mob-item{ border-radius:14px; padding:13px 14px; box-shadow:none; }
+#tab-mobilite .mob-route{ font-size:14.5px; font-weight:600; }
+#tab-mobilite .mob-time{ font-size:13.5px; font-weight:600; }
+#tab-mobilite .mob-duree{
+  display:inline-flex; align-items:center; gap:3px;
+  font-size:11px; font-weight:600; color:var(--sakura);
+  background:var(--sakura-light); padding:3px 8px; border-radius:20px; margin-top:5px;
+}
+#tab-mobilite .mob-meta{ gap:6px; margin-top:7px; }
+#tab-mobilite .mob-tag{
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px;
+}
+#tab-mobilite .mob-tag.statut-ok{ background:rgba(46,160,90,.14); color:#2e9c54; border-color:transparent; }
+#tab-mobilite .mob-tag.statut-att{ background:rgba(212,160,40,.16); color:#9a6f14; border-color:transparent; }
+:root[data-theme="dark"] #tab-mobilite .mob-tag.statut-ok,
+:root[data-theme="vert-dark"] #tab-mobilite .mob-tag.statut-ok{ color:#5fcf86; }
+:root[data-theme="dark"] #tab-mobilite .mob-tag.statut-att,
+:root[data-theme="vert-dark"] #tab-mobilite .mob-tag.statut-att{ color:#e8c66a; }
+
+/* ── Budget : bouton « Ajouter une transaction » (form masqué par défaut) ── */
+.tx-add-toggle{
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  width:100%; box-sizing:border-box; padding:13px; margin:2px 0 10px;
+  border:1.5px dashed var(--sakura); border-radius:14px;
+  background:var(--sakura-light); color:var(--sakura);
+  font-family:'DM Sans',sans-serif; font-size:14px; font-weight:700;
+  cursor:pointer; -webkit-tap-highlight-color:transparent; transition:transform .12s;
+}
+.tx-add-toggle:active{ transform:scale(.99); }
+
+/* ══════════════════════════════════════════════════════════════════
+   LIEUX — cartes refondues (puce SVG, badge Visité, tag catégorie)
+   colonne unique sur mobile (scopé #tab-lieux pour primer)
+   ══════════════════════════════════════════════════════════════════ */
+@media(max-width:1023.98px){
+  #tab-lieux .places-grid{ display:flex; flex-direction:column; gap:10px; }
+  #tab-lieux .lieux-group-grid{ display:flex; flex-direction:column; gap:10px; }
+}
+#tab-lieux .place-card{ padding:13px 14px; border-radius:14px; box-shadow:none; gap:0; }
+#tab-lieux .place-row{ display:flex; align-items:flex-start; gap:11px; }
+#tab-lieux .place-chip{
+  flex:none; width:38px; height:38px; border-radius:11px;
+  background:var(--sakura-light); color:var(--sakura);
+  display:flex; align-items:center; justify-content:center;
+}
+#tab-lieux .place-body{ flex:1; min-width:0; }
+#tab-lieux .place-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+#tab-lieux .place-name{
+  font-size:14.5px; font-weight:600; color:var(--ink);
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:0;
+}
+#tab-lieux .place-card.visited .place-name{ color:var(--sakura-dark); }
+#tab-lieux .place-visited{
+  flex:none; display:inline-flex; align-items:center; gap:3px;
+  font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:20px;
+  background:rgba(46,160,90,.14); color:#2e9c54;
+}
+:root[data-theme="dark"] #tab-lieux .place-visited,
+:root[data-theme="vert-dark"] #tab-lieux .place-visited{ color:#5fcf86; }
+#tab-lieux .place-sub{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:3px; }
+#tab-lieux .place-city{ font-size:12px; color:var(--ink-muted); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#tab-lieux .lieu-cat-badge{ flex:none; margin-top:0; }
+
+/* ══════════════════════════════════════════════════════════════════
+   CARTE mobile — vue normale : la carte remplit le haut, la liste des
+   trajets scrolle en dessous (host remplit #voyage-content)
+   ══════════════════════════════════════════════════════════════════ */
+@media(max-width:1023.98px){
+  #voyage-content #voyage-map-host{
+    display:flex; flex-direction:column;
+    flex:1 1 auto; min-height:0; height:auto; overflow:hidden;
+  }
+  #voyage-map-host #tripmap-legend-bar{ flex:0 0 auto; }
+  #voyage-map-host #tripmap-wrap{ height:48vh; min-height:240px; max-height:none; flex:0 0 auto; }
+  #voyage-map-host #tripmap-list-wrap{ flex:1 1 auto; min-height:0; overflow-y:auto; display:block; }
+}
+
+/* ── Profil : neutraliser le surlignage autofill (case grise du prénom) ── */
+.profil-acc-input{ background:transparent !important; box-shadow:none !important; }
+.profil-acc-input:-webkit-autofill,
+.profil-acc-input:-webkit-autofill:hover,
+.profil-acc-input:-webkit-autofill:focus{
+  -webkit-box-shadow:0 0 0 1000px var(--surface) inset !important;
+  -webkit-text-fill-color:var(--ink) !important;
+  caret-color:var(--ink);
+  transition:background-color 9999s ease-in-out 0s;
+}
+
+/* Cartes cliquables → modale détail */
+.pass-card, .mob-item, .loc-card, .hotel-item{ cursor:pointer; }
+
+/* ══════════════════════════════════════════════════════════════════
+   PROFIL — Documents personnels (globalDocs, transverses aux voyages)
+   ══════════════════════════════════════════════════════════════════ */
+.profil-docs{ display:block; padding:0; background:transparent; border:none; box-shadow:none; }
+#global-docs-list{ display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+.gdoc-row{
+  display:flex; align-items:center; gap:12px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; padding:12px 14px; cursor:pointer;
+  -webkit-tap-highlight-color:transparent; transition:box-shadow .15s,border-color .15s;
+}
+.gdoc-row:active{ transform:scale(.995); }
+.gdoc-ico{
+  flex:none; width:38px; height:38px; border-radius:11px;
+  background:var(--sakura-light); color:var(--sakura);
+  display:flex; align-items:center; justify-content:center;
+}
+.gdoc-ico svg{ width:19px; height:19px; }
+.gdoc-body{ flex:1; min-width:0; }
+.gdoc-name{ font-size:14.5px; font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gdoc-sub{ font-size:12px; color:var(--ink-muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gdoc-badge-wrap{ flex:none; }
+.gdoc-chev{ flex:none; color:var(--ink-hint); }
+.gdoc-empty{
+  font-size:12.5px; color:var(--ink-muted); line-height:1.55;
+  padding:16px; background:var(--surface); border:1px dashed var(--border);
+  border-radius:14px; margin-bottom:10px;
+}
+.gdoc-add{
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  width:100%; box-sizing:border-box; padding:13px;
+  border:1.5px dashed var(--sakura); border-radius:14px;
+  background:var(--sakura-light); color:var(--sakura);
+  font-family:'DM Sans',sans-serif; font-size:14px; font-weight:700;
+  cursor:pointer; -webkit-tap-highlight-color:transparent; transition:transform .12s;
+}
+.gdoc-add:active{ transform:scale(.99); }
+.gdoc-clip{ flex:none; color:var(--ink-hint); display:flex; align-items:center; }
+
+/* Documents personnels mélangés dans la section Documents d'un voyage */
+.doc-perso-badge{
+  display:inline-block; margin-left:6px; vertical-align:middle;
+  font-size:9.5px; font-weight:700; letter-spacing:.02em; line-height:1.5;
+  padding:1px 7px; border-radius:20px;
+  background:var(--sakura-light); color:var(--sakura);
+}
+
+/* ── Profil : bouton repliable des documents personnels ── */
+.gdoc-toggle{
+  display:flex; align-items:center; gap:12px; width:100%; box-sizing:border-box;
+  padding:14px 16px; background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; cursor:pointer; -webkit-tap-highlight-color:transparent;
+  font-family:'DM Sans',sans-serif; transition:border-color .15s;
+}
+.gdoc-toggle-ico{
+  flex:none; width:34px; height:34px; border-radius:10px;
+  background:var(--sakura-light); color:var(--sakura);
+  display:flex; align-items:center; justify-content:center;
+}
+.gdoc-toggle-label{ flex:1; text-align:left; font-size:14.5px; font-weight:600; color:var(--ink); }
+.gdoc-toggle-count{
+  flex:none; min-width:22px; height:22px; padding:0 7px; border-radius:11px;
+  background:var(--sakura-light); color:var(--sakura);
+  font-size:12px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;
+}
+.gdoc-toggle-chev{ flex:none; color:var(--ink-hint); transition:transform .2s; }
+.gdoc-toggle.open .gdoc-toggle-chev{ transform:rotate(90deg); }
+.gdoc-panel{ margin-top:10px; }
+.gdoc-panel[hidden]{ display:none; }

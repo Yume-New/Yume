@@ -159,6 +159,7 @@ var mobilites    = [];
 var locations    = [];
 var hotels       = [];
 var lieux        = [];
+var documents    = [];
 var budget       = 0;
 var transactions = [];
 var totalNuits   = 30;
@@ -255,6 +256,7 @@ function _hardResetGlobals() {
   locations     = [];
   hotels        = [];
   lieux         = [];
+  documents     = [];
   budget        = 0;
   transactions  = [];
   totalNuits    = 30;
@@ -277,6 +279,7 @@ function _normalizeTripData(d) {
   if (!Array.isArray(d.passes))       d.passes       = [];
   if (!Array.isArray(d.hotels))       d.hotels       = [];
   if (!Array.isArray(d.lieux))        d.lieux        = [];
+  if (!Array.isArray(d.documents))    d.documents    = [];
   if (!Array.isArray(d.vols))         d.vols         = [];
   if (!Array.isArray(d.trains))       d.trains       = [];
   if (!Array.isArray(d.transactions)) d.transactions = [];
@@ -328,6 +331,7 @@ function snapshotCurrentTrip() {
   trip.locations    = _deepClone(locations);
   trip.hotels       = _deepClone(hotels);
   trip.lieux        = _deepClone(lieux);
+  trip.documents    = _deepClone(documents);
   trip.budget       = budget;
   trip.transactions = _deepClone(transactions);
   trip.totalNuits   = totalNuits;
@@ -381,6 +385,7 @@ function restoreTrip(tid) {
   locations    = _deepClone(d.locations);
   hotels       = _deepClone(d.hotels);
   lieux        = _deepClone(d.lieux);
+  documents    = _deepClone(d.documents);
   budget       = d.budget || 0;
   transactions = _deepClone(d.transactions);
   villeColors  = _deepCloneObj(d.villeColorMap || {});
