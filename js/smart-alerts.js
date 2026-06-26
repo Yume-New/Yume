@@ -197,7 +197,22 @@ function _parseDate(str) {
   if (fr) return new Date(+fr[3], +fr[2]-1, +fr[1]);
   var iso = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (iso) return new Date(+iso[1], +iso[2]-1, +iso[3]);
+  // Format "JJ mois" (ex: "09 août") → année tirée du voyage actif
+  if (typeof MOIS_SHORT !== 'undefined' && /^\d{1,2}\s/.test(str)) {
+    var day = parseInt(str, 10);
+    for (var i = 0; i < MOIS_SHORT.length; i++) {
+      if (str.toLowerCase().indexOf(MOIS_SHORT[i].toLowerCase()) !== -1) {
+        return new Date(_saTripYear(), i, day);
+      }
+    }
+  }
   return null;
+}
+
+function _saTripYear() {
+  var meta = (typeof currentTripId !== 'undefined' && allTrips[currentTripId] && allTrips[currentTripId].meta) || {};
+  var m = (meta.dateDep || meta.dateRet || '').match(/\/(\d{4})$/);
+  return m ? +m[1] : (new Date()).getFullYear();
 }
 
 
@@ -285,6 +300,26 @@ function _checkPlanningAlerts() {
       });
     }
   }
+
+  // ── Départ hôtel imminent (aujourd'hui / demain) ───────────────
+  hots.forEach(function (h) {
+    if (!h.heureDep) return;
+    var co = _parseDate(h.checkout);
+    if (!co) return;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var coMid = new Date(co.getFullYear(), co.getMonth(), co.getDate());
+    var diff = Math.round((coMid - today) / 86400000);
+    if (diff < 0 || diff > 1) return;
+    var hd = ('' + h.heureDep).replace(':', 'h');
+    var when = diff === 0 ? 'aujourd\'hui' : 'demain';
+    alerts.push({
+      type:  'planning',
+      level: diff === 0 ? 'error' : 'warning',
+      icon:  (typeof _lu === 'function') ? _lu('log-out', 15) : '',
+      title: 'Départ ' + (h.nom || 'hôtel') + ' ' + when,
+      body:  'Libère la chambre avant ' + hd + (h.checkout ? ' (' + h.checkout + ')' : '') + '.'
+    });
+  });
 
   return alerts;
 }

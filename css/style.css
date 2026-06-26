@@ -1474,9 +1474,7 @@ body.has-bg-image .metric-tile,
 body.has-bg-image .lmap-country-panel,
 body.has-bg-image .lmap-legend,
 body.has-bg-image .lmap-search-bar{
-  background:rgba(var(--surface-rgb,255,255,255),.82) !important;
-  backdrop-filter:blur(12px) saturate(1.3) !important;
-  -webkit-backdrop-filter:blur(12px) saturate(1.3) !important;
+  background:var(--surface) !important;
 }
 :root[data-theme="nuit"] body.has-bg-image .card,
 :root[data-theme="nuit"] body.has-bg-image .add-form,
@@ -2711,14 +2709,10 @@ input, select, textarea {
 }
 
 .app-header{
-  background:rgba(var(--surface-rgb,255,255,255),.82) !important;
-  backdrop-filter:blur(8px) !important;
-  -webkit-backdrop-filter:blur(8px) !important;
+  background:var(--surface) !important;
 }
 .app-nav{
-  background:rgba(var(--surface-rgb,255,255,255),.75) !important;
-  backdrop-filter:blur(8px) !important;
-  -webkit-backdrop-filter:blur(8px) !important;
+  background:var(--surface) !important;
 }
 .settings-panel{
   backdrop-filter:blur(12px) !important;
@@ -2821,7 +2815,7 @@ input, select, textarea {
 .reminder-section{margin-top:4px}
 
 .btn-new-trip.pulse-hint{
-  animation:btnPulse 2s ease-in-out infinite
+  /* animation pulsée retirée : box-shadow animée = repaint continu (chauffe) */
 }
 @keyframes btnPulse{
   0%,100%{box-shadow:0 0 0 0 rgba(232,116,138,.4),0 8px 32px rgba(0,0,0,.25)}
@@ -3128,9 +3122,7 @@ input, select, textarea {
 
 #tab-bar{
   position:fixed;bottom:0;left:0;right:0;z-index:300;
-  background:rgba(var(--surface-rgb,255,255,255),.82);
-  backdrop-filter:blur(8px);
-  -webkit-backdrop-filter:blur(8px);
+  background:var(--surface);
   border-top:1px solid rgba(var(--surface-rgb,255,255,255),.3);
   box-shadow:0 -1px 0 rgba(26,26,46,.08);
   display:flex;align-items:stretch;
@@ -3178,9 +3170,7 @@ input, select, textarea {
   padding:0 16px;
   height:calc(52px + env(safe-area-inset-top,0px));
   padding-top:env(safe-area-inset-top,0px);
-  background:rgba(255,255,255,.96);
-  backdrop-filter:blur(8px);
-  -webkit-backdrop-filter:blur(8px);
+  background:var(--surface);
   border-bottom:1px solid rgba(0,0,0,.1);
   font-family:'DM Sans',sans-serif;
   font-size:17px;font-weight:600;
@@ -6014,6 +6004,11 @@ body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
   background:var(--surface-2); color:var(--ink-hint); font-size:10.5px; font-weight:600;
 }
 #tab-hotels .hotel-ref{ font-size:12px; font-weight:600; margin-top:6px; }
+#tab-hotels .hotel-times{ font-size:12px; color:var(--ink-muted); margin-top:3px; }
+#tab-hotels .hotel-note{ font-size:12px; color:var(--ink); margin-top:5px; padding:6px 9px; background:var(--surface-2); border-radius:8px; line-height:1.4; white-space:pre-wrap; }
+#tab-hotels .hotel-reminder{ display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:#c9921a; background:#fdf3df; border:1px solid #c9921a44; padding:4px 9px; border-radius:999px; margin-top:6px; line-height:1.2; }
+#tab-hotels .hotel-reminder svg{ flex-shrink:0; }
+#tab-hotels .hotel-reminder.urgent{ color:#c0392b; background:#fdecea; border-color:#c0392b55; }
 
 /* ══════════════════════════════════════════════════════════════════
    TRANSPORT — affinage cartes (durée en pastille, badge statut + coche)

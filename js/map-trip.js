@@ -179,18 +179,32 @@ function _lieuQuery(l) {
 
 
 // ── §4 MARQUEURS ─────────────────────────────────────────────────────
-function _makeIcon(type, label) {
-  var bg  = type === 'hotel' ? '#F08080' : '#5C6BC0';
-  var lbl = label || (type === 'hotel' ? 'H' : '+');
+// Icône Lucide d'un pin (réutilise la lib d'app.js au runtime)
+function _pinIcon(pin) {
+  var bg = '#5C6BC0', svg = '';
+  if (pin && pin.type === 'hotel') {
+    bg = '#F08080';
+    if (typeof _lu === 'function') svg = _lu('bed', 18);
+  } else if (pin && pin.type === 'lieu') {
+    if (typeof _lieuCatMeta === 'function') { var m = _lieuCatMeta(pin.cat || ''); bg = m.color; svg = m.svg; }
+  }
+  if (!svg) { svg = (typeof _lu === 'function') ? _lu('map-pin', 18) : ((pin && pin.emoji) || ''); }
+  return { svg: svg, bg: bg };
+}
+
+function _makeIcon(type, label, pin) {
+  var ic = (typeof _pinIcon === 'function')
+    ? _pinIcon(pin || { type: type, emoji: label })
+    : { svg: (label || ''), bg: (type === 'hotel' ? '#F08080' : '#5C6BC0') };
   return L.divIcon({
     className: '',
     html: '<div style="'
       + 'width:34px;height:34px;border-radius:50%;'
-      + 'background:' + bg + ';border:2.5px solid white;'
+      + 'background:' + ic.bg + ';border:2.5px solid white;'
       + 'box-shadow:0 2px 10px rgba(0,0,0,.28);'
       + 'display:flex;align-items:center;justify-content:center;'
-      + 'font-size:15px;cursor:pointer'
-      + '">' + lbl + '</div>',
+      + 'color:#fff;cursor:pointer'
+      + '">' + ic.svg + '</div>',
     iconSize:    [34, 34],
     iconAnchor:  [17, 17],
     popupAnchor: [0, -18]
@@ -203,7 +217,7 @@ function _popupHTML(pin) {
     : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(pin.label);
   return '<div style="font-family:DM Sans,sans-serif;min-width:160px;max-width:220px">'
     + '<div style="font-size:14px;font-weight:600;color:#1a1a2e;margin-bottom:3px">'
-      + (pin.emoji || '') + ' ' + pin.name
+      + pin.name
     + '</div>'
     + '<div style="font-size:11px;color:#5a5a72;margin-bottom:8px">' + pin.sub + '</div>'
     + '<a href="' + mapsUrl + '" target="_blank" rel="noopener" '
@@ -216,7 +230,7 @@ function _popupHTML(pin) {
 function _placeMarker(pin) {
   if (!_map || pin.lat == null) return;
   var marker = L.marker([pin.lat, pin.lng], {
-    icon: _makeIcon(pin.type, pin.emoji)
+    icon: _makeIcon(pin.type, pin.emoji, pin)
   }).bindPopup(_popupHTML(pin), { maxWidth: 240 });
 
   // Visibilité selon filtres actifs
@@ -540,6 +554,7 @@ function _loadTripPoints() {
     var pin = {
       id:       String(l.id),
       type:     'lieu',
+      cat:      l.categorie || '',
       name:     l.nom,
       sub:      (l.ville || '') + (l.visited ? ' · Visité' : ''),
       emoji:    l.emoji || '',
@@ -655,8 +670,16 @@ window.tripmapFilter = function (filter) {
 
 
 // ── §9 LISTE SOUS LA CARTE ────────────────────────────────────────────
-var _TYPE_LABELS = { vol:'✈️', train:'🚄', bus:'🚌', bateau:'⛴️',
-                     covoiturage:'🚗', metro:'🚇', taxi:'🚕' };
+var _TYPE_LABELS = { vol:'Vol', train:'Train', bus:'Bus', bateau:'Ferry',
+                     covoiturage:'Covoit.', metro:'Métro', taxi:'Taxi' };
+
+// Icône SVG colorée d'un type de trajet (réutilise MOB_ICONS/MOB_COLORS au runtime)
+function _routeIcon(type){
+  var col = (typeof MOB_COLORS!=='undefined' && MOB_COLORS[type]) || '#5C6BC0';
+  var svg = (typeof MOB_ICONS!=='undefined' && MOB_ICONS[type]) || '';
+  if(!svg && typeof _lu==='function') svg = _lu('map-pin',16);
+  return '<span style="display:inline-flex;align-items:center;color:'+col+'">'+svg+'</span>';
+}
 
 function _renderList() {
   var el = document.getElementById('tripmap-list-inner');
@@ -684,7 +707,7 @@ function _renderList() {
             : ' style="cursor:default"')
         + '>'
         + '<div class="tmap-pin-icon" style="background:#f4f4f8;border:none;font-size:13px;font-weight:600">'
-          + (_TYPE_LABELS[r.type] || '—')
+          + _routeIcon(r.type)
         + '</div>'
         + '<div class="tmap-pin-body">'
           + '<div class="tmap-pin-name">' + r.label + '</div>'
@@ -715,7 +738,7 @@ function _renderList() {
 
       return '<div class="tmap-pin-card" '
         + 'onclick="tripmapFocusPin(\'' + p.id + '\',\'' + p.type + '\')">'
-        + '<div class="tmap-pin-icon ' + p.type + '">' + (p.emoji || (p.type === 'hotel' ? 'H' : '+')) + '</div>'
+        + (function(){ var _ic=(typeof _pinIcon==="function")?_pinIcon(p):{svg:(p.emoji||""),bg:"#5C6BC0"}; return '<div class="tmap-pin-icon ' + p.type + '" style="background:'+_ic.bg+'1e;color:'+_ic.bg+'">' + _ic.svg + '</div>'; })()
         + '<div class="tmap-pin-body">'
           + '<div class="tmap-pin-name">' + p.name + '</div>'
           + '<div class="tmap-pin-sub">'  + p.sub  + '</div>'
@@ -765,14 +788,15 @@ window.tripmapFocusRoute = function (id) {
   }
 };
 
-// Bascule carte plein écran <-> format réduit (carte + infos sous/à côté)
+// Bascule carte vrai plein écran (overlay) <-> format normal
 window.tripmapToggleFull = function () {
   var host = document.getElementById('voyage-map-host');
   if (!host) return;
-  host.classList.toggle('is-full');
+  host.classList.toggle('is-fullscreen');
   setTimeout(function () {
     if (_map && _map.invalidateSize) _map.invalidateSize();
-  }, 220);
+    if (typeof tripmapRecenter === 'function') { try { tripmapRecenter(); } catch(e){} }
+  }, 240);
 };
 
 

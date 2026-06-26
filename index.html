@@ -958,6 +958,19 @@
     <input type="hidden" id="ht-adresse-lng" value=""/>
     <!-- Champ ville principal (maintenu pour compatibilité addHotel) -->
     <input type="hidden" id="ht-ville" value=""/>
+    <div class="form-row">
+      <div style="flex:1">
+        <label style="font-size:12px;color:var(--ink-muted)">Heure d'arrivée</label>
+        <input type="time" id="ht-heure-arr" style="width:100%"/>
+      </div>
+      <div style="flex:1">
+        <label style="font-size:12px;color:var(--ink-muted)">Heure de départ</label>
+        <input type="time" id="ht-heure-dep" style="width:100%"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <textarea id="ht-note" rows="2" placeholder="Note libre (petit-déj inclus, code wifi, étage…)" style="width:100%;resize:vertical;font-family:DM Sans,sans-serif"></textarea>
+    </div>
     <div class="form-row" style="align-items:center">
       <label class="pdf-btn">Confirmation / Bon
         <input type="file" accept=".pdf,application/pdf" onchange="attachPdfToForm('hotel-pdf',this)"/>
