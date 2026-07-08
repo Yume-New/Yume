@@ -68,6 +68,8 @@
   <div class="splash-dot"></div>
 </div>
 
+<div id="app-bg"></div>
+
 <div id="spa-root">
 
 <!-- PAGE : ACCUEIL -->
@@ -411,9 +413,14 @@
          GROUPE : VOL — codes IATA, terminal, porte, bagages, escales
     ═══════════════════════════════════════════════ -->
     <div class="mob-group" id="mob-group-vol">
-      <div class="mob-group-sep">Informations du vol</div>
+      <!-- Case escale, en haut du formulaire -->
+      <label class="mob-escale-toggle-label" style="margin-bottom:12px">
+        <input type="checkbox" id="mob-escale-check" onchange="toggleMobEscales()"/>
+        <span>Vol avec escale</span>
+      </label>
+      <div class="mob-group-sep" id="mob-vol-seg1-title">Informations du vol</div>
 
-      <!-- Aéroports -->
+      <!-- Aéroports (mode escale : Départ = origine, Arrivée = 1re escale) -->
       <div class="form-row">
         <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
           <label class="mob-lbl">Départ</label>
@@ -422,8 +429,8 @@
             <input type="text" id="mob-code-dep" placeholder="CDG" style="max-width:60px;text-transform:uppercase;font-weight:600;text-align:center" oninput="this.value=this.value.toUpperCase()"/>
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
-          <label class="mob-lbl">Arrivée</label>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px" id="mob-arr-row">
+          <label class="mob-lbl" id="mob-arr-label">Arrivée</label>
           <div class="mob-iata-wrap">
             <div class="ac-wrap" style="flex:1;position:relative"><input type="text" id="mob-arr" placeholder="Tokyo NRT / Paris CDG" autocomplete="off" oninput="updateMobPreview();onVolVilleInput('arr',this.value)" style="width:100%"/><div class="ac-list" id="ac-arr-ville"></div></div>
             <input type="text" id="mob-code-arr" placeholder="NRT" style="max-width:60px;text-transform:uppercase;font-weight:600;text-align:center" oninput="this.value=this.value.toUpperCase()"/>
@@ -431,120 +438,54 @@
         </div>
       </div>
 
-      <!-- Date + Heures + Terminal + Porte -->
+      <!-- Horaires d'extrémité + Date + Durée — TOUJOURS visibles (source unique) -->
+      <div class="form-row">
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+          <label class="mob-lbl" id="mob-hdep-label">Décollage</label>
+          <input type="time" id="mob-heure-dep" class="vol-time-input" oninput="if(typeof _mobPropagateEndTimes==='function')_mobPropagateEndTimes()"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+          <label class="mob-lbl" id="mob-harr-label">Atterrissage</label>
+          <input type="time" id="mob-heure-arr" class="vol-time-input" oninput="if(typeof _mobPropagateEndTimes==='function')_mobPropagateEndTimes()"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:none">
+          <label class="mob-lbl">Durée totale <span style="color:var(--sakura)">*</span></label>
+          <input type="text" id="mob-duree" class="vol-time-input" placeholder="ex: 14h30" style="max-width:100px;text-align:center" title="Durée réelle du billet (saisie manuelle — diffère des horaires à cause du décalage horaire)"/>
+        </div>
+      </div>
       <div class="form-row">
         <div style="display:flex;flex-direction:column;gap:3px;flex:1.2;min-width:120px">
           <label class="mob-lbl">Date</label>
           <input class="vol-date-input" type="text" id="mob-date" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('mob-date')"/>
         </div>
-        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
-          <label class="mob-lbl">Décollage</label>
-          <input type="time" id="mob-heure-dep" class="vol-time-input" oninput="calcMobDuree()"/>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
-          <label class="mob-lbl">Atterrissage</label>
-          <input type="time" id="mob-heure-arr" class="vol-time-input" oninput="calcMobDuree()"/>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:3px;flex:none">
-          <label class="mob-lbl">Durée</label>
-          <div class="hm-duree-auto" id="mob-duree-display">—</div>
-          <input type="hidden" id="mob-duree"/>
-        </div>
       </div>
 
-      <!-- Compagnie + N° vol + Siège + Terminal + Porte -->
-      <div class="form-row">
-        <div class="ac-wrap" style="flex:2;position:relative"><input type="text" id="mob-compagnie" placeholder="Compagnie (ex: Air France)" autocomplete="off" oninput="onCompagnieInput(this.value)" style="width:100%"/><div class="ac-list" id="ac-compagnie"></div></div>
-        <input type="text" id="mob-numero"    placeholder="N° vol (AF275)" style="flex:1;min-width:80px"/>
-        <input type="text" id="mob-siege"     placeholder="Siège (24A)" style="max-width:76px;flex:none"/>
-      </div>
-      <div class="form-row">
-        <input type="text" id="mob-terminal"  placeholder="Terminal (ex: T2E)" style="max-width:110px;flex:none"/>
-        <input type="text" id="mob-porte"     placeholder="Porte (ex: K42)" style="max-width:100px;flex:none"/>
-        <input type="text" id="mob-resa-vol"  placeholder="N° réservation (PNR)"/>
-        <input type="text" id="mob-bagages"   placeholder="Bagage (ex: 23kg + cabine)" style="flex:1.5"/>
-      </div>
-
-      <!-- Escales / Segment 2 -->
-      <div class="mob-escale-section">
-        <label class="mob-escale-toggle-label">
-          <input type="checkbox" id="mob-escale-check" onchange="toggleMobEscales()"/>
-          <span>Vol avec escale</span>
-        </label>
-        <div id="mob-escales-wrap" style="display:none;margin-top:10px">
-
-          <!-- Durée d'escale -->
-          <div class="mob-seg2-layover">
-            <span class="mob-seg2-layover-icon">⏳</span>
-            <div style="flex:1">
-              <label class="mob-lbl">Durée d'escale à l'aéroport intermédiaire</label>
-              <input type="text" id="mob-esc-duree" placeholder="ex: 2h30" style="max-width:120px;margin-top:3px"/>
-            </div>
-          </div>
-
-          <!-- Titre segment 2 -->
-          <div class="mob-seg2-header">
-            <div class="mob-seg2-badge">SEG. 2</div>
-            <div class="mob-seg2-subtitle">Détails du second vol</div>
-          </div>
-
-          <!-- Aéroports seg 2 -->
-          <div class="form-row">
-            <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
-              <label class="mob-lbl">Départ (escale)</label>
-              <div class="mob-iata-wrap">
-                <div class="ac-wrap" style="flex:1;position:relative">
-                  <input type="text" id="mob-esc-dep" placeholder="Aéroport escale" autocomplete="off" style="width:100%" oninput="updateMobPreview();onEscSegVilleInput('dep',this.value)"/>
-                  <div class="ac-list" id="ac-esc-dep"></div>
-                </div>
-                <input type="text" id="mob-esc-code-dep" placeholder="ICN" style="max-width:56px;text-transform:uppercase;font-weight:600;text-align:center" oninput="this.value=this.value.toUpperCase()"/>
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
-              <label class="mob-lbl">Arrivée finale</label>
-              <div class="mob-iata-wrap">
-                <div class="ac-wrap" style="flex:1;position:relative">
-                  <input type="text" id="mob-esc-arr" placeholder="Destination finale" autocomplete="off" style="width:100%" oninput="updateMobPreview();onEscSegVilleInput('arr',this.value)"/>
-                  <div class="ac-list" id="ac-esc-arr"></div>
-                </div>
-                <input type="text" id="mob-esc-code-arr" placeholder="NRT" style="max-width:56px;text-transform:uppercase;font-weight:600;text-align:center" oninput="this.value=this.value.toUpperCase()"/>
-              </div>
-            </div>
-          </div>
-
-          <!-- Horaires seg 2 -->
-          <div class="form-row">
-            <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
-              <label class="mob-lbl">Décollage</label>
-              <input type="time" id="mob-esc-heure-dep" class="vol-time-input" oninput="calcEscDuree()"/>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
-              <label class="mob-lbl">Atterrissage</label>
-              <input type="time" id="mob-esc-heure-arr" class="vol-time-input" oninput="calcEscDuree()"/>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:3px;flex:none">
-              <label class="mob-lbl">Durée vol 2</label>
-              <div class="hm-duree-auto" id="mob-esc-duree-display">—</div>
-              <input type="hidden" id="mob-esc-duree-vol"/>
-            </div>
-          </div>
-
-          <!-- Compagnie + N° vol seg 2 -->
-          <div class="form-row">
-            <input type="text" id="mob-esc-compagnie" placeholder="Compagnie (peut différer)" style="flex:2"/>
-            <input type="text" id="mob-esc-numero" placeholder="N° vol (ex: KE703)" style="flex:1;min-width:80px"/>
-          </div>
-
-          <!-- Siège + Réservation + Bagages seg 2 -->
-          <div class="form-row">
-            <input type="text" id="mob-esc-siege" placeholder="Siège (ex: 22A)" style="max-width:80px;flex:none"/>
-            <input type="text" id="mob-esc-resa" placeholder="N° résa (si différent)" style="flex:1"/>
-            <input type="text" id="mob-esc-bagages" placeholder="Bagage segment 2" style="flex:1.5"/>
-          </div>
-
+      <!-- Détails du vol direct (compagnie, n°, siège…) — masqués en mode escale (repris par segment) -->
+      <div id="mob-direct-details">
+        <div class="form-row">
+          <div class="ac-wrap" style="flex:2;position:relative"><input type="text" id="mob-compagnie" placeholder="Compagnie (ex: Air France)" autocomplete="off" oninput="onCompagnieInput(this.value)" style="width:100%"/><div class="ac-list" id="ac-compagnie"></div></div>
+          <input type="text" id="mob-numero"    placeholder="N° vol (AF275)" style="flex:1;min-width:80px"/>
+          <input type="text" id="mob-siege"     placeholder="Siège (24A)" style="max-width:76px;flex:none"/>
+        </div>
+        <div class="form-row">
+          <input type="text" id="mob-terminal"  placeholder="Terminal (ex: T2E)" style="max-width:110px;flex:none"/>
+          <input type="text" id="mob-porte"     placeholder="Porte (ex: K42)" style="max-width:100px;flex:none"/>
+          <input type="text" id="mob-resa-vol"  placeholder="N° réservation (PNR)"/>
+          <input type="text" id="mob-bagages"   placeholder="Bagage (ex: 23kg + cabine)" style="flex:1.5"/>
         </div>
       </div>
-    </div>
+
+      <!-- Escales dynamiques : compteur + blocs (SEG / escale) générés en JS -->
+      <div id="mob-escales-wrap" style="display:none">
+        <div class="mob-esc-counter">
+          <span class="mob-lbl" style="flex:1">Nombre d'escales</span>
+          <button type="button" class="mob-esc-cbtn" onclick="mobEscCount(-1)" aria-label="Une escale de moins">&#8722;</button>
+          <span class="mob-esc-count-val" id="mob-esc-count-val">1 escale</span>
+          <button type="button" class="mob-esc-cbtn" onclick="mobEscCount(1)" aria-label="Une escale de plus">+</button>
+        </div>
+        <div id="mob-escales-dyn"></div>
+      </div>
+</div>
 
     <!-- ══════════════════════════════════════════════
          GROUPE : TRAIN — gares, voiture, siège, n° train
@@ -568,16 +509,15 @@
         </div>
         <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
           <label class="mob-lbl">Départ</label>
-          <input type="time" id="mob-heure-dep" class="vol-time-input" oninput="calcMobDuree()"/>
+          <input type="time" id="mob-heure-dep" class="vol-time-input"/>
         </div>
         <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
           <label class="mob-lbl">Arrivée</label>
-          <input type="time" id="mob-heure-arr" class="vol-time-input" oninput="calcMobDuree()"/>
+          <input type="time" id="mob-heure-arr" class="vol-time-input"/>
         </div>
         <div style="display:flex;flex-direction:column;gap:3px;flex:none">
-          <label class="mob-lbl">Durée</label>
-          <div class="hm-duree-auto" id="mob-duree-display">—</div>
-          <input type="hidden" id="mob-duree"/>
+          <label class="mob-lbl">Durée totale</label>
+          <input type="text" id="mob-duree" class="vol-time-input" placeholder="ex: 3h20" style="max-width:92px;text-align:center"/>
         </div>
       </div>
       <div class="form-row">
@@ -613,11 +553,11 @@
         </div>
         <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
           <label class="mob-lbl">Départ</label>
-          <input type="time" id="mob-heure-dep" class="vol-time-input" oninput="calcMobDuree()"/>
+          <input type="time" id="mob-heure-dep" class="vol-time-input"/>
         </div>
         <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
           <label class="mob-lbl">Arrivée</label>
-          <input type="time" id="mob-heure-arr" class="vol-time-input" oninput="calcMobDuree()"/>
+          <input type="time" id="mob-heure-arr" class="vol-time-input"/>
         </div>
       </div>
       <div class="form-row">
@@ -653,11 +593,11 @@
         </div>
         <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
           <label class="mob-lbl">Départ</label>
-          <input type="time" id="mob-heure-dep" class="vol-time-input" oninput="calcMobDuree()"/>
+          <input type="time" id="mob-heure-dep" class="vol-time-input"/>
         </div>
         <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
           <label class="mob-lbl">Arrivée</label>
-          <input type="time" id="mob-heure-arr" class="vol-time-input" oninput="calcMobDuree()"/>
+          <input type="time" id="mob-heure-arr" class="vol-time-input"/>
         </div>
       </div>
       <div class="form-row">
@@ -721,8 +661,8 @@
     </div>
     <!-- ── Actions (toujours visibles) ── -->
     <div class="form-row" id="mob-action-row" style="align-items:center;margin-top:6px;justify-content:flex-end">
-      <button class="btn-primary" onclick="addMobilite()">+ Ajouter</button>
-      <button class="btn-ghost"   onclick="_resetTransportForm();toggleForm('form-mobilite')">Annuler</button>
+      <button class="btn-primary" id="mob-submit-btn" onclick="addMobilite()">+ Ajouter</button>
+      <button class="btn-ghost"   onclick="_mobCloseForm()">Annuler</button>
     </div>
     <div class="form-row" style="align-items:center">
       <label class="pdf-btn">Billet / Document
@@ -1144,15 +1084,11 @@
       <label class="doc-field-lbl">Expiration</label>
       <input type="month" id="doc-expiry" class="doc-month"/>
     </div>
+    <div id="doc-pdf-slot"></div>
     <div class="form-row" style="align-items:center">
       <button class="btn-primary" onclick="saveDoc()">Enregistrer</button>
       <button class="btn-ghost" onclick="toggleForm('form-doc')">Annuler</button>
       <button class="btn-ghost doc-del-btn" id="doc-del-btn" onclick="deleteDoc()" style="display:none">Supprimer</button>
-      <label class="pdf-btn" style="margin-left:auto">Fichier
-        <input type="file" accept="image/*,.pdf,application/pdf" onchange="attachPdfToForm('doc-file',this)"/>
-      </label>
-      <span id="doc-file-badge"></span>
-      <input type="hidden" id="doc-file" value=""/>
       <input type="hidden" id="doc-edit-id" value=""/>
     </div>
   </div>
@@ -1221,6 +1157,13 @@
       <input type="date" id="tx-date"/>
       <button class="btn-primary" onclick="addTransaction()">Ajouter</button>
     </div>
+    <div class="form-row" style="align-items:center">
+      <label class="pdf-btn">Justificatif
+        <input type="file" accept=".pdf,image/*,application/pdf" onchange="attachPdfToForm('tx-pdf',this)"/>
+      </label>
+      <span id="tx-pdf-badge"></span>
+      <input type="hidden" id="tx-pdf" value=""/>
+    </div>
     <!-- Champs Groupe (conditionnels) -->
     <div class="tx-group-fields" id="tx-group-fields">
       <div class="tx-paidby-row">
@@ -1235,6 +1178,10 @@
     <div style="font-size:11px;color:var(--ink-hint);margin-top:4px" id="tx-hint"><span id="tx-hint-text">La devise locale est convertie en € au taux temps réel.</span></div>
   </div>
   <div class="section-divider"><span>Historique</span></div>
+  <button class="tx-export-btn" onclick="openExportFactures()" title="Regrouper des factures en un seul PDF">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>
+    Exporter les factures
+  </button>
   <div class="card" style="padding:8px 18px"><div class="tx-list" id="tx-list"><div class="empty-state"><div class="empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v2m0 8v2m-4-4h8"/></svg></div><div>Aucune transaction</div></div></div></div>
 </section>
 <section class="section" id="tab-convertir">
@@ -1944,6 +1891,7 @@
 
 <!-- 1. Données statiques (zéro dépendance) -->
 <script src="./data/geo-defaults.js"></script>
+<script src="./data/airports-gps.js"></script>
 <script src="./data/transport-refs.js"></script>
 <script src="./data/finance-data.js"></script>
 <script src="./data/inspiration-images.js"></script>
@@ -1955,7 +1903,10 @@
 <script src="./js/map-world.js"></script>
 <script src="./js/map-trip.js"></script>
 
-<!-- 4. Application principale -->
+<!-- 4. Librairie PDF locale (fusion factures, hors-ligne — jamais de CDN) -->
+<script src="./js/vendor/pdf-lib.min.js"></script>
+
+<!-- 5. Application principale -->
 <script src="./js/app.js"></script>
 
 <!-- 5. Phase B — Routing ferroviaire + Timeline -->

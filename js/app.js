@@ -36,7 +36,65 @@ function _migrateAllTrips(){
     if(typeof t.totalNuits !== 'number') t.totalNuits = 30;
     if(t.hotels) t.hotels.forEach(_migrateAddress);
     if(t.lieux)  t.lieux.forEach(_migrateAddress);
+    if(t.mobilites) t.mobilites.forEach(_migrateVol);
+    // Migration pièce jointe document : champ historique `file` → `pdfId`
+    // (convention partagée avec hôtels/vols/pass/transactions/docs perso).
+    // Idempotente + non-destructive : ne touche pas le blob dans pdfStore,
+    // renomme seulement le pointeur. Une fois `pdfId` posé, no-op.
+    if(t.documents) t.documents.forEach(function(d){
+      if(d && d.file && !d.pdfId){ d.pdfId = d.file; delete d.file; }
+    });
   });
+}
+
+// ── Migration vol : segment2 (escale unique) → escales[] riche (multi-segments) ──
+// Idempotente via le drapeau _volV2. Rétro-compat : vol direct = escales:[].
+//   Ancien : m.segment2 = {dep(=escale), arr(=destination finale), codeDep, codeArr,
+//            heureDep, heureArr, dureeVol, compagnie, numero, siege, resa, bagages, dureeEscale}
+//   Nouveau : m.escales = [{aeroport, code, lat, lng, dureeEscale, heureArrEscale,
+//            heureDep, dureeVol, compagnie, numero, siege, terminal, porte, resa, bagages}]
+function _migrateVol(m){
+  if(!m || m.type !== 'vol') return m;
+  // ── v2 : segment2 → escales[] (une seule fois, marqueur _volV2) ──
+  if(!m._volV2){
+    var s2 = m.segment2;
+    if(s2 && (s2.dep || s2.arr)){
+      m.escales = [{
+        aeroport      : s2.dep || '',
+        code          : s2.codeDep || '',
+        lat           : (typeof s2.lat === 'number') ? s2.lat : null,
+        lng           : (typeof s2.lng === 'number') ? s2.lng : null,
+        dureeEscale   : s2.dureeEscale || '',
+        heureArrEscale: m.heureArr || '',   // atterrissage à l'escale (arrivée du segment 1)
+        heureDep      : s2.heureDep || '',   // départ du segment 2 (escale → destination)
+        dureeVol      : s2.dureeVol || '',
+        compagnie     : s2.compagnie || '',
+        numero        : s2.numero || '',
+        siege         : s2.siege || '',
+        terminal      : '',
+        porte         : '',
+        resa          : s2.resa || '',
+        bagages       : s2.bagages || ''
+      }];
+      // Destination finale = segment2.arr (sinon on garde m.arr)
+      if(s2.arr){
+        m.arr      = s2.arr;
+        m.codeArr  = s2.codeArr || m.codeArr || '';
+        m.heureArr = s2.heureArr || '';
+      }
+    } else {
+      // Vol direct (ou segment2 vide) : aucune escale.
+      m.escales = [];
+    }
+    m._volV2 = true;
+  }
+  // ── v3 : purge de segment2 ──
+  // Tous les lecteurs utilisent escales[] via _volChain (qui privilégie escales[]).
+  // Une fois escales[] en place, segment2 est de la donnée morte → on le supprime.
+  // Idempotent (segment2 déjà absent = no-op). Le fallback segment2 de _volChain
+  // ne subsiste que comme filet pour un éventuel vol non passé par cette migration.
+  if(m.segment2) delete m.segment2;
+  return m;
 }
 
 
@@ -630,9 +688,11 @@ function clearAllModals(){
     var el=document.getElementById(id); if(el) el.value='';
   });
 
-  // 3. Checkbox escale
+  // 3. Checkbox escale + compteur (auto-reset des blocs dynamiques)
+  _mobEscCount = 1;
   var escChk=document.getElementById('mob-escale-check');
   if(escChk){ escChk.checked=false; escChk.dispatchEvent(new Event('change')); }
+  var escDyn=document.getElementById('mob-escales-dyn'); if(escDyn) escDyn.innerHTML='';
 
   // 4. Preview route / titre
   var prev=document.getElementById('mob-route-preview');
@@ -817,8 +877,8 @@ var NAV_BLOCKS = [
   { title:'Dépenses du voyage',  items:['budget','convertir'] }
 ];
 // Sous-vues regroupées sous l'item unique « Déplacements »
-var _DEPL = ['pass','mobilite','locations'];
-var _deplActive = 'pass';   // partie déplacement par défaut : Pass
+var _DEPL = ['mobilite','pass','locations']; // ordre : Transport · Pass · Location
+var _deplActive = 'mobilite';   // partie déplacement par défaut : Transport
 var _lastNavId = null;      // dernière sous-section nav (optimisation rebuild)
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1018,7 +1078,7 @@ function _exposeAllSections(){
 // 'deplacements' résout vers la dernière sous-vue (pass/transport/location),
 // sinon on montre le belt de sections et on bascule dessus.
 function goToSection(id, btn){
-  if(id === 'deplacements'){ id = 'pass'; _deplActive = 'pass'; }
+  if(id === 'deplacements'){ id = 'mobilite'; _deplActive = 'mobilite'; }
   // L'item de nav surligné est « Déplacements » pour les 3 sous-vues
   var navId = (_DEPL.indexOf(id) !== -1) ? 'deplacements' : id;
   document.querySelectorAll('#voyage-subsection-nav .vsn-item').forEach(function(b){
@@ -1809,39 +1869,6 @@ function getAutoEmoji(tripMeta){
 }
 
 // ══════════════════════════════════════════════════════════
-// LONG-PRESS + MODE ÉDITION sur les cartes
-// ══════════════════════════════════════════════════════════
-var _editingCard   = null; // tid currently in edit mode
-var _lpTimer       = null; // long-press timer
-
-
-function enterEditMode(tid){
-  // Close any open edit card first
-  if(_editingCard && _editingCard !== tid) exitEditMode();
-
-  _editingCard = tid;
-  var card = document.getElementById('voy-edit-card-' + tid);
-  if(card){
-    card.classList.add('editing');
-    // Activate backdrop
-    var bd = document.getElementById('edit-mode-backdrop');
-    if(bd){ bd.classList.add('active'); bd.onclick = exitEditMode; }
-    // Haptic feedback if available
-    if(navigator.vibrate) navigator.vibrate(40);
-  }
-}
-
-function exitEditMode(){
-  if(!_editingCard) return;
-  var card = document.getElementById('voy-edit-card-' + _editingCard);
-  if(card) card.classList.remove('editing');
-  _editingCard = null;
-  var bd = document.getElementById('edit-mode-backdrop');
-  if(bd){ bd.classList.remove('active'); bd.onclick = null; }
-}
-
-
-// ══════════════════════════════════════════════════════════
 // supprimerVoyage — UNIQUE fonction de suppression
 // Appelée par tous les boutons (croix long-press, dropdown, etc.)
 // ══════════════════════════════════════════════════════════
@@ -1873,7 +1900,6 @@ function supprimerVoyage(tid){
   if(typeof renderTripsList        === 'function') renderTripsList();
   if(typeof updateHomeTopbarStats  === 'function') updateHomeTopbarStats();
   if(typeof updateStatsBar         === 'function') updateStatsBar();
-  if(typeof buildDropdownMenu      === 'function') buildDropdownMenu();
 }
 
 function deleteTrip(e, tid){
@@ -1889,7 +1915,6 @@ function editTrip(e, tid){
   if(e && e.stopPropagation) e.stopPropagation();
   // Compat: appelé sans event
   if(typeof e === 'string'){ tid = e; e = null; }
-  exitEditMode();
   var t = allTrips[tid];
   if(!t) return;
   var m = t.meta || {};
@@ -2077,7 +2102,7 @@ function renderHomeHero(){
     + '<div class="hh-top">'
       + '<div class="hh-greet"><span class="hh-hi">' + hello + '</span>'
       + '<span class="hh-kicker">' + kicker + '</span></div>'
-      + '<button class="hh-bell" onclick="openSettings && openSettings()" aria-label="Notifications">' + ICO_BELL + '</button>'
+      + '<button class="hh-bell" onclick="event.stopPropagation();openSettings && openSettings()" aria-label="Notifications">' + ICO_BELL + '</button>'
     + '</div>'
     + '<div class="hh-body">'
       + (pill ? '<span class="hh-pill hh-pill-'+pillCls+'">' + ICO_CLOCK + ' ' + pill + '</span>' : '')
@@ -2087,11 +2112,13 @@ function renderHomeHero(){
         + '<span>' + ICO_USER + ' ' + travel + '</span>'
       + '</div>'
     + '</div>'
-    + '<button class="hh-open" onclick="openTrip(\'' + best + '\')">'
+    + '<button class="hh-open" onclick="event.stopPropagation();openTrip(\'' + best + '\')">'
       + '<span>Ouvrir le voyage</span>'
       + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'
     + '</button>';
   el.style.display = '';
+  el.style.cursor = 'pointer';
+  el.onclick = function(){ openTrip(best); };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -2598,9 +2625,6 @@ function renderTripsList(){
     btn.onclick = function(){ openOlderTrips(); };
     container.appendChild(btn);
   }
-
-  // Sync le menu déroulant des voyages
-  if(typeof buildDropdownMenu === 'function') buildDropdownMenu();
 }
 
 // ── Modale « Tous mes voyages » (anciens inclus) ──
@@ -2796,7 +2820,6 @@ function createTrip(){
   closeCreateModal();
   _resetCreateModal();
   if(typeof updateStatsBar === 'function') updateStatsBar();
-  if(typeof buildDropdownMenu === 'function') buildDropdownMenu();
   // Nullifier currentTripId pour éviter tout snapshot résiduel de l'ancien voyage
   currentTripId = null;
   openTrip(tid);
@@ -2981,36 +3004,11 @@ function initHMSelect(el, type, selectedVal){
   }
 }
 
-// Calcule la valeur HH:MM depuis H + D + U
-
-// Parse valeur "12h46" → {h:12, d:4, u:6}
-function parseHMtoDU(val){
-  if(!val) return null;
-  var mt=val.match(/^(\d{1,2})[h:](\d{2})$/);
-  if(!mt) return null;
-  var h=parseInt(mt[1],10);
-  var m=parseInt(mt[2],10);
-  return {h:h, d:Math.floor(m/10), u:m%10};
-}
-
-// Init un groupe H+D+U avec valeur optionnelle
-
-// Sync hidden input à partir des selects HH/MM
-
 // Init tous les selects HH au chargement
 function initAllHMSelects(){
   // input[type=time] — nothing to initialise, browser handles it natively
 }
 
-
-// ── Autocomplete escale ville ──
-
-function updateTrRoute(){
-  var dep=document.getElementById('tr-dep-ville')?document.getElementById('tr-dep-ville').value.trim():'';
-  var arr=document.getElementById('tr-arr-ville')?document.getElementById('tr-arr-ville').value.trim():'';
-  var hid=document.getElementById('tr-route');
-  if(hid) hid.value=(dep||'?')+' → '+(arr||'?');
-}
 
 // Autocomplete hôtel ville
 function onHotelVilleInput(val){
@@ -3425,7 +3423,7 @@ function importData(fileInput){
       // ── Migration : garantir la présence de tous les arrays + adresses
       //    structurées (factorisé dans _migrateAllTrips). ──
       if(typeof _migrateAllTrips === 'function') _migrateAllTrips();
-      if(data.pdfStore) window.pdfStore = data.pdfStore;
+      if(data.pdfStore){ window.pdfStore = data.pdfStore; if(typeof savePdfStore === 'function') savePdfStore(); }
       if(data.globalDocs){ try{ localStorage.setItem('yume_global_docs', JSON.stringify(data.globalDocs)); }catch(e){} }
       if(data.globalPdfs){ window.globalPdfStore = data.globalPdfs; try{ localStorage.setItem('yume_global_pdfs', JSON.stringify(data.globalPdfs)); }catch(e){} }
       if(data.profile && data.profile.name){
@@ -3443,7 +3441,6 @@ function importData(fileInput){
       }
       showHomeScreen();
       updateStatsBar();
-      buildDropdownMenu();
       updateGreeting();
       showToast('Sauvegarde importée avec succès ', 'success');
     } catch(err){
@@ -3464,7 +3461,7 @@ function resetApp(){
   var keys = [];
   for(var i=0;i<localStorage.length;i++) keys.push(localStorage.key(i));
   keys.forEach(function(k){
-    if(k.startsWith('mv_') || k === 'yume_theme' || k === 'yume_profile_name' || k === 'yume_profile_avatar'){
+    if(k.startsWith('mv_') || k === 'yume_theme' || k === 'yume_profile_name' || k === 'yume_profile_avatar' || k === 'yume_pdfstore'){
       localStorage.removeItem(k);
     }
   });
@@ -3480,7 +3477,6 @@ function resetApp(){
   // Reset UI
   showHomeScreen();
   updateStatsBar();
-  buildDropdownMenu();
   updateGreeting();
   closeSettings();
   showToast('Application réinitialisée', 'info');
@@ -4468,10 +4464,13 @@ function openTimelineDetail(cat, id){
     } else {
       rows += _tlRow('Siège', obj.siege);
     }
-    if(obj.segment2 && obj.segment2.dep){
-      rows += _tlRow('Correspondance',
-        (obj.segment2.dep||'')+'  →  '+(obj.segment2.arr||'')
-        + (obj.segment2.numero?'  ·  '+obj.segment2.numero:''));
+    if(obj.type==='vol' && typeof _isEscaleVol==='function' && _isEscaleVol(obj) && typeof _volChain==='function'){
+      var dch=_volChain(obj);
+      dch.escales.forEach(function(e,i){
+        var nm=e.aeroport||(dch.airports[i+1]&&(dch.airports[i+1].name||dch.airports[i+1].code))||'';
+        rows += _tlRow('Escale '+(i+1),
+          nm + (e.dureeEscale?'  ·  '+e.dureeEscale:'') + (e.numero?'  ·  vol '+e.numero:''));
+      });
     }
     rows += _tlRow('Statut', obj.statut);
     rows += _tlRow('Note', obj.note);
@@ -4580,9 +4579,57 @@ function openCardDetail(cat, id){
 // carte, édition…) ne doit pas ouvrir la modale détail.
 function _cardDetailClick(ev, cat, id){
   if(ev && ev.target && ev.target.closest &&
-     ev.target.closest('.copyable,.pdf-view-btn,.pdf-del-btn,.edit-item-btn,.hotel-map-btn,.loc-key-badge,button,a,input,select,label')) return;
+     ev.target.closest('.copyable,.pdf-view-btn,.pdf-del-btn,.pdf-badge,.edit-item-btn,.hotel-map-btn,.map-pin-link,.loc-key-badge,button,a,input,select,label')) return;
   openCardDetail(cat, id);
 }
+// ══════════════════════════════════════════════════════════════════
+// DÉLÉGATION D'ÉVÉNEMENTS — cartes d'items (pass, vol, train, etc.)
+// Élimine la classe de bug #5.1 (ids non quotés dans onclick inline) :
+// les ids passent par des attributs DOM, plus aucune interpolation JS.
+//   - Bouton d'action  : data-act="editPass" data-id="p1"
+//   - Carte détail     : data-detail-cat="pass" data-detail-id="p1"
+// Un seul listener délégué sur #spa-root gère tout (init une fois).
+// L'allowlist _ITEM_ACTS empêche d'appeler une fonction arbitraire.
+// ══════════════════════════════════════════════════════════════════
+var _ITEM_ACTS = {
+  editPass:1, deletePass:1, editVol:1, deleteVol:1, editTrain:1, deleteTrain:1,
+  editMobilite:1, deleteMobilite:1, editLocation:1, deleteLocation:1,
+  editHotel:1, deleteHotel:1, editLieu:1, deleteLieu:1,
+  editTransaction:1, deleteTransaction:1, editDoc:1, deleteDoc:1,
+  openPdf:1, openGlobalDocModal:1
+};
+function _initItemDelegation(){
+  var root = document.getElementById('spa-root');
+  if(!root || root._itemDelegated) return;
+  root._itemDelegated = true;
+  root.addEventListener('click', function(e){
+    // 1) Bouton d'action (edit/delete) → dispatch via allowlist
+    var actEl = e.target.closest && e.target.closest('[data-act]');
+    if(actEl && root.contains(actEl)){
+      var act = actEl.getAttribute('data-act');
+      if(_ITEM_ACTS[act] && typeof window[act] === 'function'){
+        e.stopPropagation();
+        window[act](actEl.getAttribute('data-id'));
+        return;
+      }
+    }
+    // 2) Bouton « voir sur la carte » → goToMapPin(cat, id) [2 args]
+    var pin = e.target.closest && e.target.closest('[data-mappin-cat]');
+    if(pin && root.contains(pin)){
+      e.stopPropagation();
+      if(typeof goToMapPin === 'function') goToMapPin(pin.getAttribute('data-mappin-cat'), pin.getAttribute('data-mappin-id'));
+      return;
+    }
+    // 3) Carte cliquable → modale détail (le garde-fou interne de
+    //    _cardDetailClick ignore les clics sur boutons/liens internes).
+    var card = e.target.closest && e.target.closest('[data-detail-cat]');
+    if(card && root.contains(card)){
+      _cardDetailClick(e, card.getAttribute('data-detail-cat'), card.getAttribute('data-detail-id'));
+    }
+  });
+}
+document.addEventListener('DOMContentLoaded', _initItemDelegation);
+
 // Basculer « visité » depuis la modale détail d'un lieu, puis ré-afficher la modale à jour.
 function toggleLieuVisitedFromModal(id){
   id = isNaN(+id) ? id : +id;
@@ -4618,12 +4665,65 @@ function mMois(id,val){
   return '<select id="'+id+'" data-build-mois="1" data-val="'+(val||'')+'" style="flex:1;min-width:90px;padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none"></select>';
 }
 function mDateRow(label,jourId,moisId,jourVal,moisVal,heureId,heureVal){
-  var h=heureId?'<input type="text" id="'+heureId+'" value="'+(heureVal||'')+'" placeholder="hh:mm" style="max-width:80px;flex:none;padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none"/>':'';
+  var h=heureId?'<input type="time" id="'+heureId+'" value="'+(heureVal||'')+'" style="max-width:110px;flex:none;padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none"/>':'';
   return '<div class="modal-field w-full"><label>'+label+'</label><div style="display:flex;gap:6px;flex-wrap:wrap">'+mJour(jourId,jourVal)+mMois(moisId,moisVal)+h+'</div></div>';
 }
-function modalFooter(saveFn,delFn){
+// ══════════════════════════════════════════════════════════════════
+// CONFIRMATION DE SUPPRESSION — universelle, réutilisable
+// Rendue dans la modale unique (#editModal) : remplace le formulaire.
+// Aucune interpolation JS du libellé (piège #5.1) : les handlers sont
+// posés via la propriété .onclick (fonctions), pas via des chaînes.
+//   type        : 'la dépense', 'le vol', 'l'hébergement'…
+//   libelle     : nom lisible de l'item (échappé HTML)
+//   aUnDocument : true si une pièce jointe (facture) est rattachée
+//   onConfirm   : fonction exécutée à la validation (fait la suppression)
+//   onCancel    : fonction optionnelle (défaut : fermer la modale)
+// ══════════════════════════════════════════════════════════════════
+function confirmDelete(type, libelle, aUnDocument, onConfirm, onCancel){
+  var msg = 'Supprimer ' + type + ' « ' + _tlEsc(libelle||'') + ' » ? Cette action est définitive.';
+  var warn = aUnDocument
+    ? '<div class="confirm-doc-warn">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+      + '<span>Un document (facture) y est rattaché et sera aussi supprimé.</span></div>'
+    : '';
+  openModal(
+    '<div class="modal-header"><div class="modal-title">Confirmer la suppression</div>'
+    +'<button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
+    +'<div class="confirm-del-body"><p class="confirm-del-msg">'+msg+'</p>'+warn+'</div>'
+    +'<div class="modal-footer"><div class="modal-actions" style="margin-left:auto">'
+      +'<button class="btn-ghost" id="confirmDelCancel">Annuler</button>'
+      +'<button class="btn-danger" id="confirmDelExec">Supprimer</button>'
+    +'</div></div>'
+  );
+  var exec = document.getElementById('confirmDelExec');
+  if(exec) exec.onclick = function(){ if(typeof onConfirm==='function') onConfirm(); };
+  var cancel = document.getElementById('confirmDelCancel');
+  if(cancel) cancel.onclick = function(){ if(typeof onCancel==='function') onCancel(); else closeModal(); };
+}
+
+// Métadonnées de la dernière modale d'édition ouverte (posées par modalFooter).
+// Consommées par _askModalDelete au clic sur « Supprimer ».
+var _modalDelMeta = null;
+function _askModalDelete(){
+  var m = _modalDelMeta;
+  if(!m) return;
+  var editFn = 'edit' + m.fn.substring(6); // deleteVol → editVol
+  confirmDelete(m.type, m.libelle, !!m.hasDoc,
+    function(){ if(_ITEM_ACTS[m.fn] && typeof window[m.fn]==='function') window[m.fn](m.id); },
+    function(){ if(typeof window[editFn]==='function') window[editFn](m.id); else closeModal(); }
+  );
+}
+
+// modalFooter(saveFn, delFn, delMeta)
+//  - delMeta {type,libelle,hasDoc,fn,id} : route la suppression via confirmDelete.
+//  - Sans delMeta : ancien comportement (delFn appelé directement) — rétro-compat.
+function modalFooter(saveFn,delFn,delMeta){
+  _modalDelMeta = delMeta || null;
+  var delBtn = delMeta
+    ? '<button class="btn-danger" id="modalDelBtn" onclick="_askModalDelete()">Supprimer</button>'
+    : '<button class="btn-danger" onclick="'+delFn+'">Supprimer</button>';
   return '<div class="modal-footer">'
-    +'<button class="btn-danger" onclick="'+delFn+'">Supprimer</button>'
+    +delBtn
     +'<div class="modal-actions">'
       +'<button class="btn-ghost" onclick="closeModal()">Annuler</button>'
       +'<button class="btn-primary" onclick="'+saveFn+'">Enregistrer</button>'
@@ -4666,6 +4766,7 @@ function _modalPdfAttach(hiddenId, fileInput){
   reader.onload = function(e){
     var pdfId = 'pdf_'+Date.now();
     window.pdfStore[pdfId] = {name: file.name, data: e.target.result};
+    savePdfStore();
     var hid = document.getElementById(hiddenId);
     if(hid) hid.value = pdfId;
     var badge = document.getElementById(hiddenId+'-badge');
@@ -4681,6 +4782,7 @@ function _modalPdfAttach(hiddenId, fileInput){
 // Suppression PDF depuis une modal
 function _modalPdfDel(hiddenId, pdfId){
   if(window.pdfStore) delete window.pdfStore[pdfId];
+  savePdfStore();
   var hid = document.getElementById(hiddenId);
   if(hid) hid.value = '';
   var badge = document.getElementById(hiddenId+'-badge');
@@ -4897,143 +4999,11 @@ function renderVolsDestCard(){
   }
 }
 
-// ── Masque de saisie heure __h__ ──
-var hmState = {}; // { targetId: { phase:'H'|'M', digits:'' } }
-
-
-function clearHeureMask(targetId){
-  hmState[targetId] = {phase:'H', digits:''};
-  var el = document.getElementById(targetId);
-  if(el){ el.value=''; el.dispatchEvent(new Event('input',{bubbles:true})); }
-  updateHeureMaskDisplay(targetId);
-  var wrap = document.getElementById('hmw-'+targetId);
-  if(wrap) wrap.classList.remove('has-value');
-}
-
-function updateHeureMaskDisplay(targetId){
-  var state = hmState[targetId] || {phase:'H', digits:''};
-  var hEl = document.getElementById('hs-'+targetId+'-H');
-  var mEl = document.getElementById('hs-'+targetId+'-M');
-  var disp = document.getElementById('hmd-'+targetId);
-  if(!hEl||!mEl) return;
-
-  var el = document.getElementById(targetId);
-  var curVal = el ? el.value : '';
-  var hStr='--', mStr='--';
-  if(curVal){
-    var m = curVal.match(/^(\d{1,2})[h:](\d{2})$/);
-    if(m){ hStr=(parseInt(m[1])<10?'0':'')+m[1]; mStr=m[2]; }
-  }
-  // En cours de saisie
-  if(state.digits.length > 0){
-    if(state.phase==='H'){
-      hStr = (state.digits+'__').slice(0,2).replace(/_/g,'_');
-      hEl.textContent = state.digits.padEnd(2,'_');
-      mEl.textContent = mStr==='--' ? '--' : mStr;
-    } else {
-      mEl.textContent = state.digits.padEnd(2,'_');
-      hEl.textContent = hStr==='--' ? '--' : hStr;
-    }
-  } else {
-    hEl.textContent = hStr; mEl.textContent = mStr;
-  }
-
-  // Souligner le segment actif
-  if(disp && disp.classList.contains('active')){
-    hEl.classList.toggle('editing', state.phase==='H');
-    mEl.classList.toggle('editing', state.phase==='M');
-  }
-}
-
-// Gestionnaire de touches pour le masque
-document.addEventListener('keydown', function(e){
-  // Trouver quel targetId est actif (le parent .heure-mask-wrap a focus)
-  var activeInp = document.querySelector('.heure-mask-input:focus');
-  if(!activeInp) return;
-
-  var wrap = activeInp.closest('.heure-mask-wrap');
-  if(!wrap) return;
-  var targetId = wrap.id.replace('hmw-','');
-  if(!targetId) return;
-  if(!hmState[targetId]) hmState[targetId] = {phase:'H', digits:''};
-  var state = hmState[targetId];
-
-  if(e.key === 'Escape' || e.key === 'Tab'){
-    var disp = document.getElementById('hmd-'+targetId);
-    if(disp) disp.classList.remove('active');
-    state.digits='';
-    return;
-  }
-  if(e.key === 'Backspace'){
-    if(state.digits.length > 0){
-      state.digits = state.digits.slice(0,-1);
-    } else if(state.phase === 'M'){
-      state.phase = 'H'; state.digits = '';
-    } else {
-      clearHeureMask(targetId);
-    }
-    updateHeureMaskDisplay(targetId);
-    e.preventDefault(); return;
-  }
-  if(!/^\d$/.test(e.key)) return;
-  e.preventDefault();
-
-  var digit = e.key;
-  state.digits += digit;
-
-  if(state.phase === 'H'){
-    // Après 2 chiffres, ou si premier chiffre > 2, valider les heures
-    var h = parseInt(state.digits, 10);
-    if(state.digits.length === 2 || (state.digits.length === 1 && h > 2)){
-      // Valider : 0-23
-      h = Math.min(h, 23);
-      state.hVal = h;
-      state.phase = 'M';
-      state.digits = '';
-    }
-  } else {
-    // Minutes : après 2 chiffres, valider
-    if(state.digits.length === 2){
-      var m2 = parseInt(state.digits, 10);
-      m2 = Math.min(m2, 59);
-      var hh = state.hVal !== undefined ? state.hVal : 0;
-      var val = (hh<10?'0'+hh:hh)+':'+(m2<10?'0'+m2:m2);
-      var el = document.getElementById(targetId);
-      if(el){ el.value=val; el.dispatchEvent(new Event('input',{bubbles:true})); }
-      // Feedback
-      var wrap2 = document.getElementById('hmw-'+targetId);
-      if(wrap2) wrap2.classList.add('has-value');
-      var disp2 = document.getElementById('hmd-'+targetId);
-      if(disp2) disp2.classList.remove('active');
-      state.phase='H'; state.digits='';
-      autoCalcDureeVol();
-    }
-  }
-  updateHeureMaskDisplay(targetId);
-});
-
-// Blur = fin de saisie
-document.addEventListener('focusout', function(e){
-  if(!e.target.classList.contains('heure-mask-input')) return;
-  var wrap = e.target.closest('.heure-mask-wrap');
-  if(!wrap) return;
-  var targetId = wrap.id.replace('hmw-','');
-  var disp = document.getElementById('hmd-'+targetId);
-  if(disp) disp.classList.remove('active');
-  if(hmState[targetId]) hmState[targetId].digits='';
-  updateHeureMaskDisplay(targetId);
-});
-
 // ── Calendrier vols : minDate ──
 
 // ── Escales ──
 var escalesData = []; // [{aeroport:'', duree:'', numero:''}]
 
-
-function addEscaleField(){
-  escalesData.push({aeroport:'', duree:'', numero:''});
-  renderEscalesFields();
-}
 
 function removeEscaleField(idx){
   escalesData.splice(idx,1);
@@ -5176,7 +5146,7 @@ function renderVols(){
             : '')
         +'</div>'
         : '')
-      +'<button class="edit-item-btn" onclick="event.stopPropagation();editVol(\''+v.id+'\')"></button>'
+      +'<button class="edit-item-btn" data-act="editVol" data-id="'+v.id+'"></button>'
     +'</div>';
   }).join('');
   // Attacher les listeners PDF après rendu
@@ -5264,7 +5234,7 @@ function editVol(id){id=isNaN(+id)?id:+id;
           +'</div>'
           +'<input type="hidden" id="ev-escales-json" value="[]"/>'
         +'</div>')
-    +modalFooter('saveVol(\''+id+'\')','deleteVol(\''+id+'\')')
+    +modalFooter('saveVol(\''+id+'\')','deleteVol(\''+id+'\')',{type:'le vol',libelle:v.titre||'',hasDoc:!!v.pdfId,fn:'deleteVol',id:id})
   );
 }
 
@@ -5441,7 +5411,7 @@ function saveVol(id){id=isNaN(+id)?id:+id;
   v.siege     = document.getElementById('ev-siege').value;
   // PDF
   var evPdf = document.getElementById('ev-pdf-id');
-  if(evPdf && evPdf.value) v.pdfId = evPdf.value;
+  if(evPdf) v.pdfId = evPdf.value;
   // Escales
   var evEsc = document.getElementById('ev-escales-json');
   if(evEsc && evEsc.value){
@@ -5550,7 +5520,7 @@ function renderPasses(){
         +(emodes&&emodes.passes ? '<button class="pdf-del-btn" data-pid="'+p.pdfId+'" data-passid="'+p.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>' : '')
       +'</div>';
     }
-    return '<div class="pass-card item-wrap epass" style="position:relative" onclick="_cardDetailClick(event,\'pass\',\''+p.id+'\')">'
+    return '<div class="pass-card item-wrap epass" style="position:relative" data-detail-cat="pass" data-detail-id="'+p.id+'">'
       +'<div class="pass-title">'+p.nom+' <span class="badge '+sc+'">'+p.statut+'</span></div>'
       +(validite?'<div class="pass-info">'+validite+(p.numero?' · N° <span class="copyable" data-copy="'+(p.numero+'').replace(/"/g,'&quot;')+'">'+p.numero+'</span>':'')+(p.prix?' · '+p.prix+' €':'')+'</div>':'')
       +(p.numero&&!validite?'<div class="pass-info">N° <span class="copyable" data-copy="'+(p.numero+'').replace(/"/g,'&quot;')+'">'+p.numero+'</span>'+(p.prix?' · '+p.prix+' €':'')+'</div>':'')
@@ -5559,7 +5529,7 @@ function renderPasses(){
       +(p.note?'<div class="pass-note">'+p.note+'</div>':'')
       +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">'+avt+'</div>'
       +pdfHtml
-      +'<button class="edit-item-btn" onclick="event.stopPropagation();editPass(\''+p.id+'\')"></button>'
+      +'<button class="edit-item-btn" data-act="editPass" data-id="'+p.id+'"></button>'
     +'</div>';
   }).join('');
   // Listeners PDF
@@ -5599,7 +5569,7 @@ function editPass(id){id=isNaN(+id)?id:+id;
       +'<textarea id="ep-note" rows="2" style="width:100%;resize:vertical;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r-sm);font-family:DM Sans,sans-serif">'+((p.note)||'')+'</textarea>'
     +'</div></div>'
     +mPdfBlock('ep-pdf', p.pdfId||'')
-    +modalFooter('savePass(\''+id+'\')','deletePass(\''+id+'\')')
+    +modalFooter('savePass(\''+id+'\')','deletePass(\''+id+'\')',{type:'le pass',libelle:p.nom||'',hasDoc:!!p.pdfId,fn:'deletePass',id:id})
   );
 }
 function savePass(id){id=isNaN(+id)?id:+id;
@@ -5613,7 +5583,7 @@ function savePass(id){id=isNaN(+id)?id:+id;
   p.zone   =(document.getElementById('ep-zone')||{}).value||'';
   p.note   =(document.getElementById('ep-note')||{}).value||'';
   var epPdf=document.getElementById('ep-pdf');
-  if(epPdf&&epPdf.value) p.pdfId=epPdf.value;
+  if(epPdf) p.pdfId=epPdf.value;
   p.validite=p.debut&&p.fin?p.debut+' → '+p.fin:(p.debut?p.debut+' →':'');
   closeModal();renderPasses();_updatePassesPinTop();snapshotCurrentTrip();
 }
@@ -5650,7 +5620,7 @@ function renderTrains(){
         +(t.siege?'<div class="train-detail">Siège '+t.siege+(t.voiture?' · Voiture '+t.voiture:'')+'</div>':'')
       +'</div>'
       +'<span class="badge '+bc+'">'+t.statut+'</span>'
-      +'<button class="edit-item-btn" onclick="event.stopPropagation();editTrain(\''+t.id+'\')" style="right:4px"></button>'
+      +'<button class="edit-item-btn" data-act="editTrain" data-id="'+t.id+'" style="right:4px"></button>'
     +'</div>';
   }).join('');
 }
@@ -5683,7 +5653,7 @@ function editTrain(id){id=isNaN(+id)?id:+id;
     +'</div>'
     // PDF — accessible en mode modification
     +mPdfBlock('et-pdf', t.pdfId||'')
-    +modalFooter('saveTrain(\''+id+'\')','deleteTrain(\''+id+'\')')
+    +modalFooter('saveTrain(\''+id+'\')','deleteTrain(\''+id+'\')',{type:'le trajet',libelle:t.route||(t.dep&&t.arr?t.dep+' → '+t.arr:''),hasDoc:!!t.pdfId,fn:'deleteTrain',id:id})
   );
 }
 function saveTrain(id){id=isNaN(+id)?id:+id;
@@ -5703,7 +5673,7 @@ function saveTrain(id){id=isNaN(+id)?id:+id;
   // Recalcul durée
   if(t.dep&&t.arr){var dm=parseHM(t.dep),am=parseHM(t.arr);if(dm!==null&&am!==null){var df=am-dm;if(df<=0)df+=1440;t.duree=formatMinutes(df);}}
   // PDF — accepte nouveau fichier OU conserve l'ancien
-  var etPdf=document.getElementById('et-pdf'); if(etPdf&&etPdf.value) t.pdfId=etPdf.value;
+  var etPdf=document.getElementById('et-pdf'); if(etPdf) t.pdfId=etPdf.value;
   // Reconstruction date canonique JJ/MM/AAAA pour le tri chronologique
   if(t.jour&&t.mois){
     var MOIS_NUM={'jan':1,'fev':2,'fév':2,'mar':3,'avr':4,'mai':5,'juin':6,
@@ -5896,57 +5866,359 @@ function onMobTypeChange(){
   setMobType(typeEl.value, chip);
 }
 
-// ── Escale / Segment 2 ──
-var _mobEscales=[];
-window.toggleMobEscales=function(){
-  var chk=document.getElementById('mob-escale-check');
-  var wrap=document.getElementById('mob-escales-wrap');
-  if(!wrap)return;
-  wrap.style.display=(chk&&chk.checked)?'':'none';
-};
-// Conservé pour compatibilité mais inutilisé (plus de multi-escale via bouton)
-window.addMobEscale=function(){};
-window.removeMobEscale=function(idx,row){ if(row)row.remove(); };
+// La durée totale du vol/trajet est désormais SAISIE MANUELLEMENT (champ #mob-duree) :
+// elle ne peut pas être calculée depuis les horaires à cause du décalage horaire
+// (ex. Paris 20h → Taipei affiché 8h = 16h réelles). Aucun auto-calc de durée.
 
-// ── Calcul durée ──
-function calcMobDuree(){
-  // Chercher les champs dans le groupe actif
-  var type=(document.getElementById('mob-type')||{}).value||'vol';
-  var groupId=MOB_GROUPS[type]||'mob-group-vol';
-  var group=document.getElementById(groupId);
-  if(!group)return;
-  var depInputs=group.querySelectorAll('[id="mob-heure-dep"]');
-  var arrInputs=group.querySelectorAll('[id="mob-heure-arr"]');
-  var dh=depInputs.length?depInputs[0].value:'';
-  var ah=arrInputs.length?arrInputs[0].value:'';
-  var dispEls=group.querySelectorAll('[id="mob-duree-display"]');
-  var hidEls =group.querySelectorAll('[id="mob-duree"]');
-  var disp=dispEls.length?dispEls[0]:null;
-  var hidden=hidEls.length?hidEls[0]:null;
-  if(!dh||!ah){if(disp)disp.textContent='—';return;}
-  var dm=typeof parseHM==='function'?parseHM(dh):null;
-  var am=typeof parseHM==='function'?parseHM(ah):null;
-  if(dm===null||am===null){if(disp)disp.textContent='—';return;}
-  var diff=am-dm;if(diff<=0)diff+=1440;
-  var str=typeof formatMinutes==='function'?formatMinutes(diff):Math.floor(diff/60)+'h'+(diff%60?String(diff%60).padStart(2,'0'):'');
-  if(disp)disp.textContent=str;
-  if(hidden)hidden.value=str;
+// ══════════════════════════════════════════════════════════════════
+// FORMULAIRE VOL — ESCALES DYNAMIQUES (N escales → N+1 segments)
+// Case escale cochée : le bloc du haut devient « Segment 1 » (origine →
+// 1re escale), puis pour chaque escale j : un bloc Escale j (aéroport +
+// durée) et un bloc SEG. j+1. La destination finale est dans le dernier
+// segment. Aéroport d'escale saisi une seule fois (pas de double saisie).
+// ══════════════════════════════════════════════════════════════════
+var _mobEscCount = 1;
+var MOB_ESC_MAX = 3;
+var _mobEditId = null; // id du vol en cours d'édition via le formulaire unifié (null = création)
+
+function toggleMobEscales(){
+  var on = !!((document.getElementById('mob-escale-check')||{}).checked);
+  var wrap = document.getElementById('mob-escales-wrap');
+  if(wrap) wrap.style.display = on ? '' : 'none';
+  var title    = document.getElementById('mob-vol-seg1-title');
+  var direct   = document.getElementById('mob-direct-details');
+  var arrLabel = document.getElementById('mob-arr-label');
+  var hdepLbl  = document.getElementById('mob-hdep-label');
+  var harrLbl  = document.getElementById('mob-harr-label');
+  if(on){
+    // Origine + destination finale + horaires d'extrémité RESTENT en haut
+    // (source unique). Les infos par vol se saisissent dans chaque segment.
+    if(title)    title.textContent = 'Trajet global';
+    if(direct)   direct.style.display = 'none';
+    if(arrLabel) arrLabel.textContent = 'Destination finale';
+    if(hdepLbl)  hdepLbl.textContent = 'Décollage initial';
+    if(harrLbl)  harrLbl.textContent = 'Arrivée finale';
+    if(_mobEscCount < 1) _mobEscCount = 1;
+    _renderMobEscBlocks();
+  } else {
+    if(title)    title.textContent = 'Informations du vol';
+    if(direct)   direct.style.display = '';
+    if(arrLabel) arrLabel.textContent = 'Arrivée';
+    if(hdepLbl)  hdepLbl.textContent = 'Décollage';
+    if(harrLbl)  harrLbl.textContent = 'Atterrissage';
+    var dyn = document.getElementById('mob-escales-dyn');
+    if(dyn) dyn.innerHTML = '';
+  }
 }
 
-// ── Calcul durée vol 2 (escale) ──
-function calcEscDuree(){
-  var dh=(document.getElementById('mob-esc-heure-dep')||{}).value||'';
-  var ah=(document.getElementById('mob-esc-heure-arr')||{}).value||'';
-  var disp=document.getElementById('mob-esc-duree-display');
-  var hid =document.getElementById('mob-esc-duree-vol');
-  if(!dh||!ah){if(disp)disp.textContent='—';return;}
-  var dm=typeof parseHM==='function'?parseHM(dh):null;
-  var am=typeof parseHM==='function'?parseHM(ah):null;
-  if(dm===null||am===null){if(disp)disp.textContent='—';return;}
-  var diff=am-dm;if(diff<=0)diff+=1440;
-  var str=typeof formatMinutes==='function'?formatMinutes(diff):Math.floor(diff/60)+'h'+(diff%60?String(diff%60).padStart(2,'0'):'');
-  if(disp)disp.textContent=str;
-  if(hid)hid.value=str;
+function mobEscCount(d){
+  var prev = _mobEscCount;
+  _mobEscCount = Math.max(1, Math.min(MOB_ESC_MAX, _mobEscCount + d));
+  if(_mobEscCount !== prev) _renderMobEscBlocks();
+}
+
+// Snapshot/restore des valeurs saisies (pour ne rien perdre au changement de compteur)
+function _mobSnapshotDyn(){
+  // On saute les champs en lecture seule (horaires d'extrémité propagés) : ils
+  // seront re-reportés depuis le haut sur le bon segment après le re-render.
+  var m = {}, dyn = document.getElementById('mob-escales-dyn');
+  if(dyn) dyn.querySelectorAll('input').forEach(function(i){ if(i.id && !i.readOnly) m[i.id] = i.value; });
+  return m;
+}
+function _mobRestoreDyn(m){
+  Object.keys(m).forEach(function(id){ var e = document.getElementById(id); if(e) e.value = m[id]; });
+}
+
+function _renderMobEscBlocks(){
+  var n = _mobEscCount;
+  var cv = document.getElementById('mob-esc-count-val');
+  if(cv) cv.textContent = n + ' escale' + (n>1?'s':'');
+  var dyn = document.getElementById('mob-escales-dyn');
+  if(!dyn) return;
+  var snap = _mobSnapshotDyn();
+  // Chaîne : SEG.1, puis pour chaque escale j : bloc Escale j + bloc SEG. j+1.
+  // N escales → N+1 segments, tous symétriques et complets.
+  var h = _mobSegBlockHTML(1);
+  for(var j=1;j<=n;j++){
+    h += _mobEscBlockHTML(j);
+    h += _mobSegBlockHTML(j+1);
+  }
+  dyn.innerHTML = h;
+  _mobRestoreDyn(snap);
+  _mobWireEscAC();
+  _mobUpdateSegRoutes();
+  _mobPropagateEndTimes();
+}
+
+// Auto-remplissage des horaires d'EXTRÉMITÉ (source unique = bloc du haut) :
+//  - décollage du SEG.1  ← heure de décollage initiale (haut)
+//  - atterrissage du dernier SEG ← heure d'arrivée finale (haut)
+// Ces deux champs sont en lecture seule dans les segments (pas de double
+// saisie). Les horaires intermédiaires restent éditables. Se re-reporte
+// automatiquement sur le nouveau dernier segment au changement de compteur.
+function _mobPropagateEndTimes(){
+  var n = _mobEscCount;
+  var topDep = (document.getElementById('mob-heure-dep')||{}).value || '';
+  var topArr = (document.getElementById('mob-heure-arr')||{}).value || '';
+  // Réinitialiser l'état lecture seule de tous les horaires de segment
+  for(var k=1;k<=n+1;k++){
+    var hd = document.getElementById('mseg-'+k+'-hdep');
+    var ha = document.getElementById('mseg-'+k+'-harr');
+    if(hd){ hd.readOnly=false; hd.classList.remove('mob-seg-inherited'); hd.removeAttribute('title'); }
+    if(ha){ ha.readOnly=false; ha.classList.remove('mob-seg-inherited'); ha.removeAttribute('title'); }
+  }
+  // SEG.1 décollage = décollage initial (haut)
+  var s1 = document.getElementById('mseg-1-hdep');
+  if(s1){ s1.value=topDep; s1.readOnly=true; s1.classList.add('mob-seg-inherited'); s1.title='Repris du décollage initial (en haut)'; }
+  // Dernier segment atterrissage = arrivée finale (haut)
+  var last = document.getElementById('mseg-'+(n+1)+'-harr');
+  if(last){ last.value=topArr; last.readOnly=true; last.classList.add('mob-seg-inherited'); last.title='Repris de l\'arrivée finale (en haut)'; }
+}
+
+// ── CRUD vol : lecture du formulaire → modèle escales[] ──
+// Remplit les champs vol de m (codes déjà posés en amont). En mode escale :
+//   - SEG.1 (racine) : infos depuis le bloc dynamique SEG.1
+//   - m.escales[j-1] : escale j (aéroport+durée) + segment j+1 (qui en part)
+//   - heureDep/heureArr de m = horaires d'extrémité (déjà lus depuis le haut)
+// En mode direct : escales:[] et les infos racine (déjà lues) sont conservées.
+// Base locale aéroports (code IATA → {lat,lng}), offline. Sert à GELER les
+// coordonnées d'un vol à l'enregistrement pour figer la position (pas de
+// re-géocodage). AIRPORTS_GPS est chargé avant app.js ; garde défensive.
+function _airportGpsApp(code){
+  if(!code || typeof AIRPORTS_GPS==='undefined') return null;
+  var g = AIRPORTS_GPS[String(code).toUpperCase().trim()];
+  return (g && g.length===2) ? { lat:g[0], lng:g[1] } : null;
+}
+// Gèle origine + destination finale d'un vol depuis leurs codes IATA (codeDep/
+// codeArr). Nettoie les champs si le code est inconnu (repli tracé = géocodage).
+function _freezeVolRootGps(m){
+  var d = _airportGpsApp(m.codeDep), a = _airportGpsApp(m.codeArr);
+  if(d){ m.latDep=d.lat; m.lngDep=d.lng; } else { delete m.latDep; delete m.lngDep; }
+  if(a){ m.latArr=a.lat; m.lngArr=a.lng; } else { delete m.latArr; delete m.lngArr; }
+}
+
+function _readVolEscalesInto(m){
+  function segv(k,f){ return (document.getElementById('mseg-'+k+'-'+f)||{}).value || ''; }
+  function escv(j,f){ return (document.getElementById('mesc-'+j+'-'+f)||{}).value || ''; }
+  m._volV2 = true;
+  if(m.segment2) delete m.segment2; // le modèle escales[] remplace segment2
+  var on = !!((document.getElementById('mob-escale-check')||{}).checked);
+  if(!on){
+    m.escales = [];
+    m.dureeVol = '';
+    return;
+  }
+  var n = (typeof _mobEscCount==='number' && _mobEscCount>0) ? _mobEscCount : 1;
+  // SEG.1 → racine (écrase les champs racine, vides en mode escale)
+  m.compagnie = segv(1,'compagnie');
+  m.numero    = segv(1,'numero');
+  m.siege     = segv(1,'siege');
+  m.terminal  = segv(1,'terminal');
+  m.porte     = segv(1,'porte');
+  m.resa      = segv(1,'resa');
+  m.bagages   = segv(1,'bagages');
+  m.dureeVol  = segv(1,'duree'); // durée du SEG.1 (optionnelle)
+  m.escales = [];
+  for(var j=1;j<=n;j++){
+    // Gel des coordonnées de l'escale depuis son code IATA (base locale, offline).
+    var _eg = _airportGpsApp(escv(j,'code'));
+    m.escales.push({
+      aeroport      : escv(j,'airport'),
+      code          : escv(j,'code'),
+      lat: (_eg?_eg.lat:null), lng: (_eg?_eg.lng:null),
+      dureeEscale   : escv(j,'duree'),
+      heureArrEscale: segv(j,'harr'),      // arrivée du SEG.j à l'escale j
+      heureDep      : segv(j+1,'hdep'),    // départ du SEG.(j+1)
+      dureeVol      : segv(j+1,'duree'),
+      compagnie     : segv(j+1,'compagnie'),
+      numero        : segv(j+1,'numero'),
+      siege         : segv(j+1,'siege'),
+      terminal      : segv(j+1,'terminal'),
+      porte         : segv(j+1,'porte'),
+      resa          : segv(j+1,'resa'),
+      bagages       : segv(j+1,'bagages')
+    });
+  }
+}
+
+// ── CRUD vol : modèle escales[] → repeuplement du formulaire (édition) ──
+function _fillVolEscalesForm(m){
+  var chk = document.getElementById('mob-escale-check');
+  var esc = (m && m.escales) ? m.escales : [];
+  if(!esc.length){
+    if(chk){ chk.checked = false; }
+    _mobEscCount = 1;
+    toggleMobEscales();
+    return;
+  }
+  if(chk){ chk.checked = true; }
+  _mobEscCount = Math.max(1, Math.min(MOB_ESC_MAX, esc.length));
+  toggleMobEscales();           // rend les blocs (SEG.1 + escales/segments)
+  // Horaires d'extrémité (haut) : déjà posés via mob-heure-dep/arr par l'appelant.
+  function segset(k,f,val){ var e=document.getElementById('mseg-'+k+'-'+f); if(e) e.value = val||''; }
+  function escset(j,f,val){ var e=document.getElementById('mesc-'+j+'-'+f); if(e) e.value = val||''; }
+  // SEG.1 (racine)
+  segset(1,'compagnie', m.compagnie); segset(1,'numero', m.numero);
+  segset(1,'siege', m.siege); segset(1,'terminal', m.terminal);
+  segset(1,'porte', m.porte); segset(1,'resa', m.resa);
+  segset(1,'bagages', m.bagages); segset(1,'duree', m.dureeVol);
+  for(var j=1;j<=_mobEscCount;j++){
+    var e = esc[j-1] || {};
+    escset(j,'airport', e.aeroport); escset(j,'code', e.code); escset(j,'duree', e.dureeEscale);
+    segset(j,'harr', e.heureArrEscale);          // arrivée SEG.j à l'escale j
+    segset(j+1,'hdep', e.heureDep);              // départ SEG.(j+1)
+    segset(j+1,'duree', e.dureeVol);
+    segset(j+1,'compagnie', e.compagnie); segset(j+1,'numero', e.numero);
+    segset(j+1,'siege', e.siege); segset(j+1,'terminal', e.terminal);
+    segset(j+1,'porte', e.porte); segset(j+1,'resa', e.resa); segset(j+1,'bagages', e.bagages);
+  }
+  _mobUpdateSegRoutes();
+  _mobPropagateEndTimes();      // ré-applique décollage SEG.1 / atterrissage dernier depuis le haut
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LECTEURS — chaîne d'un vol (source unique pour carte-item, carte géo,
+// timeline). Dérive du modèle escales[] la liste ordonnée des aéroports
+// [origine, escale1..N, destination], des N+1 segments et des N escales.
+// Rétro-compat : si escales[] vide mais segment2 présent (vol non migré),
+// on reconstruit à la volée sans muter m.
+// ══════════════════════════════════════════════════════════════════
+function _volChain(m){
+  var esc = (m && m.escales && m.escales.length) ? m.escales : null;
+  var finalName=m.arr||'', finalCode=m.codeArr||'', finalHeureArr=m.heureArr||'';
+  if(!esc && m && m.segment2 && (m.segment2.dep||m.segment2.arr)){
+    var s2=m.segment2;
+    esc=[{ aeroport:s2.dep||'', code:s2.codeDep||'', lat:(typeof s2.lat==='number'?s2.lat:null), lng:(typeof s2.lng==='number'?s2.lng:null),
+           dureeEscale:s2.dureeEscale||'', heureArrEscale:m.heureArr||'', heureDep:s2.heureDep||'', dureeVol:s2.dureeVol||'',
+           compagnie:s2.compagnie||'', numero:s2.numero||'', siege:s2.siege||'' }];
+    finalName=s2.arr||m.arr||''; finalCode=s2.codeArr||m.codeArr||''; finalHeureArr=s2.heureArr||m.heureArr||'';
+  }
+  esc = esc || [];
+  var n = esc.length;
+  var airports=[{ name:m.dep||'', code:m.codeDep||'',
+    lat:(typeof m.latDep==='number'?m.latDep:null), lng:(typeof m.lngDep==='number'?m.lngDep:null) }];
+  for(var j=0;j<n;j++){
+    airports.push({ name:esc[j].aeroport||'', code:esc[j].code||'',
+      lat:(typeof esc[j].lat==='number'?esc[j].lat:null), lng:(typeof esc[j].lng==='number'?esc[j].lng:null) });
+  }
+  airports.push({ name:finalName, code:finalCode,
+    lat:(typeof m.latArr==='number'?m.latArr:null), lng:(typeof m.lngArr==='number'?m.lngArr:null) });
+  var segments=[];
+  for(var k=0;k<=n;k++){
+    var sg;
+    if(k===0){
+      sg={ compagnie:m.compagnie||'', numero:m.numero||'', siege:m.siege||'',
+           heureDep:m.heureDep||'', heureArr:(n>0?(esc[0].heureArrEscale||''):finalHeureArr) };
+    } else {
+      var e=esc[k-1];
+      sg={ compagnie:e.compagnie||'', numero:e.numero||'', siege:e.siege||'',
+           heureDep:e.heureDep||'', heureArr:(k<n?(esc[k].heureArrEscale||''):finalHeureArr) };
+    }
+    sg.fromLabel=airports[k].code||airports[k].name||'—';
+    sg.toLabel  =airports[k+1].code||airports[k+1].name||'—';
+    segments.push(sg);
+  }
+  return { n:n, airports:airports, segments:segments, escales:esc, finalHeureArr:finalHeureArr };
+}
+function _isEscaleVol(m){
+  return m && m.type==='vol' && ((m.escales&&m.escales.length) || (m.segment2&&(m.segment2.dep||m.segment2.arr)));
+}
+
+// Met à jour l'en-tête de route de chaque segment depuis la chaîne d'aéroports
+// (origine en haut → escales → destination finale en haut). Chaînage auto.
+function _mobUpdateSegRoutes(){
+  var n = _mobEscCount;
+  function lbl(codeId, nameId){
+    var c = (document.getElementById(codeId)||{}).value || '';
+    var nm= (document.getElementById(nameId)||{}).value || '';
+    return (c || nm || '—');
+  }
+  var chain = [ lbl('mob-code-dep','mob-dep') ];
+  for(var j=1;j<=n;j++){ chain.push(lbl('mesc-'+j+'-code','mesc-'+j+'-airport')); }
+  chain.push(lbl('mob-code-arr','mob-arr'));
+  for(var k=1;k<=n+1;k++){
+    var r = document.getElementById('mseg-'+k+'-route');
+    if(r) r.textContent = chain[k-1] + '  →  ' + chain[k];
+  }
+}
+
+function _mobEscBlockHTML(j){
+  var pin = (typeof _lu==='function') ? _lu('plane', 14) : '';
+  return '<div class="mob-esc-block">'
+    + '<div class="mob-esc-block-head">'+pin+'<span>Escale '+j+'</span></div>'
+    + '<div class="form-row">'
+      + '<div class="ac-wrap" style="flex:1;position:relative">'
+        + '<input type="text" id="mesc-'+j+'-airport" placeholder="Aéroport d\'escale" autocomplete="off" data-esc-ac="'+j+'" style="width:100%"/>'
+        + '<div class="ac-list" id="ac-mesc-'+j+'"></div>'
+      + '</div>'
+      + '<input type="text" id="mesc-'+j+'-code" placeholder="ICN" style="max-width:56px;text-transform:uppercase;font-weight:600;text-align:center" oninput="this.value=this.value.toUpperCase()"/>'
+      + '<input type="text" id="mesc-'+j+'-duree" placeholder="Durée escale (2h30)" style="max-width:150px"/>'
+    + '</div>'
+  + '</div>';
+}
+
+// Bloc segment COMPLET et symétrique (identique pour SEG.1 … SEG.N+1).
+// Les aéroports dep/arr ne sont pas re-saisis (chaînés depuis origine/escales/
+// destination) : l'en-tête affiche la route. Chaque segment porte tous ses
+// champs : décollage, atterrissage, durée (optionnelle), compagnie, n° vol,
+// siège, terminal, porte, n° résa, bagages.
+function _mobSegBlockHTML(k){
+  return '<div class="mob-seg-block">'
+    + '<div class="mob-seg-block-head"><span class="mob-seg-badge">SEG. '+k+'</span>'
+      + '<span class="mob-seg-route" id="mseg-'+k+'-route">—</span></div>'
+    + '<div class="form-row">'
+      + '<div class="mob-seg-f"><label class="mob-lbl">Décollage</label><input type="time" id="mseg-'+k+'-hdep" class="vol-time-input"/></div>'
+      + '<div class="mob-seg-f"><label class="mob-lbl">Atterrissage</label><input type="time" id="mseg-'+k+'-harr" class="vol-time-input"/></div>'
+      + '<div class="mob-seg-f"><label class="mob-lbl">Durée segment</label><input type="text" id="mseg-'+k+'-duree" placeholder="option." style="max-width:96px"/></div>'
+    + '</div>'
+    + '<div class="form-row">'
+      + '<input type="text" id="mseg-'+k+'-compagnie" placeholder="Compagnie" style="flex:2"/>'
+      + '<input type="text" id="mseg-'+k+'-numero" placeholder="N° vol" style="flex:1;min-width:70px"/>'
+      + '<input type="text" id="mseg-'+k+'-siege" placeholder="Siège" style="max-width:72px"/>'
+    + '</div>'
+    + '<div class="form-row">'
+      + '<input type="text" id="mseg-'+k+'-terminal" placeholder="Terminal" style="max-width:96px"/>'
+      + '<input type="text" id="mseg-'+k+'-porte" placeholder="Porte" style="max-width:82px"/>'
+      + '<input type="text" id="mseg-'+k+'-resa" placeholder="N° résa" style="flex:1;min-width:80px"/>'
+      + '<input type="text" id="mseg-'+k+'-bagages" placeholder="Bagages" style="flex:1.2"/>'
+    + '</div>'
+  + '</div>';
+}
+
+// Autocomplétion aéroport sur les blocs escale + destination finale (CITY_DATA)
+function _mobWireEscAC(){
+  var inputs = document.querySelectorAll('#mob-escales-dyn [data-esc-ac]');
+  for(var i=0;i<inputs.length;i++){
+    inputs[i].oninput = function(){ _mobEscACInput(this); };
+  }
+}
+function _mobEscACInput(inp){
+  var key   = inp.getAttribute('data-esc-ac');
+  var boxId  = (key==='final') ? 'ac-mfinal'      : 'ac-mesc-'+key;
+  var codeId = (key==='final') ? 'mfinal-code'    : 'mesc-'+key+'-code';
+  var box = document.getElementById(boxId);
+  if(!box) return;
+  var val = inp.value.trim();
+  if(!val){ box.classList.remove('open'); return; }
+  var q = val.toLowerCase();
+  var hits = Object.keys(CITY_DATA).filter(function(c){ return c.toLowerCase().indexOf(q)!==-1; }).slice(0,8);
+  if(!hits.length){ box.classList.remove('open'); return; }
+  box.innerHTML = hits.map(function(city){
+    var d = CITY_DATA[city];
+    return '<div class="ac-item" data-city="'+city.replace(/"/g,'&quot;')+'"><span>'+city+'</span><span class="ac-sub">'+d.pays+' · '+d.iata+'</span></div>';
+  }).join('');
+  box.classList.add('open');
+  box.querySelectorAll('.ac-item').forEach(function(item){
+    item.addEventListener('click', function(){
+      var city = this.getAttribute('data-city'); var d = CITY_DATA[city];
+      inp.value = city;
+      var cEl = document.getElementById(codeId);
+      if(cEl && d && d.iata && d.iata!=='—') cEl.value = d.iata;
+      box.classList.remove('open');
+      if(typeof _mobUpdateSegRoutes==='function') _mobUpdateSegRoutes();
+    });
+  });
+  if(typeof _mobUpdateSegRoutes==='function') _mobUpdateSegRoutes();
 }
 
 // ── Prévisualisation route ──
@@ -5969,6 +6241,7 @@ function updateMobPreview(){
   } else {
     prev.classList.remove('visible');
   }
+  if(typeof _mobUpdateSegRoutes==='function') _mobUpdateSegRoutes();
 }
 
 // ── Lire les champs du groupe actif ──
@@ -6061,66 +6334,35 @@ function renderMobilite(){
       ?(m.codeDep||m.dep||'—')+' → '+(m.codeArr||m.arr||'—')
       :(m.dep||'—')+' → '+(m.arr||'—');
 
-    // Escales
-    var escalesHtml='';
-    if(m.type==='vol'&&m.escales&&m.escales.length){
-      escalesHtml='<div class="mob-escales-inline">'
-        +m.escales.map(function(e){
-          return '<span class="mob-escale-tag">'+e.aeroport+(e.duree?' ('+e.duree+')':'')+'</span>';
-        }).join('')
-      +'</div>';
-    }
-
-    // ── Contenu body : 1 ou 2 segments ──
+    // ── Contenu body : chaîne complète (N+1 segments) ou vol simple ──
+    var escVol = _isEscaleVol(m);
     var bodyHtml='';
-    if(m.type==='vol'&&m.segment2){
-      // Route seg1
-      var r1dep=(m.codeDep||m.dep||'—');
-      var r1arr=(m.segment2.codeDep||m.segment2.dep||'—');
-      var r2dep=r1arr;
-      var r2arr=(m.segment2.codeArr||m.segment2.arr||'—');
-      // Détails seg1
-      var d1=[];
-      if(m.compagnie)d1.push(m.compagnie);
-      if(m.numero)d1.push(m.numero);
-      if(m.siege)d1.push('Siège '+m.siege);
-      // Détails seg2
-      var d2=[];
-      if(m.segment2.compagnie)d2.push(m.segment2.compagnie);
-      if(m.segment2.numero)d2.push(m.segment2.numero);
-      if(m.segment2.siege)d2.push('Siège '+m.segment2.siege);
-
-      bodyHtml='<div class="mob-segments">'
-        // Segment 1
-        +'<div class="mob-seg">'
-          +'<span class="mob-seg-num">SEG 1</span>'
-          +'<span class="mob-seg-route">'+r1dep+' → '+r1arr+'</span>'
-          +(m.heureDep?'<span class="mob-seg-times">'+m.heureDep+(m.heureArr?' → '+m.heureArr:'')+'</span>':'')
-        +'</div>'
-        +(d1.length?'<div style="font-size:11px;color:var(--ink-hint);padding:0 0 3px 28px">'+d1.join(' · ')+'</div>':'')
-        // Connecteur escale
-        +'<div class="mob-layover-row">'
-          +'<div class="mob-layover-dot"></div>'
-          +'Escale '+(m.segment2.dep||r1arr)+(m.segment2.dureeEscale?' — '+m.segment2.dureeEscale:'')
-        +'</div>'
-        // Segment 2
-        +'<div class="mob-seg">'
-          +'<span class="mob-seg-num">SEG 2</span>'
-          +'<span class="mob-seg-route">'+r2dep+' → '+r2arr+'</span>'
-          +(m.segment2.heureDep?'<span class="mob-seg-times">'+m.segment2.heureDep+(m.segment2.heureArr?' → '+m.segment2.heureArr:'')+'</span>':'')
-        +'</div>'
-        +(d2.length?'<div style="font-size:11px;color:var(--ink-hint);padding:0 0 2px 28px">'+d2.join(' · ')+'</div>':'')
-      +'</div>'
-      +'<div class="mob-meta" style="margin-top:5px">'
-        +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+(statutOk?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ':'')+m.statut+'</span>'
-        +(m.note?'<span class="mob-tag">'+m.note+'</span>':'')
-        +passCoverHtml
-      +'</div>';
+    if(escVol){
+      var ch=_volChain(m);
+      var segHtml='';
+      for(var si=0; si<ch.segments.length; si++){
+        var sg=ch.segments[si];
+        var dts=[]; if(sg.compagnie)dts.push(sg.compagnie); if(sg.numero)dts.push(sg.numero); if(sg.siege)dts.push('Siège '+sg.siege);
+        var times=(sg.heureDep||sg.heureArr)?'<span class="mob-seg-times">'+(sg.heureDep||'—')+(sg.heureArr?' → '+sg.heureArr:'')+'</span>':'';
+        segHtml+='<div class="mob-seg"><span class="mob-seg-num">SEG '+(si+1)+'</span>'
+          +'<span class="mob-seg-route">'+sg.fromLabel+' → '+sg.toLabel+'</span>'+times+'</div>'
+          +(dts.length?'<div style="font-size:11px;color:var(--ink-hint);padding:0 0 3px 28px">'+dts.join(' · ')+'</div>':'');
+        if(si < ch.n){
+          var e=ch.escales[si];
+          var escLbl=(e.aeroport||ch.airports[si+1].name||ch.airports[si+1].code||'');
+          segHtml+='<div class="mob-layover-row"><div class="mob-layover-dot"></div>Escale '+escLbl+(e.dureeEscale?' — '+e.dureeEscale:'')+'</div>';
+        }
+      }
+      bodyHtml='<div class="mob-segments">'+segHtml+'</div>'
+        +'<div class="mob-meta" style="margin-top:5px">'
+          +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+(statutOk?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ':'')+m.statut+'</span>'
+          +(m.note?'<span class="mob-tag">'+m.note+'</span>':'')
+          +passCoverHtml
+        +'</div>';
     } else {
-      // Vol simple ou autre transport
+      // Vol direct ou autre transport
       bodyHtml='<div class="mob-route">'+routeLabel+'</div>'
         +(details.length?'<div class="mob-detail">'+details.join(' · ')+'</div>':'')
-        +escalesHtml
         +'<div class="mob-meta">'
           +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+(statutOk?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ':'')+m.statut+'</span>'
           +(m.note?'<span class="mob-tag">'+m.note+'</span>':'')
@@ -6128,10 +6370,10 @@ function renderMobilite(){
         +'</div>';
     }
 
-    return '<div class="mob-item item-wrap emobilite'+((m.type==='vol'&&m.segment2)?' has-seg2':'')+'" onclick="_cardDetailClick(event,\'transport\',\''+m.id+'\')">'
+    return '<div class="mob-item item-wrap emobilite'+(escVol?' has-seg2':'')+'" data-detail-cat="transport" data-detail-id="'+m.id+'">'
       +'<div class="mob-icon '+m.type+'" style="background:'+color+'18;border-color:'+color+'44;color:'+color+'" title="Transport">'+icon+'</div>'
       +'<div class="mob-body">'+bodyHtml+'</div>'
-      +(m.type!=='vol'||!m.segment2
+      +(!escVol
         ?'<div class="mob-right">'
           +(m.heureDep?'<div class="mob-time">'+m.heureDep+(m.heureArr?' → '+m.heureArr:'')+'</div>':'')
           +(m.date?'<div class="mob-date">'+m.date+'</div>':'')
@@ -6142,7 +6384,7 @@ function renderMobilite(){
           +(m.duree?'<div class="mob-duree"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="11" height="11"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> '+m.duree+'</div>':'')
         +'</div>'
       )
-      +'<button class="edit-item-btn" onclick="event.stopPropagation();editMobilite(\''+m.id+'\')"></button>'
+      +'<button class="edit-item-btn" data-act="editMobilite" data-id="'+m.id+'"></button>'
     +'</div>';
   }).join('');
 }
@@ -6150,6 +6392,9 @@ function renderMobilite(){
 // ── Ajouter un trajet — lit les champs du groupe actif ──
 function addMobilite(){
   var type=(document.getElementById('mob-type')||{}).value||'vol';
+
+  // ── Mode ÉDITION (vol via formulaire unifié) : mise à jour, pas d'ajout ──
+  if(_mobEditId && type==='vol'){ _saveMobiliteVolFromForm(_mobEditId); return; }
 
   // ── Cas spécial : Pass ─────────────────────────────────────
   if(type==='pass'){
@@ -6218,30 +6463,10 @@ function addMobilite(){
     m.porte  =_v('mob-porte');
     m.resa   =_v('mob-resa-vol');
     m.bagages=_v('mob-bagages');
-    // Segment 2 (escale riche)
-    var escChk=document.getElementById('mob-escale-check');
-    if(escChk&&escChk.checked){
-      var s2dep =(document.getElementById('mob-esc-dep')||{}).value||'';
-      var s2arr =(document.getElementById('mob-esc-arr')||{}).value||'';
-      if(s2dep||s2arr){
-        m.segment2={
-          dep        :s2dep,
-          arr        :s2arr,
-          codeDep    :(document.getElementById('mob-esc-code-dep')||{}).value||'',
-          codeArr    :(document.getElementById('mob-esc-code-arr')||{}).value||'',
-          heureDep   :(document.getElementById('mob-esc-heure-dep')||{}).value||'',
-          heureArr   :(document.getElementById('mob-esc-heure-arr')||{}).value||'',
-          dureeVol   :(document.getElementById('mob-esc-duree-vol')||{}).value||'',
-          compagnie  :(document.getElementById('mob-esc-compagnie')||{}).value||'',
-          numero     :(document.getElementById('mob-esc-numero')||{}).value||'',
-          siege      :(document.getElementById('mob-esc-siege')||{}).value||'',
-          resa       :(document.getElementById('mob-esc-resa')||{}).value||'',
-          bagages    :(document.getElementById('mob-esc-bagages')||{}).value||'',
-          dureeEscale:(document.getElementById('mob-esc-duree')||{}).value||''
-        };
-      }
-    }
-    m.escales=m.segment2?[{aeroport:m.segment2.dep||'',duree:m.segment2.dureeEscale}]:[];
+    // Escales dynamiques → m.escales[] (ou [] si direct). Écrase les infos
+    // racine par celles de SEG.1 en mode escale.
+    _readVolEscalesInto(m);
+    _freezeVolRootGps(m); // gel coords origine/destination depuis codes IATA
   } else if(type==='train'){
     m.siege  =_v('mob-siege');
     m.voiture=_v('mob-voiture');
@@ -6257,21 +6482,15 @@ function addMobilite(){
   // Reset champs du groupe actif
   if(group){
     group.querySelectorAll('input[type=text],input[type=time]').forEach(function(inp){ inp.value=''; });
-    var dispEls=group.querySelectorAll('[id="mob-duree-display"]');
-    if(dispEls.length)dispEls[0].textContent='—';
   }
   ['mob-note','mob-pdf'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
   var badge=document.getElementById('mob-pdf-badge');if(badge)badge.innerHTML='';
   var prev=document.getElementById('mob-route-preview');if(prev)prev.classList.remove('visible');
-  _mobEscales=[];
+  // Auto-reset escales : décocher + compteur=1 + toggleMobEscales (vide blocs,
+  // restaure titre/labels/#mob-direct-details).
+  _mobEscCount=1;
   var eChk=document.getElementById('mob-escale-check');if(eChk)eChk.checked=false;
-  var eWrap=document.getElementById('mob-escales-wrap');if(eWrap)eWrap.style.display='none';
-  // Reset segment 2
-  ['mob-esc-dep','mob-esc-arr','mob-esc-code-dep','mob-esc-code-arr',
-   'mob-esc-heure-dep','mob-esc-heure-arr','mob-esc-compagnie','mob-esc-numero',
-   'mob-esc-siege','mob-esc-resa','mob-esc-bagages','mob-esc-duree','mob-esc-duree-vol'
-  ].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
-  var escDisp=document.getElementById('mob-esc-duree-display');if(escDisp)escDisp.textContent='—';
+  if(typeof toggleMobEscales==='function') toggleMobEscales();
 
   toggleForm('form-mobilite');
   _resetTransportForm();
@@ -6280,9 +6499,105 @@ function addMobilite(){
   showToast(MOB_LABELS[m.type]+' ajouté', 'success');
 }
 
+// ══════════════════════════════════════════════════════════════════
+// ÉDITION VOL UNIFIÉE — réutilise le formulaire de création (form-mobilite)
+// avec ses blocs escale dynamiques. Le bouton devient « Enregistrer » et la
+// soumission cible l'id du vol édité (_mobEditId) au lieu d'un nouvel ajout.
+// ══════════════════════════════════════════════════════════════════
+function _editVolUnified(m){
+  openMobiliteAs('vol'); // ouvre + reset le formulaire (peut effacer _mobEditId)
+  setTimeout(function(){
+    _mobEditId = m.id; // posé APRÈS l'ouverture/reset, sinon écrasé
+    function set(id,v){ var e=document.getElementById(id); if(e) e.value = (v==null?'':v); }
+    var hid=document.getElementById('mob-type'); if(hid) hid.value='vol';
+    // Bloc global
+    set('mob-dep', m.dep); set('mob-code-dep', m.codeDep);
+    set('mob-arr', m.arr); set('mob-code-arr', m.codeArr);
+    set('mob-heure-dep', m.heureDep); set('mob-heure-arr', m.heureArr);
+    set('mob-duree', m.duree); set('mob-date', m.date); set('mob-note', m.note);
+    var st=document.getElementById('mob-statut'); if(st) st.value=m.statut||'Confirmé';
+    // Infos vol direct (racine = SEG.1)
+    set('mob-compagnie', m.compagnie); set('mob-numero', m.numero);
+    set('mob-siege', m.siege); set('mob-terminal', m.terminal);
+    set('mob-porte', m.porte); set('mob-resa-vol', m.resa); set('mob-bagages', m.bagages);
+    // Pièce jointe (billet)
+    set('mob-pdf', m.pdfId);
+    _mobRenderPdfBadge(m.pdfId);
+    // Escales : coche la case + rend + remplit les blocs (ou reste direct)
+    _fillVolEscalesForm(m);
+    // Bouton + titre en mode édition
+    var btn=document.getElementById('mob-submit-btn'); if(btn) btn.textContent='Enregistrer';
+    var ttl=document.getElementById('mob-form-title'); if(ttl) ttl.textContent='Modifier le vol';
+    var prev=document.getElementById('mob-route-preview'); if(prev){ updateMobPreview(); }
+  }, 110);
+}
+
+// Rendu du badge PDF (billet) dans le formulaire de création — vue + retrait.
+function _mobRenderPdfBadge(pdfId){
+  var bEl=document.getElementById('mob-pdf-badge'); if(!bEl) return;
+  bEl.innerHTML='';
+  if(pdfId && window.pdfStore && window.pdfStore[pdfId]){
+    var name=(window.pdfStore[pdfId].name||'Document');
+    bEl.innerHTML=
+      '<button type="button" class="pdf-view-btn" onclick="openPdf(\''+pdfId+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> '+name+'</button>'
+      +'<button type="button" class="pdf-del-btn" onclick="_mobClearPdf()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>';
+  }
+}
+function _mobClearPdf(){
+  var h=document.getElementById('mob-pdf'); if(h) h.value='';
+  var b=document.getElementById('mob-pdf-badge'); if(b) b.innerHTML='';
+}
+
+// Sortie du mode édition : réinitialise l'état + le libellé du bouton/titre.
+function _mobCancelEdit(){
+  _mobEditId = null;
+  var btn=document.getElementById('mob-submit-btn'); if(btn) btn.textContent='+ Ajouter';
+  var ttl=document.getElementById('mob-form-title'); if(ttl) ttl.textContent='Ajouter un trajet';
+}
+
+// Fermeture du formulaire trajet (Annuler) : AUTO-RESET complet — vide tous
+// les champs, les blocs escale dynamiques et l'état d'édition, puis ferme.
+function _mobCloseForm(){
+  if(typeof window._resetFormMobilite==='function') window._resetFormMobilite();
+  if(typeof _resetTransportForm==='function') _resetTransportForm();
+  toggleForm('form-mobilite');
+}
+
+// Enregistrement d'un vol édité (via le formulaire unifié) → met à jour
+// l'objet existant (même id), sans créer de doublon.
+function _saveMobiliteVolFromForm(id){
+  var m=mobilites.find(function(x){return x.id==id;});
+  if(!m){ _mobCancelEdit(); return; }
+  var groupId=MOB_GROUPS['vol']||'mob-group-vol';
+  var group=document.getElementById(groupId);
+  var _v=function(fid){return _getMobGroupVal(group,fid);};
+  m.type='vol';
+  m.dep=_v('mob-dep').trim(); m.arr=_v('mob-arr').trim();
+  m.codeDep=_v('mob-code-dep'); m.codeArr=_v('mob-code-arr');
+  m.statut=(document.getElementById('mob-statut')||{}).value||m.statut||'Confirmé';
+  m.date=_v('mob-date'); m.heureDep=_v('mob-heure-dep'); m.heureArr=_v('mob-heure-arr');
+  m.duree=_v('mob-duree'); m.note=(document.getElementById('mob-note')||{}).value||'';
+  m.compagnie=_v('mob-compagnie'); m.numero=_v('mob-numero');
+  m.siege=_v('mob-siege'); m.terminal=_v('mob-terminal'); m.porte=_v('mob-porte');
+  m.resa=_v('mob-resa-vol'); m.bagages=_v('mob-bagages');
+  m.pdfId=(document.getElementById('mob-pdf')||{}).value||'';
+  _readVolEscalesInto(m); // escales[] + écrase infos racine par SEG.1 si escale
+  _freezeVolRootGps(m);   // gel coords origine/destination depuis codes IATA
+  _mobCancelEdit();
+  toggleForm('form-mobilite');
+  _resetTransportForm();
+  if(typeof window._resetFormMobilite==='function') window._resetFormMobilite();
+  renderMobilite();
+  snapshotCurrentTrip();
+  showToast('Vol modifié','success');
+}
+
 // ── Édition modale enrichie ──
 function editMobilite(id){id=isNaN(+id)?id:+id;
   var m=mobilites.find(function(x){return x.id==id;});if(!m)return;
+  // Les VOLS s'éditent via le formulaire de création unifié (mêmes blocs
+  // escale dynamiques) — l'ancienne modale em-* ne gère qu'un segment unique.
+  if(m.type==='vol'){ _editVolUnified(m); return; }
   var icon=MOB_ICONS[m.type]||'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>';
   var typeLabel=MOB_LABELS[m.type]||'Trajet';
 
@@ -6299,45 +6614,8 @@ function editMobilite(id){id=isNaN(+id)?id:+id;
         +modalField('Date fin',  mInput('em-pass-fin',  m.fin  ||'','JJ/MM/AAAA'))
         +modalField('Prix (€)',  mInput('em-pass-prix', m.prix ||'','ex: 350','max-width:90px'))
       +'</div>';
-  } else if(m.type==='vol'){
-    var s2=m.segment2||{};
-    specificFields=
-      '<div class="modal-row">'
-        +modalField('Code départ',mInput('em-code-dep',m.codeDep||'','CDG'))
-        +modalField('Code arrivée',mInput('em-code-arr',m.codeArr||'','NRT'))
-        +modalField('N° résa.',mInput('em-resa',m.resa||'','PNR'))
-      +'</div>'
-      +'<div class="modal-row">'
-        +modalField('Siège',mInput('em-siege',m.siege||'','24A'))
-        +modalField('Terminal',mInput('em-terminal',m.terminal||'','T2E'))
-        +modalField('Porte',mInput('em-porte',m.porte||'','K42'))
-        +modalField('Bagages',mInput('em-bagages',m.bagages||'','23kg'))
-      +'</div>'
-      // Segment 2
-      +(s2.dep||s2.arr
-        ?'<div class="modal-section">Segment 2 — via '+(s2.codeDep||s2.dep||'escale')+'</div>'
-        +'<div class="modal-row">'
-          +modalField('Départ escale',mInput('em-s2-dep',s2.dep||'','Aéroport escale'))
-          +modalField('Code',mInput('em-s2-code-dep',s2.codeDep||'','ICN','max-width:64px'))
-          +modalField('Arrivée finale',mInput('em-s2-arr',s2.arr||'','Destination'))
-          +modalField('Code',mInput('em-s2-code-arr',s2.codeArr||'','NRT','max-width:64px'))
-        +'</div>'
-        +'<div class="modal-row">'
-          +modalField('H. départ vol 2',mInput('em-s2-hdep',s2.heureDep||'','09:00'))
-          +modalField('H. arrivée vol 2',mInput('em-s2-harr',s2.heureArr||'','11:10'))
-          +modalField('Durée escale',mInput('em-s2-esc-duree',s2.dureeEscale||'','2h30'))
-        +'</div>'
-        +'<div class="modal-row">'
-          +modalField('Compagnie vol 2',mInput('em-s2-comp',s2.compagnie||'',''))
-          +modalField('N° vol 2',mInput('em-s2-num',s2.numero||'',''))
-          +modalField('Siège vol 2',mInput('em-s2-siege',s2.siege||'',''))
-        +'</div>'
-        +'<div class="modal-row">'
-          +modalField('N° résa. vol 2',mInput('em-s2-resa',s2.resa||'','si différent'))
-          +modalField('Bagages vol 2',mInput('em-s2-bagages',s2.bagages||'',''))
-        +'</div>'
-        :''
-      );
+  // (vol : édité via le formulaire unifié _editVolUnified — editMobilite retourne
+  //  avant ce point pour type==='vol', donc aucune branche vol ici.)
   } else if(m.type==='train'){
     specificFields=
       '<div class="modal-row">'
@@ -6370,8 +6648,8 @@ function editMobilite(id){id=isNaN(+id)?id:+id;
     +'</div>'
     +'<div class="modal-row">'
       +modalField('Date',mInput('em-date',m.date,'JJ/MM/AAAA'))
-      +modalField('H. départ',mInput('em-hdep',m.heureDep,'09:00'))
-      +modalField('H. arrivée',mInput('em-harr',m.heureArr,'12:30'))
+      +modalField('H. départ','<input type="time" id="em-hdep" value="'+(m.heureDep||'')+'" style="padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none;width:100%"/>')
+      +modalField('H. arrivée','<input type="time" id="em-harr" value="'+(m.heureArr||'')+'" style="padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none;width:100%"/>')
     +'</div>'
     +'<div class="modal-row">'
       +modalField('Compagnie / Opérateur',mInput('em-comp',m.compagnie,''))
@@ -6383,7 +6661,7 @@ function editMobilite(id){id=isNaN(+id)?id:+id;
       +modalField('Note',mInput('em-note',m.note||'',''))
     +'</div>'
     +mPdfBlock('em-pdf', m.pdfId||'')
-    +modalFooter('saveMobilite(\''+id+'\')','deleteMobilite(\''+id+'\')')
+    +modalFooter('saveMobilite(\''+id+'\')','deleteMobilite(\''+id+'\')',{type:'le transport',libelle:(typeof MOB_LABELS!=='undefined'&&MOB_LABELS[m.type])||m.titre||m.type||'',hasDoc:!!m.pdfId,fn:'deleteMobilite',id:id})
   );
 }
 
@@ -6403,31 +6681,9 @@ function saveMobilite(id){id=isNaN(+id)?id:+id;
   m.note     =_gv('em-note');
   // Type-specific — champs strictement typés pour éviter la contamination croisée
   if(m.type==='vol'){
-    m.codeDep =_gv('em-code-dep');
-    m.codeArr =_gv('em-code-arr');
-    m.resa    =_gv('em-resa');
-    m.siege   =_gv('em-siege');
-    m.terminal=_gv('em-terminal');
-    m.porte   =_gv('em-porte');
-    m.bagages =_gv('em-bagages');
-    // Segment 2 uniquement pour les vols
-    if(m.segment2&&document.getElementById('em-s2-dep')){
-      m.segment2=JSON.parse(JSON.stringify(m.segment2));
-      m.segment2.dep        =_gv('em-s2-dep');
-      m.segment2.codeDep    =_gv('em-s2-code-dep');
-      m.segment2.arr        =_gv('em-s2-arr');
-      m.segment2.codeArr    =_gv('em-s2-code-arr');
-      m.segment2.heureDep   =_gv('em-s2-hdep');
-      m.segment2.heureArr   =_gv('em-s2-harr');
-      m.segment2.dureeEscale=_gv('em-s2-esc-duree');
-      m.segment2.compagnie  =_gv('em-s2-comp');
-      m.segment2.numero     =_gv('em-s2-num');
-      m.segment2.siege      =_gv('em-s2-siege');
-      m.segment2.resa       =_gv('em-s2-resa');
-      m.segment2.bagages    =_gv('em-s2-bagages');
-    }
-    // Champs train/bateau absents pour les vols — nettoyage défensif
-    delete m.voiture; delete m.cabine; delete m.pont;
+    // Les vols sont édités via le formulaire unifié (_editVolUnified / _saveMobiliteVolFromForm) :
+    // editMobilite retourne avant d'ouvrir cette modale em-*, donc ce chemin n'est jamais atteint
+    // pour un vol. Garde no-op défensif (ne rien écraser, surtout pas m.escales).
   } else if(m.type==='train'){
     m.siege  =_gv('em-siege');
     m.voiture=_gv('em-voiture');
@@ -6453,14 +6709,13 @@ function saveMobilite(id){id=isNaN(+id)?id:+id;
     delete m.codeDep; delete m.codeArr; delete m.siege; delete m.voiture;
     delete m.segment2; delete m.escales; delete m.cabine; delete m.pont;
   }
-  // Recalc durée
-  if(m.heureDep&&m.heureArr&&typeof parseHM==='function'){
-    var dm=parseHM(m.heureDep),am=parseHM(m.heureArr);
-    if(dm!==null&&am!==null){var df=am-dm;if(df<=0)df+=1440;m.duree=typeof formatMinutes==='function'?formatMinutes(df):'';}
-  }
+  // La durée totale est SAISIE MANUELLE (décalage horaire) : jamais recalculée
+  // depuis les horaires. On conserve m.duree tel quel (ou édité via em-duree).
+  var emDuree=document.getElementById('em-duree');
+  if(emDuree) m.duree=emDuree.value;
   // PDF — accepte nouveau fichier OU conserve l'ancien
   var emPdf=document.getElementById('em-pdf');
-  if(emPdf&&emPdf.value) m.pdfId=emPdf.value;
+  if(emPdf) m.pdfId=emPdf.value;
   // Remplacement atomique dans le tableau — aucun lien de référence subsistant
   mobilites[idx]=m;
   closeModal();renderMobilite();snapshotCurrentTrip();
@@ -6526,7 +6781,7 @@ function renderLocations(){
   el.innerHTML=locations.map(function(l){
     var icon=LOC_ICONS[l.type]||'—';
     var lcolor=(typeof LOC_COLORS!=='undefined'&&LOC_COLORS[l.type])||'#7a8290';
-    return '<div class="loc-card item-wrap elocations" onclick="_cardDetailClick(event,\'location\',\''+l.id+'\')">'
+    return '<div class="loc-card item-wrap elocations" data-detail-cat="location" data-detail-id="'+l.id+'">'
       +'<div class="loc-card-header">'
         +'<div class="loc-icon" style="background:'+lcolor+'18;color:'+lcolor+'" title="Location">'+icon+'<span class="loc-key-badge"></span></div>'
         +'<div style="flex:1;min-width:0">'
@@ -6543,7 +6798,7 @@ function renderLocations(){
       +'</div>'
       +(l.caution?'<div class="loc-caution">Caution : '+l.caution+'</div>':'')
       +(l.note?'<div style="font-size:11px;color:var(--ink-muted);margin-top:6px">'+l.note+'</div>':'')
-      +'<button class="edit-item-btn" onclick="event.stopPropagation();editLocation(\''+l.id+'\')"></button>'
+      +'<button class="edit-item-btn" data-act="editLocation" data-id="'+l.id+'"></button>'
     +'</div>';
   }).join('');
 }
@@ -6606,7 +6861,7 @@ function editLocation(id){id=isNaN(+id)?id:+id;
       +modalField('Note',mInput('el2-note',l.note||'','assurance, plein…'))
     +'</div>'
     +mPdfBlock('el2-pdf', l.pdfId||'')
-    +modalFooter('saveLocation(\''+id+'\')','deleteLocation(\''+id+'\')')
+    +modalFooter('saveLocation(\''+id+'\')','deleteLocation(\''+id+'\')',{type:'la location',libelle:l.nom||(typeof LOC_LABELS!=='undefined'&&LOC_LABELS[l.type])||l.type||'',hasDoc:!!l.pdfId,fn:'deleteLocation',id:id})
   );
 }
 function saveLocation(id){id=isNaN(+id)?id:+id;
@@ -6623,7 +6878,7 @@ function saveLocation(id){id=isNaN(+id)?id:+id;
   l.caution=document.getElementById('el2-caution').value;
   l.note=document.getElementById('el2-note').value;
   var el2Pdf=document.getElementById('el2-pdf');
-  if(el2Pdf&&el2Pdf.value) l.pdfId=el2Pdf.value;
+  if(el2Pdf) l.pdfId=el2Pdf.value;
   closeModal();renderLocations();snapshotCurrentTrip();
 }
 function deleteLocation(id){id=isNaN(+id)?id:+id;
@@ -6761,12 +7016,12 @@ function renderHotels(){
       var locDisplay = h.ville + (h.pays ? '<span class="pays-tag">'+h.pays+'</span>' : '');
       adresseLine = '<div class="hotel-adresse-structured">'
         +'<span>'+(rueDisplay ? rueDisplay+', ' : '')+locDisplay+'</span>'
-        +'<button class="map-pin-link" onclick="event.stopPropagation();goToMapPin(\'hotel\',\''+h.id+'\')" title="Voir sur la carte" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0;margin-left:4px"><svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' width=\'13\' height=\'13\'><path d=\'M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z\'/><line x1=\'9\' y1=\'3\' x2=\'9\' y2=\'17\'/><line x1=\'15\' y1=\'6.5\' x2=\'15\' y2=\'20.5\'/></svg></button>'
+        +'<button class="map-pin-link" data-mappin-cat="hotel" data-mappin-id="'+h.id+'" title="Voir sur la carte" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0;margin-left:4px"><svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' width=\'13\' height=\'13\'><path d=\'M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z\'/><line x1=\'9\' y1=\'3\' x2=\'9\' y2=\'17\'/><line x1=\'15\' y1=\'6.5\' x2=\'15\' y2=\'20.5\'/></svg></button>'
         +'</div>';
     } else if(h.adresse){
       // Fallback legacy
       adresseLine = '<div class="hotel-adresse">'+h.adresse
-        +'<button class="map-pin-link" onclick="event.stopPropagation();goToMapPin(\'hotel\',\''+h.id+'\')" title="Voir sur la carte"><svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' width=\'13\' height=\'13\'><path d=\'M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z\'/><line x1=\'9\' y1=\'3\' x2=\'9\' y2=\'17\'/><line x1=\'15\' y1=\'6.5\' x2=\'15\' y2=\'20.5\'/></svg></button></div>';
+        +'<button class="map-pin-link" data-mappin-cat="hotel" data-mappin-id="'+h.id+'" title="Voir sur la carte"><svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' width=\'13\' height=\'13\'><path d=\'M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z\'/><line x1=\'9\' y1=\'3\' x2=\'9\' y2=\'17\'/><line x1=\'15\' y1=\'6.5\' x2=\'15\' y2=\'20.5\'/></svg></button></div>';
     }
     var _nh=_hotelNights(h);
     var _bits=[];
@@ -6779,11 +7034,11 @@ function renderHotels(){
     if(h.heureDep) _times.push('Départ '+_fmtHeure(h.heureDep));
     var _rem=_hotelDepReminder(h);
     var _luOut=(typeof _lu==='function')?_lu('log-out',13):'';
-    return '<div class="hotel-item item-wrap ehotel" style="border-left-color:'+c+'" onclick="_cardDetailClick(event,\'hotel\',\''+h.id+'\')">'
+    return '<div class="hotel-item item-wrap ehotel" style="border-left-color:'+c+'" data-detail-cat="hotel" data-detail-id="'+h.id+'">'
       +'<div class="hotel-main">'
         +'<div class="hotel-top">'
           +'<div class="hotel-name">'+h.nom+'</div>'
-          +'<button class="hotel-map-btn" onclick="event.stopPropagation();goToMapPin(\'hotel\',\''+h.id+'\')" title="Voir sur la carte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z"/><line x1="9" y1="3" x2="9" y2="17"/><line x1="15" y1="6.5" x2="15" y2="20.5"/></svg></button>'
+          +'<button class="hotel-map-btn" data-mappin-cat="hotel" data-mappin-id="'+h.id+'" title="Voir sur la carte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z"/><line x1="9" y1="3" x2="9" y2="17"/><line x1="15" y1="6.5" x2="15" y2="20.5"/></svg></button>'
         +'</div>'
         +(_rem?'<div class="hotel-reminder'+(_rem.urgent?' urgent':'')+'">'+_luOut+'<span>'+_rem.text+'</span></div>':'')
         +(_bits.length?'<div class="hotel-info">'+_bits.join(' · ')+'</div>':'')
@@ -6791,7 +7046,7 @@ function renderHotels(){
         +(h.note?'<div class="hotel-note">'+(h.note+'').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>':'')
         +(h.resa?'<div class="hotel-ref" style="color:'+c+'">Résa · <span class="copyable" data-copy="'+(h.resa+'').replace(/"/g,'&quot;')+'">'+h.resa+'</span></div>':'')
       +'</div>'
-      +'<button class="edit-item-btn" onclick="event.stopPropagation();editHotel(\''+h.id+'\')"></button>'
+      +'<button class="edit-item-btn" data-act="editHotel" data-id="'+h.id+'"></button>'
     +'</div>';
   }).join('');
   renderNightsSummary();
@@ -6842,7 +7097,7 @@ function editHotel(id){id=isNaN(+id)?id:+id;
       +'<div class="addr-result-badge" id="eh-addr-result"></div>'
     +'</div>'
     +mPdfBlock('eh-pdf', h.pdfId||'')
-    +modalFooter('saveHotel(\''+id+'\')','deleteHotel(\''+id+'\')')
+    +modalFooter('saveHotel(\''+id+'\')','deleteHotel(\''+id+'\')',{type:"l'hébergement",libelle:h.nom||'',hasDoc:!!h.pdfId,fn:'deleteHotel',id:id})
   );
 }
 function saveHotel(id){id=isNaN(+id)?id:+id;
@@ -6871,7 +7126,7 @@ function saveHotel(id){id=isNaN(+id)?id:+id;
   h.adresse=newFull; // compat legacy
   // PDF
   var ehPdf=document.getElementById('eh-pdf');
-  if(ehPdf&&ehPdf.value) h.pdfId=ehPdf.value;
+  if(ehPdf) h.pdfId=ehPdf.value;
   // Géocodage si nouvelle adresse sans coords
   if(h.fullAddress && (!h.lat || !h.lng)){
     fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(h.fullAddress),{headers:{'Accept-Language':'fr,en'}})
@@ -6955,6 +7210,7 @@ function setLieuxGroup(mode, btn){
 function _renderLieuCard(l){
   var card = document.createElement('div');
   card.className = 'place-card item-wrap elieu' + (l.visited ? ' visited' : '');
+  card.setAttribute('data-lieu-id', String(l.id));
 
   var horaires = '';
   if(l.ouverture || l.fermeture){
@@ -6963,10 +7219,10 @@ function _renderLieuCard(l){
       + (l.fermeture ? '<span class="lieu-horaire-chip">' + l.fermeture + '</span>' : '')
     + '</div>';
   }
-  var mapBtn = '<button class="map-pin-link" style="margin-left:5px;background:none;border:none;cursor:pointer;font-size:13px;padding:0" onclick="event.stopPropagation();goToMapPin(\'lieu\',\'' + l.id + '\')" title="Voir sur la carte"><svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' width=\'13\' height=\'13\'><path d=\'M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z\'/><line x1=\'9\' y1=\'3\' x2=\'9\' y2=\'17\'/><line x1=\'15\' y1=\'6.5\' x2=\'15\' y2=\'20.5\'/></svg></button>';
+  var mapBtn = '<button class="map-pin-link" style="margin-left:5px;background:none;border:none;cursor:pointer;font-size:13px;padding:0" data-mappin-cat="lieu" data-mappin-id="' + l.id + '" title="Voir sur la carte"><svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.8\' width=\'13\' height=\'13\'><path d=\'M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z\'/><line x1=\'9\' y1=\'3\' x2=\'9\' y2=\'17\'/><line x1=\'15\' y1=\'6.5\' x2=\'15\' y2=\'20.5\'/></svg></button>';
   var pdfHtml = '';
   if(l.pdfId && window.pdfStore && window.pdfStore[l.pdfId]){
-    pdfHtml = '<span class="pdf-badge" style="cursor:pointer;font-size:11px;margin-top:4px;display:inline-block" onclick="event.stopPropagation();openPdf(\'' + l.pdfId + '\')">' + window.pdfStore[l.pdfId].name + '</span>';
+    pdfHtml = '<span class="pdf-badge" style="cursor:pointer;font-size:11px;margin-top:4px;display:inline-block" data-act="openPdf" data-id="' + l.pdfId + '">' + window.pdfStore[l.pdfId].name + '</span>';
   }
   var locLine = l.ville + (l.pays ? ', <span style="color:var(--ink-hint)">' + l.pays + '</span>' : '');
   var adresseDetail = '';
@@ -6977,6 +7233,9 @@ function _renderLieuCard(l){
 
   card.innerHTML =
     '<div class="place-row">'
+      + '<span class="drag-handle" onclick="event.stopPropagation()">'
+      + '<svg viewBox="0 0 10 16" width="10" height="16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="2.5" r="1.2"/><circle cx="7" cy="2.5" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="7" cy="8" r="1.2"/><circle cx="3" cy="13.5" r="1.2"/><circle cx="7" cy="13.5" r="1.2"/></svg>'
+      + '</span>'
       + '<div class="place-chip" style="background:' + meta.tint + ';color:' + meta.color + '">' + meta.svg + '</div>'
       + '<div class="place-body">'
         + '<div class="place-head"><span class="place-name">' + l.nom + '</span>' + visBadge + '</div>'
@@ -6986,7 +7245,7 @@ function _renderLieuCard(l){
         + pdfHtml
       + '</div>'
     + '</div>'
-    + '<button class="edit-item-btn" onclick="event.stopPropagation();editLieu(\'' + l.id + '\')"></button>';
+    + '<button class="edit-item-btn" data-act="editLieu" data-id="' + l.id + '"></button>';
 
   card.onclick = function(e){
     if(emodes && emodes.lieux) return;
@@ -7011,6 +7270,7 @@ function renderLieux(){
   // ── Mode regroupé : par ville ou par catégorie ──
   if(_lieuxGroupMode !== 'none'){
     grid.innerHTML='';
+    grid.classList.add('is-grouped');
     if(!lieux.length){ empty.style.display='block'; grid.style.display='none'; return; }
     empty.style.display='none'; grid.style.display='';
 
@@ -7072,12 +7332,16 @@ function renderLieux(){
   }
 
   // ── Mode liste (filtre par ville/catégorie via les chips) ──
-  var filtered=currentFilter==='Tous'?lieux:lieux.filter(function(l){return l.ville===currentFilter||l.categorie===currentFilter;});
+  grid.classList.remove('is-grouped');
+  lieux.forEach(function(l, i){ if(typeof l.ordre !== 'number') l.ordre = i; });
+  var filtered=currentFilter==='Tous'?lieux.slice():lieux.filter(function(l){return l.ville===currentFilter||l.categorie===currentFilter;});
+  filtered.sort(function(a,b){ return (a.ordre||0)-(b.ordre||0); });
   grid.innerHTML='';
   if(!filtered.length){ empty.style.display='block'; grid.style.display='none'; return; }
   empty.style.display='none'; grid.style.display='';
   filtered.forEach(function(l){ grid.appendChild(_renderLieuCard(l)); });
   _updateLieuxFilters();
+  _initLieuxDrag(grid);
 }
 
 
@@ -7165,7 +7429,7 @@ function editLieu(id){id=isNaN(+id)?id:+id;
 +modalField('Note',mInput('el-note',l.note||'','Conseil, prix…'))
     +modalField('Jour de visite (optionnel)','<input type="date" id="el-jour" value="'+(l.jour||'')+'" style="width:100%"/>')
     +mPdfBlock('el-pdf', l.pdfId||'')
-    +modalFooter('saveLieu(\''+id+'\')','deleteLieu(\''+id+'\')')
+    +modalFooter('saveLieu(\''+id+'\')','deleteLieu(\''+id+'\')',{type:'le lieu',libelle:l.nom||'',hasDoc:!!l.pdfId,fn:'deleteLieu',id:id})
   );
   setTimeout(function(){
     var ouvEl=document.getElementById('el-ouv');
@@ -7190,7 +7454,7 @@ function saveLieu(id){id=isNaN(+id)?id:+id;
   var cat  =document.getElementById('el-categorie'); if(cat) l.categorie=cat.value.trim();
   // PDF
   var elPdf=document.getElementById('el-pdf');
-  if(elPdf&&elPdf.value) l.pdfId=elPdf.value;
+  if(elPdf) l.pdfId=elPdf.value;
   if(l.ville) l.ville=_normalizeLieuVille(l.ville);
   var newFull = buildFullAddress(l.rue||'', l.cp||'', l.ville||'', l.pays||'');
   l.fullAddress = newFull;
@@ -7224,6 +7488,7 @@ function addLieu(){
     rue:addr.rue, cp:addr.cp, pays:addr.pays,
     fullAddress:fullAddress, adresse:fullAddress,
     ouverture:ouv, fermeture:fer, note:note, jour:jour, pdfId:pdfId,
+    ordre: lieux.length,
     lat:parseFloat((document.getElementById('lieu-adresse-lat')||{}).value)||null,
     lng:parseFloat((document.getElementById('lieu-adresse-lng')||{}).value)||null
   });
@@ -7242,6 +7507,122 @@ function addLieu(){
 function deleteLieu(id){id=isNaN(+id)?id:+id;
   lieux=lieux.filter(function(l){return l.id!=id;});
   closeModal();renderLieux();snapshotCurrentTrip();
+}
+
+function _initLieuxDrag(grid){
+  var handles = grid.querySelectorAll('.drag-handle');
+  if(!handles.length) return;
+
+  var _dragId   = null;
+  var _ghost    = null;
+  var _dragEl   = null;
+  var _insertIdx = -1;
+  var _offsetY  = 0;
+
+  var _line = document.createElement('div');
+  _line.className = 'drag-insert-line';
+  grid.appendChild(_line);
+
+  function _getSorted(){
+    var f = (currentFilter === 'Tous')
+      ? lieux.slice()
+      : lieux.filter(function(l){ return l.ville===currentFilter||l.categorie===currentFilter; });
+    f.sort(function(a,b){ return (a.ordre||0)-(b.ordre||0); });
+    return f;
+  }
+
+  function _startDrag(e){
+    e.preventDefault();
+    e.stopPropagation();
+    var handle = this;
+    var card = handle.parentNode;
+    while(card && !card.classList.contains('place-card')) card = card.parentNode;
+    if(!card) return;
+    var touch = (e.touches && e.touches[0]) || e;
+    var rect = card.getBoundingClientRect();
+    _dragEl = card;
+    _dragId = card.getAttribute('data-lieu-id');
+    _offsetY = touch.clientY - rect.top;
+    _ghost = card.cloneNode(true);
+    _ghost.style.cssText = 'position:fixed;left:'+rect.left+'px;width:'+rect.width+'px;top:'+rect.top+'px;z-index:9000;pointer-events:none;opacity:.88;box-shadow:0 8px 24px rgba(0,0,0,.18);border-radius:14px';
+    document.body.appendChild(_ghost);
+    card.style.opacity = '0.25';
+    document.body.style.userSelect = 'none';
+    document.body.style.webkitUserSelect = 'none';
+    document.addEventListener('mousemove', _onMove);
+    document.addEventListener('mouseup', _endDrag);
+    document.addEventListener('touchmove', _onMove, {passive:false});
+    document.addEventListener('touchend', _endDrag);
+  }
+
+  function _onMove(e){
+    if(!_ghost) return;
+    e.preventDefault();
+    var touch = (e.touches && e.touches[0]) || e;
+    var y = touch.clientY;
+    _ghost.style.top = (y - _offsetY) + 'px';
+    var cards = grid.querySelectorAll('.place-card');
+    var newIdx = cards.length;
+    for(var i = 0; i < cards.length; i++){
+      if(cards[i] === _dragEl) continue;
+      var cr = cards[i].getBoundingClientRect();
+      if(y < cr.top + cr.height / 2){ newIdx = i; break; }
+    }
+    _insertIdx = newIdx;
+    var gridRect = grid.getBoundingClientRect();
+    if(newIdx < cards.length && cards[newIdx] !== _dragEl){
+      var t = cards[newIdx].getBoundingClientRect().top - gridRect.top - 5;
+      _line.style.cssText = 'display:block;top:'+Math.max(0,t)+'px';
+    } else {
+      var last = null;
+      for(var j = cards.length-1; j >= 0; j--){ if(cards[j] !== _dragEl){ last = cards[j]; break; } }
+      if(last){ _line.style.cssText = 'display:block;top:'+(last.getBoundingClientRect().bottom-gridRect.top+5)+'px'; }
+    }
+  }
+
+  function _endDrag(){
+    document.removeEventListener('mousemove', _onMove);
+    document.removeEventListener('mouseup', _endDrag);
+    document.removeEventListener('touchmove', _onMove);
+    document.removeEventListener('touchend', _endDrag);
+    if(_ghost){ document.body.removeChild(_ghost); _ghost = null; }
+    if(_dragEl){ _dragEl.style.opacity = ''; _dragEl = null; }
+    _line.style.display = 'none';
+    document.body.style.userSelect = '';
+    document.body.style.webkitUserSelect = '';
+    if(!_dragId || _insertIdx === -1){ _dragId=null; _insertIdx=-1; return; }
+    var sorted = _getSorted();
+    var dragIdx = -1;
+    for(var i = 0; i < sorted.length; i++){
+      if(String(sorted[i].id) === String(_dragId)){ dragIdx = i; break; }
+    }
+    if(dragIdx === -1 || _insertIdx === dragIdx || _insertIdx === dragIdx+1){
+      _dragId=null; _insertIdx=-1; return;
+    }
+    var moved = sorted.splice(dragIdx, 1)[0];
+    var at = (_insertIdx > dragIdx) ? _insertIdx-1 : _insertIdx;
+    sorted.splice(at, 0, moved);
+    if(currentFilter === 'Tous'){
+      for(var i = 0; i < sorted.length; i++) sorted[i].ordre = i;
+    } else {
+      var allSorted = lieux.slice().sort(function(a,b){ return (a.ordre||0)-(b.ordre||0); });
+      var filtSet = {};
+      for(var i = 0; i < sorted.length; i++) filtSet[sorted[i].id] = true;
+      var positions = [];
+      for(var i = 0; i < allSorted.length; i++){ if(filtSet[allSorted[i].id]) positions.push(i); }
+      for(var i = 0; i < positions.length; i++) allSorted[positions[i]] = sorted[i];
+      for(var i = 0; i < allSorted.length; i++) allSorted[i].ordre = i;
+    }
+    _dragId=null; _insertIdx=-1;
+    snapshotCurrentTrip();
+    renderLieux();
+  }
+
+  var hs = grid.querySelectorAll('.drag-handle');
+  for(var i = 0; i < hs.length; i++){
+    hs[i].addEventListener('mousedown', _startDrag);
+    hs[i].addEventListener('touchstart', _startDrag, {passive:false});
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -7580,10 +7961,13 @@ function addTransaction(){
   if(!desc || isNaN(raw) || raw <= 0) return;
 
   var amountEur = (devise === 'EUR') ? raw : localToEur(raw, devise);
+  var pdfId = (document.getElementById('tx-pdf')||{}).value||'';
 
-  transactions.push({id:uid(), desc:desc, raw:raw, devise:devise, amount:amountEur, cat:cat, date:date});
+  transactions.push({id:uid(), desc:desc, raw:raw, devise:devise, amount:amountEur, cat:cat, date:date, pdfId:pdfId});
   document.getElementById('tx-desc').value   = '';
   document.getElementById('tx-amount').value = '';
+  var _txPdf = document.getElementById('tx-pdf'); if(_txPdf) _txPdf.value = '';
+  var _txPdfBadge = document.getElementById('tx-pdf-badge'); if(_txPdfBadge) _txPdfBadge.innerHTML = '';
   // Remettre la devise par défaut du voyage (pas forcer EUR, mais le choix du voyage)
   _buildTxDeviseSelect();
 
@@ -7601,7 +7985,429 @@ function addTransaction(){
 }
 
 function deleteTransaction(id){
-  transactions=transactions.filter(function(t){return t.id!=id;});updateBudget();
+  transactions=transactions.filter(function(t){return t.id!=id;});
+  closeModal();updateBudget();snapshotCurrentTrip();
+}
+
+function editTransaction(id){
+  var t=transactions.find(function(x){return x.id==id;});if(!t)return;
+  // Mêmes devises que le formulaire de création, déjà construit pour le voyage actif
+  var deviseOptionsHtml = (document.getElementById('tx-devise')||{}).innerHTML || '<option value="EUR">€ Euro</option>';
+  var catOptions = ['🍱 Repas','🚉 Transport','🏯 Hébergement','🎌 Activités','🛍 Shopping','💊 Santé','📱 Divers'];
+  openModal(
+    '<div class="modal-header"><div class="modal-title">Modifier cette transaction</div><button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
+    +'<div class="modal-row">'
+      +modalField('Description',mInput('etx-desc',t.desc,'Ramen Ichiran','width:100%'))
+    +'</div>'
+    +'<div class="modal-row">'
+      +modalField('Montant',mInput('etx-amount',t.raw,'ex: 12.50','max-width:120px'))
+      +'<div class="modal-field"><label>Devise</label><select id="etx-devise" style="flex:1;min-width:0;padding:9px 12px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none">'+deviseOptionsHtml+'</select></div>'
+    +'</div>'
+    +'<div class="modal-row">'
+      +'<div class="modal-field"><label>Catégorie</label><select id="etx-cat" style="flex:1;min-width:0;padding:9px 12px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none">'
+        +catOptions.map(function(o){return '<option'+(o===t.cat?' selected':'')+'>'+o+'</option>';}).join('')
+      +'</select></div>'
+      +modalField('Date','<input type="date" id="etx-date" value="'+(t.date||'')+'" style="padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none;width:100%"/>')
+    +'</div>'
+    +mPdfBlock('etx-pdf', t.pdfId||'')
+    +modalFooter('saveTransaction(\''+id+'\')','deleteTransaction(\''+id+'\')',{type:'la dépense',libelle:t.desc||'',hasDoc:!!t.pdfId,fn:'deleteTransaction',id:id})
+  );
+  var devSel=document.getElementById('etx-devise'); if(devSel) devSel.value=t.devise;
+}
+
+function saveTransaction(id){
+  var t=transactions.find(function(x){return x.id==id;});if(!t)return;
+  var desc = (document.getElementById('etx-desc')||{}).value||'';
+  var raw  = parseFloat((document.getElementById('etx-amount')||{}).value);
+  if(!desc.trim() || isNaN(raw) || raw<=0) return;
+  t.desc   = desc.trim();
+  t.raw    = raw;
+  t.devise = (document.getElementById('etx-devise')||{}).value||t.devise;
+  t.cat    = (document.getElementById('etx-cat')||{}).value||t.cat;
+  t.date   = (document.getElementById('etx-date')||{}).value||t.date;
+  t.amount = (t.devise==='EUR') ? raw : localToEur(raw, t.devise);
+  var etxPdf=document.getElementById('etx-pdf');
+  if(etxPdf) t.pdfId=etxPdf.value;
+  closeModal();updateBudget();snapshotCurrentTrip();
+  showToast('Transaction mise à jour','success');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// EXPORT MODULAIRE DES FACTURES → PDF unique (dossier de remboursement)
+// Source : transactions du voyage actif ayant une pièce jointe (pdfId).
+// Fusion PDF + images via pdf-lib (local, hors-ligne). Page de garde
+// récapitulative en 1re page. Sélection hiérarchique catégorie → facture.
+// ══════════════════════════════════════════════════════════════════
+
+// Ordre d'affichage/tri des catégories (par libellé nettoyé). Inconnues → fin.
+var _EXP_CAT_ORDER = ['Transport','Hébergement','Repas','Activités','Shopping','Santé','Divers'];
+function _expCatRank(clean){
+  var i = _EXP_CAT_ORDER.indexOf(clean);
+  return i === -1 ? 99 : i;
+}
+
+// Factures exportables du voyage actif (pdfId présent ET entrée pdfStore valide)
+function _expFactures(){
+  if(typeof transactions === 'undefined' || !transactions) return [];
+  return transactions.filter(function(t){
+    return t.pdfId && window.pdfStore && window.pdfStore[t.pdfId] && window.pdfStore[t.pdfId].data;
+  });
+}
+
+// Clé de tri date : "JJ/MM" ou "JJ/MM/AAAA" → nombre comparable
+function _expDateKey(d){
+  var m = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/.exec(String(d||''));
+  if(!m) return 99999999;
+  var y = m[3] ? (m[3].length===2 ? 2000+ +m[3] : +m[3]) : 2000;
+  return y*10000 + (+m[2])*100 + (+m[1]);
+}
+
+// Comparateur : catégorie (rang) puis date puis libellé
+function _expCmp(a, b){
+  var ra=_expCatRank(_catClean(a.cat)), rb=_expCatRank(_catClean(b.cat));
+  if(ra!==rb) return ra-rb;
+  var na=_catClean(a.cat), nb=_catClean(b.cat);
+  if(na!==nb) return na<nb?-1:1;
+  var da=_expDateKey(a.date), db=_expDateKey(b.date);
+  if(da!==db) return da-db;
+  return 0;
+}
+
+// Ouvre la modale de sélection
+function openExportFactures(){
+  var facs = _expFactures();
+  var tripName = (allTrips[currentTripId]&&allTrips[currentTripId].meta&&allTrips[currentTripId].meta.name)||'ce voyage';
+  var head = '<div class="modal-header"><div class="modal-title">Exporter les factures</div>'
+    +'<button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
+
+  if(!facs.length){
+    openModal(head
+      +'<div class="exp-empty">Aucune facture attachée dans ce voyage.<br>Ajoute un justificatif à une dépense (crayon d\'une transaction) pour l\'exporter ici.</div>');
+    return;
+  }
+
+  // Regrouper par catégorie (clé = cat brute avec emoji ; libellé = _catClean)
+  var groups = {}, order = [];
+  facs.forEach(function(t){
+    var k = t.cat || '';
+    if(!groups[k]){ groups[k]=[]; order.push(k); }
+    groups[k].push(t);
+  });
+  order.sort(function(a,b){
+    var ra=_expCatRank(_catClean(a)), rb=_expCatRank(_catClean(b));
+    if(ra!==rb) return ra-rb;
+    var na=_catClean(a), nb=_catClean(b);
+    return na<nb?-1:na>nb?1:0;
+  });
+
+  var html = head
+    +'<div class="exp-presets">'
+      +'<button type="button" class="exp-preset-btn" onclick="_expPreset(\'cse\')">CSE</button>'
+      +'<button type="button" class="exp-preset-btn" onclick="_expPreset(\'opco\')">OPCO</button>'
+    +'</div>'
+    +'<div class="exp-preset-hint">CSE : Transport + Hébergement · OPCO : Transport + Hébergement + Repas. Ajuste ensuite facture par facture.</div>'
+    +'<div class="exp-body">';
+
+  order.forEach(function(k, ci){
+    var clean = _catClean(k);
+    var color = (typeof _catColor==='function') ? _catColor(k) : 'var(--sakura)';
+    var arr = groups[k].slice().sort(function(a,b){ return _expDateKey(a.date)-_expDateKey(b.date); });
+    var catTotal = arr.reduce(function(s,t){ return s+(+t.amount||0); },0);
+    html += '<div class="exp-cat">'
+      +'<label class="exp-cat-head">'
+        +'<input type="checkbox" class="exp-chk exp-cat-chk" data-exp-cat="'+ci+'" data-exp-catclean="'+_tlEsc(clean)+'"/>'
+        +'<span class="exp-cat-dot" style="background:'+color+'"></span>'
+        +'<span class="exp-cat-name">'+_tlEsc(clean)+'</span>'
+        +'<span class="exp-cat-total">'+arr.length+' · '+_expFmtEur(catTotal)+'</span>'
+      +'</label>';
+    arr.forEach(function(t){
+      html += '<label class="exp-fac-row">'
+        +'<input type="checkbox" class="exp-chk exp-fac-chk" data-exp-fac="'+_tlEsc(String(t.id))+'" data-exp-catkey="'+ci+'"/>'
+        +'<span class="exp-fac-main">'
+          +'<span class="exp-fac-desc">'+_tlEsc(t.desc||'(sans libellé)')+'</span>'
+          +'<span class="exp-fac-meta">'+_tlEsc(t.date||'')+'</span>'
+        +'</span>'
+        +'<span class="exp-fac-amount">'+_expFmtEur(+t.amount||0)+'</span>'
+      +'</label>';
+    });
+    html += '</div>';
+  });
+
+  html += '</div>'
+    +'<div class="exp-footer">'
+      +'<span class="exp-count" id="exp-count">0 facture sélectionnée</span>'
+      +'<button class="btn-ghost" onclick="closeModal()">Annuler</button>'
+      +'<button class="btn-primary" id="exp-run-btn" onclick="_exportFacturesRun()">Exporter</button>'
+    +'</div>';
+
+  openModal(html);
+  _expWire();
+  _expRefreshState();
+}
+
+// Câblage des cases (délégation locale sur le conteneur de la modale)
+function _expWire(){
+  var root = document.getElementById('editModalInner');
+  if(!root) return;
+  root.addEventListener('change', function(e){
+    var el = e.target;
+    if(!el || el.className.indexOf('exp-chk')===-1) return;
+    if(el.getAttribute('data-exp-cat') != null){
+      // Case catégorie → propager à ses factures
+      var k = el.getAttribute('data-exp-cat');
+      var facs = root.querySelectorAll('.exp-fac-chk[data-exp-catkey="'+k+'"]');
+      for(var i=0;i<facs.length;i++){ facs[i].checked = el.checked; }
+    } else if(el.getAttribute('data-exp-fac') != null){
+      // Case facture → recalculer l'état de sa catégorie
+      _expSyncCat(root, el.getAttribute('data-exp-catkey'));
+    }
+    _expRefreshState();
+  });
+}
+
+// Met à jour la case catégorie (cochée / indéterminée / décochée)
+function _expSyncCat(root, k){
+  var catChk = root.querySelector('.exp-cat-chk[data-exp-cat="'+k+'"]');
+  if(!catChk) return;
+  var facs = root.querySelectorAll('.exp-fac-chk[data-exp-catkey="'+k+'"]');
+  var total=facs.length, on=0;
+  for(var i=0;i<facs.length;i++){ if(facs[i].checked) on++; }
+  catChk.checked = (on===total && total>0);
+  catChk.indeterminate = (on>0 && on<total);
+}
+
+// Recalcule le compteur + état du bouton Exporter
+function _expRefreshState(){
+  var root = document.getElementById('editModalInner');
+  if(!root) return;
+  var facs = root.querySelectorAll('.exp-fac-chk');
+  var on=0;
+  for(var i=0;i<facs.length;i++){ if(facs[i].checked) on++; }
+  var cnt = document.getElementById('exp-count');
+  if(cnt) cnt.textContent = on + ' facture' + (on>1?'s':'') + ' sélectionnée' + (on>1?'s':'');
+  var btn = document.getElementById('exp-run-btn');
+  if(btn){ btn.disabled = (on===0); btn.style.opacity = on===0 ? '.5' : ''; }
+}
+
+// Preset : coche les catégories dont le libellé nettoyé est dans la liste
+function _expPreset(kind){
+  var wanted = (kind==='opco') ? ['Transport','Hébergement','Repas'] : ['Transport','Hébergement'];
+  var root = document.getElementById('editModalInner');
+  if(!root) return;
+  var cats = root.querySelectorAll('.exp-cat-chk');
+  for(var i=0;i<cats.length;i++){
+    var k = cats[i].getAttribute('data-exp-cat');
+    var want = wanted.indexOf(cats[i].getAttribute('data-exp-catclean')) !== -1;
+    cats[i].checked = want;
+    cats[i].indeterminate = false;
+    var facs = root.querySelectorAll('.exp-fac-chk[data-exp-catkey="'+k+'"]');
+    for(var j=0;j<facs.length;j++){ facs[j].checked = want; }
+  }
+  _expRefreshState();
+}
+
+// Lance la génération du PDF fusionné
+function _exportFacturesRun(){
+  var root = document.getElementById('editModalInner');
+  if(!root) return;
+  if(typeof PDFLib === 'undefined'){ if(typeof showToast==='function') showToast('Librairie PDF indisponible (recharge la page)','error',4000); return; }
+  var boxes = root.querySelectorAll('.exp-fac-chk');
+  var chosen = [];
+  for(var i=0;i<boxes.length;i++){
+    if(boxes[i].checked){
+      var id = boxes[i].getAttribute('data-exp-fac');
+      var t = transactions.filter(function(x){ return String(x.id)===id; })[0];
+      if(t) chosen.push(t);
+    }
+  }
+  if(!chosen.length){ if(typeof showToast==='function') showToast('Sélectionne au moins une facture','error'); return; }
+  chosen.sort(_expCmp);
+  var tripName = (allTrips[currentTripId]&&allTrips[currentTripId].meta&&allTrips[currentTripId].meta.name)||'voyage';
+  var btn = document.getElementById('exp-run-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Génération…'; }
+  _expMergePDF(chosen, tripName).then(function(bytes){
+    _expDownload(bytes, 'factures-'+_expSlug(tripName)+'.pdf');
+    closeModal();
+    if(typeof showToast==='function') showToast('PDF des factures généré','success');
+  }).catch(function(e){
+    if(typeof console!=='undefined') console.error('[Yume] export factures:', e);
+    if(btn){ btn.disabled=false; btn.textContent='Exporter'; }
+    if(typeof showToast==='function') showToast('Échec de la génération du PDF','error',4000);
+  });
+}
+
+// dataURL base64 → Uint8Array
+function _dataUrlToBytes(dataUrl){
+  var base64 = String(dataUrl||'').split(',')[1] || '';
+  var bin = atob(base64);
+  var len = bin.length, bytes = new Uint8Array(len);
+  for(var i=0;i<len;i++){ bytes[i] = bin.charCodeAt(i); }
+  return bytes;
+}
+function _expMime(dataUrl){
+  var m = /^data:([^;]+)/.exec(String(dataUrl||''));
+  return m ? m[1].toLowerCase() : '';
+}
+function _expSlug(s){
+  return String(s||'voyage').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40) || 'voyage';
+}
+function _expFmtEur(n){
+  var s = (Math.round((+n||0)*100)/100).toFixed(2).replace('.',',');
+  var parts = s.split(',');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return parts[0]+','+parts[1]+' €';
+}
+
+// Assainit un texte pour Helvetica/WinAnsi : garde ASCII + Latin-1 + €, sinon drop.
+// Renvoie {text, lossy}.
+function _pdfSafe(str){
+  str = String(str==null?'':str);
+  var out='', lossy=false;
+  for(var i=0;i<str.length;i++){
+    var c = str.charCodeAt(i);
+    if((c>=32 && c<=126) || (c>=160 && c<=255) || c===0x20AC){ out += str.charAt(i); }
+    else { lossy = true; }
+  }
+  return { text: out.replace(/\s+/g,' ').trim(), lossy: lossy };
+}
+
+// Fusion pdf-lib : PDF (toutes pages) + images (A4-fit). Corrompues → skipped.
+function _expMergePDF(facs, tripName){
+  return PDFLib.PDFDocument.create().then(function(doc){
+    var included=[], skipped=[];
+    var chain = Promise.resolve();
+    facs.forEach(function(f){
+      chain = chain.then(function(){
+        var entry = window.pdfStore[f.pdfId];
+        if(!entry || !entry.data) throw new Error('missing');
+        var mime = _expMime(entry.data);
+        var bytes = _dataUrlToBytes(entry.data);
+        if(mime === 'application/pdf'){
+          return PDFLib.PDFDocument.load(bytes, {ignoreEncryption:true}).then(function(src){
+            return doc.copyPages(src, src.getPageIndices()).then(function(pages){
+              pages.forEach(function(p){ doc.addPage(p); });
+              included.push(f);
+            });
+          });
+        } else if(mime.indexOf('image/png') === 0){
+          return doc.embedPng(bytes).then(function(img){ _expDrawImagePage(doc, img); included.push(f); });
+        } else if(mime.indexOf('image/jpeg') === 0 || mime.indexOf('image/jpg') === 0){
+          return doc.embedJpg(bytes).then(function(img){ _expDrawImagePage(doc, img); included.push(f); });
+        } else {
+          throw new Error('unsupported '+mime);
+        }
+      }).catch(function(e){
+        skipped.push(f);
+      });
+    });
+    return chain.then(function(){
+      return Promise.all([
+        doc.embedFont(PDFLib.StandardFonts.Helvetica),
+        doc.embedFont(PDFLib.StandardFonts.HelveticaBold)
+      ]).then(function(fonts){
+        _expBuildCover(doc, fonts[0], fonts[1], tripName, included, skipped);
+        return doc.save();
+      });
+    });
+  });
+}
+
+// Dessine une image sur une page A4 portrait, mise à l'échelle dans les marges.
+function _expDrawImagePage(doc, img){
+  var pw=595.28, ph=841.89, margin=36;
+  var scale = Math.min((pw-2*margin)/img.width, (ph-2*margin)/img.height, 1);
+  var w=img.width*scale, h=img.height*scale;
+  var page = doc.addPage([pw,ph]);
+  page.drawImage(img, { x:(pw-w)/2, y:(ph-h)/2, width:w, height:h });
+}
+
+// Construit la/les page(s) de garde et les insère en tête (2 passes : layout puis dessin).
+function _expBuildCover(doc, font, fontBold, tripName, included, skipped){
+  var pw=595.28, ph=841.89, mL=48, mR=48, mT=56, mB=56;
+  var maxW = pw-mL-mR;
+  var rgb = PDFLib.rgb;
+  var ink = rgb(0.12,0.12,0.14), muted = rgb(0.42,0.42,0.46), red = rgb(0.75,0.22,0.17);
+
+  // Nom du voyage assaini (fallback si illisible)
+  var tn = _pdfSafe(tripName); var tripLabel = (tn.text && tn.text.length>=2) ? tn.text : 'Voyage';
+
+  var total = 0;
+  for(var ti=0; ti<included.length; ti++){ total += (+included[ti].amount||0); }
+
+  // Libellé d'une facture pour la page de garde : desc si lisible, sinon fallback identifiable
+  function facLabel(t){
+    var s = _pdfSafe(t.desc);
+    // Fallback seulement si le texte restant est inexploitable (ex. libellé 100% CJK).
+    // La ligne conserve de toute façon catégorie + date + montant → reste identifiable.
+    var kept = s.text.replace(/[^0-9A-Za-zÀ-ÿ]/g,'');
+    if(kept.length < 2){ return '[libelle non affichable]'; }
+    return s.text;
+  }
+  // Construit la liste des "lignes" à dessiner (2 passes utilisent la même liste)
+  var lines = [];
+  lines.push({ t:'Dossier de factures', s:20, b:true, c:ink, gap:10 });
+  lines.push({ t:tripLabel, s:14, b:false, c:ink, gap:4 });
+  lines.push({ t:included.length+' facture'+(included.length>1?'s':'')+' incluse'+(included.length>1?'s':''), s:10, b:false, c:muted, gap:16 });
+  included.forEach(function(t){
+    var lbl = facLabel(t);
+    var line = '- ' + lbl + '  |  ' + _catClean(t.cat) + '  |  ' + (t.date||'') + '  |  ' + _expFmtEur(+t.amount||0);
+    lines.push({ t:_expTrunc(font, line, 10, maxW), s:10, b:false, c:ink, gap:5 });
+  });
+  lines.push({ t:'', s:6, b:false, c:ink, gap:6 });
+  lines.push({ t:'Total : '+_expFmtEur(total), s:13, b:true, c:ink, gap:6 });
+  if(skipped.length){
+    lines.push({ t:'', s:6, b:false, c:ink, gap:8 });
+    lines.push({ t:skipped.length+' facture'+(skipped.length>1?'s':'')+' ignoree'+(skipped.length>1?'s':'')+' (illisible'+(skipped.length>1?'s':'')+') :', s:10, b:true, c:red, gap:5 });
+    skipped.forEach(function(t){
+      var line = '- ' + facLabel(t) + '  |  ' + _catClean(t.cat) + '  |  ' + (t.date||'') + '  |  ' + _expFmtEur(+t.amount||0);
+      lines.push({ t:_expTrunc(font, line, 10, maxW), s:10, b:false, c:red, gap:5 });
+    });
+  }
+
+  // Passe 1 : compter les pages nécessaires
+  var y = ph-mT, pageCount = 1;
+  for(var i=0;i<lines.length;i++){
+    var ln = lines[i];
+    if(y - ln.s < mB){ pageCount++; y = ph-mT; }
+    y -= (ln.s + ln.gap);
+  }
+  // Créer les pages de garde en tête (index 0..pageCount-1)
+  var pages = [];
+  for(var p=0;p<pageCount;p++){ pages.push(doc.insertPage(p, [pw,ph])); }
+
+  // Passe 2 : dessiner
+  var pi=0, cy=ph-mT;
+  for(var k=0;k<lines.length;k++){
+    var l = lines[k];
+    if(cy - l.s < mB){ pi++; cy = ph-mT; }
+    if(l.t){
+      try{
+        pages[pi].drawText(l.t, { x:mL, y:cy-l.s, size:l.s, font:(l.b?fontBold:font), color:l.c });
+      }catch(e){ /* ligne non dessinable : on la saute plutôt que planter */ }
+    }
+    cy -= (l.s + l.gap);
+  }
+}
+
+// Tronque un texte pour tenir dans maxW (ajoute "..." ASCII)
+function _expTrunc(font, text, size, maxW){
+  var safe = _pdfSafe(text).text;
+  try{
+    if(font.widthOfTextAtSize(safe, size) <= maxW) return safe;
+    var t = safe;
+    while(t.length>1 && font.widthOfTextAtSize(t+'...', size) > maxW){ t = t.slice(0,-1); }
+    return t + '...';
+  }catch(e){ return safe.slice(0,80); }
+}
+
+// Téléchargement du PDF fusionné
+function _expDownload(bytes, filename){
+  var blob = new Blob([bytes], { type:'application/pdf' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
 }
 
 function updateBudget(){
@@ -7676,7 +8482,10 @@ function updateBudget(){
           +rawLine
           +'<div class="tx-date">'+t.date+'</div>'
         +'</div>'
-        +'<button class="tx-delete" onclick="deleteTransaction(\''+t.id+'\')" title="Supprimer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'
+        +(t.pdfId && window.pdfStore && window.pdfStore[t.pdfId]
+          ? '<button class="tx-doc" data-act="openPdf" data-id="'+t.pdfId+'" title="Voir le justificatif"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>'
+          : '')
+        +'<button class="tx-edit" data-act="editTransaction" data-id="'+t.id+'" title="Modifier"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="14" height="14"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>'
       +'</div>';
     }).join('');
   }
@@ -8251,8 +9060,24 @@ function calSelectDay(d){
 // ══════════════════════════════════════════════════════════════════
 // PDF ATTACHMENTS
 // ══════════════════════════════════════════════════════════════════
-// Stockage global des PDFs indexés par id unique
-if(!window.pdfStore) window.pdfStore = {};
+// Stockage global des PDFs indexés par id unique — persisté dans
+// localStorage (clé 'yume_pdfstore') pour survivre au rechargement
+// de la page. Avant ce correctif, pdfStore vivait uniquement en
+// mémoire et les pièces jointes disparaissaient à chaque F5.
+function savePdfStore(){
+  try{ localStorage.setItem('yume_pdfstore', JSON.stringify(window.pdfStore||{})); }
+  catch(e){
+    console.warn('[Yume] savePdfStore: échec localStorage (quota plein ?)', e);
+    if(typeof showToast === 'function') showToast('Pièce jointe non sauvegardée — stockage local plein', 'error', 4000);
+  }
+}
+function loadPdfStore(){
+  try{
+    var raw = localStorage.getItem('yume_pdfstore');
+    return raw ? JSON.parse(raw) : {};
+  } catch(e){ return {}; }
+}
+if(!window.pdfStore) window.pdfStore = loadPdfStore();
 
 function attachPdfToForm(hiddenId, fileInput){
   var file = fileInput.files[0];
@@ -8263,6 +9088,7 @@ function attachPdfToForm(hiddenId, fileInput){
     var b64   = e.target.result;
     var pdfId = 'pdf_'+Date.now();
     window.pdfStore[pdfId] = { name: file.name, data: b64 };
+    savePdfStore();
     var hid = document.getElementById(hiddenId);
     if(hid) hid.value = pdfId;
     // Badge avec boutons vue + suppression
@@ -8280,6 +9106,7 @@ function attachPdfToForm(hiddenId, fileInput){
       delBtn.title = 'Supprimer ce document';
       delBtn.addEventListener('click', function(){
         delete window.pdfStore[pdfId];
+        savePdfStore();
         if(hid) hid.value = '';
         bEl.innerHTML = '';
         fileInput.value = '';
@@ -8294,13 +9121,19 @@ function attachPdfToForm(hiddenId, fileInput){
 function openPdf(pdfId){
   var entry = window.pdfStore[pdfId] || (window.globalPdfStore && window.globalPdfStore[pdfId]);
   if(!entry){ alert('PDF introuvable. Le document a peut-être été supprimé ou la page a été rechargée.'); return; }
+  // Détecte le vrai type MIME depuis le data URL (ex: data:image/jpeg;base64,...)
+  // — sans ça, une photo de ticket était forcée en Blob "application/pdf" et
+  // ne s'affichait pas correctement.
+  var mimeMatch = (''+entry.data).match(/^data:([^;]+);base64,/);
+  var mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
+  var isImage = mime.indexOf('image/') === 0;
   try {
-    // Méthode 1 : Blob URL (la plus fiable, ouvre un vrai PDF viewer)
+    // Méthode 1 : Blob URL (la plus fiable, ouvre un vrai viewer natif)
     var byteStr = atob(entry.data.split(',')[1]);
     var ab = new ArrayBuffer(byteStr.length);
     var ia = new Uint8Array(ab);
     for(var i=0;i<byteStr.length;i++) ia[i] = byteStr.charCodeAt(i);
-    var blob = new Blob([ab], {type:'application/pdf'});
+    var blob = new Blob([ab], {type:mime});
     var url  = URL.createObjectURL(blob);
     var win  = window.open(url, '_blank');
     // Révoquer l'URL après ouverture
@@ -8316,8 +9149,10 @@ function openPdf(pdfId){
     var win2 = window.open();
     if(win2){
       win2.document.write('<html><head><title>'+entry.name+'</title></head>'
-        +'<body style="margin:0;padding:0">'
-        +'<embed src="'+entry.data+'" type="application/pdf" width="100%" height="100%" style="position:absolute;inset:0"/>'
+        +'<body style="margin:0;padding:0;background:#1a1a2e">'
+        +(isImage
+          ? '<img src="'+entry.data+'" style="display:block;max-width:100%;margin:0 auto"/>'
+          : '<embed src="'+entry.data+'" type="'+mime+'" width="100%" height="100%" style="position:absolute;inset:0"/>')
         +'</body></html>');
     }
   }
@@ -8367,71 +9202,6 @@ updateStatsBar();
 renderCountryTags();
 
 // ══════════════════════════════════════════════════════════════
-// DROPDOWN VOYAGES (page d'accueil)
-// ══════════════════════════════════════════════════════════════
-
-function buildDropdownMenu(){
-  var menu = document.getElementById('trips-dropdown-menu');
-  if(!menu) return;
-  var ids = Object.keys(allTrips);
-  if(!ids.length){
-    menu.innerHTML='<div class="trips-dd-empty">Aucun voyage — crée-en un !</div>';
-    return;
-  }
-  menu.innerHTML = ids.slice().reverse().map(function(tid){
-    var m=allTrips[tid].meta||{};
-    var name=m.name||'Voyage sans titre';
-    var emoji=m.emoji||'✈';
-    var parts=[];
-    var vCount=(allTrips[tid].vols||[]).length;
-    var hCount=(allTrips[tid].hotels||[]).length;
-    if(vCount) parts.push(vCount+' vol'+(vCount>1?'s':''));
-    if(hCount) parts.push(hCount+' héb.');
-    if(m.created) parts.push(m.created);
-    return '<div class="trips-dd-item" onclick="selectTripFromDropdown(\''+tid+'\')">'+
-      '<span class="ddi-emoji">'+emoji+'</span>'+
-      '<div class="ddi-body">'+
-        '<div class="ddi-name">'+name+'</div>'+
-        '<div class="ddi-meta">'+(parts.join(' · ')||'Vide')+'</div>'+
-      '</div>'+
-      '<button class="ddi-del" onclick="event.stopPropagation();deleteTripFromDropdown(\''+tid+'\')" title="Supprimer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'+
-    '</div>';
-  }).join('');
-}
-
-function selectTripFromDropdown(tid){
-  var menuEl=document.getElementById('trips-dropdown-menu');
-  var btnEl=document.getElementById('trips-dropdown-btn');
-  if(menuEl) menuEl.classList.remove('open');
-  if(btnEl) btnEl.classList.remove('open');
-  var m=(allTrips[tid]&&allTrips[tid].meta)||{};
-  var emojiEl=document.getElementById('dd-selected-emoji');
-  var labelEl=document.getElementById('dd-selected-label');
-  if(emojiEl) emojiEl.textContent=m.emoji||'✈';
-  if(labelEl) labelEl.textContent=m.name||'Voyage';
-  openTrip(tid);
-}
-
-function deleteTripFromDropdown(tid){
-  var name = (allTrips[tid] && allTrips[tid].meta && allTrips[tid].meta.name) || 'ce voyage';
-  if(!confirm('Supprimer "' + name + '" ?')) return;
-  supprimerVoyage(tid);
-}
-
-document.addEventListener('click',function(e){
-  var wrap=document.getElementById('trips-dropdown-wrap');
-  if(wrap&&!wrap.contains(e.target)){
-    var menu=document.getElementById('trips-dropdown-menu');
-    var btn=document.getElementById('trips-dropdown-btn');
-    if(menu) menu.classList.remove('open');
-    if(btn) btn.classList.remove('open');
-  }
-});
-
-// renderTripsList — buildDropdownMenu() intégré directement (voir ci-dessus)
-
-
-// ══════════════════════════════════════════════════════════════
 // AUTOMATION — Utilitaires temps & dates
 // ══════════════════════════════════════════════════════════════
 
@@ -8477,22 +9247,6 @@ function flashAuto(el, hintId){
 
 // ── Train : départ + arrivée → durée ──
 
-// ── Vol : heure départ + arrivée → durée (lit directement les input[type=time]) ──
-function autoCalcDureeVol(){
-  var depH = (document.getElementById('vol-dep-heure')||{}).value || '';
-  var arrH = (document.getElementById('vol-arr-heure')||{}).value || '';
-  var dEl  = document.getElementById('vol-duree');
-  if(!dEl) return;
-  var dMin = parseHM(depH), aMin = parseHM(arrH);
-  if(dMin === null || aMin === null){ dEl.value = ''; return; }
-  var total = aMin - dMin;
-  if(total <= 0) total += 1440; // vol de nuit
-  dEl.value = formatMinutes(Math.max(0, total));
-  flashAuto(dEl, null);
-}
-document.addEventListener('change',function(e){
-  if(e.target&&(e.target.id==='vol-dep-jour'||e.target.id==='vol-arr-jour')) autoCalcDureeVol();
-});
 
 // ── Hôtel : logique 3 variables CI / CO / Nuits ──
 function autoHotel(changed){
@@ -9432,13 +10186,18 @@ window._resetFormMobilite = function(){
     var hd = g.querySelector('[id="mob-duree"]');
     if(hd) hd.value = '';
   });
-  // Escales
+  // Sortie du mode édition (vol unifié) : le prochain « nouveau vol » ne doit
+  // hériter d'aucune donnée ni escale du vol précédemment édité.
+  if(typeof _mobCancelEdit === 'function') _mobCancelEdit();
+  // Escales : décocher + réinitialiser le compteur, puis toggleMobEscales()
+  // (branche décochée) restaure titre, labels, #mob-direct-details et vide
+  // les blocs dynamiques (donc aussi les horaires d'extrémité propagés).
   var escChk = document.getElementById('mob-escale-check');
   if(escChk) escChk.checked = false;
-  var escWrap = document.getElementById('mob-escales-wrap');
-  if(escWrap) escWrap.style.display = 'none';
-  var escDisp = document.getElementById('mob-esc-duree-display');
-  if(escDisp) escDisp.textContent = '—';
+  if(typeof _mobEscCount !== 'undefined') _mobEscCount = 1;
+  if(typeof toggleMobEscales === 'function') toggleMobEscales();
+  // Nettoyer le badge PDF du formulaire
+  var mpb=document.getElementById('mob-pdf-badge'); if(mpb) mpb.innerHTML='';
   // Route preview
   var prev = document.getElementById('mob-route-preview');
   if(prev){ prev.textContent = ''; prev.classList.remove('visible'); }
@@ -9771,6 +10530,22 @@ function _docEsc(s){
 function _docVal(id){ var e=document.getElementById(id); return e ? e.value : ''; }
 function _docSet(id,v){ var e=document.getElementById(id); if(e) e.value = (v==null?'':v); }
 function _docGroupKey(d){ var c=(d&&d.cat)||'autre'; return (DOC_CAT[c]&&DOC_CAT[c].group)||'autre'; }
+// Pointeur de pièce jointe d'un document. `pdfId` = convention partagée ;
+// `file` = fallback lecture pour un doc non encore migré (voir _migrateAllTrips).
+function _docPdfId(d){ return (d && (d.pdfId || d.file)) || ''; }
+// Injecte le bloc pièce jointe partagé (voir/remplacer/supprimer) dans le
+// formulaire doc — même UX que hôtels/vols/pass (mPdfBlock + openPdf).
+function _docFillPdfSlot(pdfId){
+  var slot=document.getElementById('doc-pdf-slot');
+  if(slot && typeof mPdfBlock==='function') slot.innerHTML = mPdfBlock('doc-pdf', pdfId||'');
+}
+// Supprime un blob de pdfStore + persiste (évite les orphelins de quota).
+function _purgePdfBlob(pdfId){
+  if(pdfId && window.pdfStore && window.pdfStore[pdfId]){
+    delete window.pdfStore[pdfId];
+    if(typeof savePdfStore==='function') savePdfStore();
+  }
+}
 
 function _docFmtExpiry(ym){
   var m=/^(\d{4})-(\d{2})$/.exec(ym||''); if(!m) return ym||'';
@@ -9824,14 +10599,15 @@ function _docRow(d){
   if(d.number) sub.push('N° '+_docEsc(d.number));
   if(d.expiry) sub.push('exp. '+_docFmtExpiry(d.expiry));
   var perso=!!d.__personal;
-  var click=perso ? "openGlobalDocModal('"+d.id+"')" : "editDoc('"+d.id+"')";
   var g=_docGroupKey(d), c=_docColor(g);
-  return '<div class="doc-row'+(perso?' doc-row-perso':'')+'" onclick="'+click+'">'
+  var pid=_docPdfId(d);
+  var pdfPill = pid ? '<button type="button" class="doc-row-pdf" data-act="openPdf" data-id="'+pid+'" title="Voir la pi\u00e8ce jointe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>' : '';
+  return '<div class="doc-row'+(perso?' doc-row-perso':'')+'" data-act="'+(perso?'openGlobalDocModal':'editDoc')+'" data-id="'+d.id+'">'
     + '<span class="doc-row-ico" data-cat="'+g+'" style="background:'+c+'1e;color:'+c+'">'+_docIcon(d.cat)+'</span>'
     + '<div class="doc-row-body"><div class="doc-row-name">'+_docEsc(d.name||'Document')
       + (perso?' <span class="doc-perso-badge">Personnel</span>':'')+'</div>'
     + (sub.length?'<div class="doc-row-sub">'+sub.join(' \u00b7 ')+'</div>':'')+'</div>'
-    + _docBadge(v) + '</div>';
+    + pdfPill + _docBadge(v) + '</div>';
 }
 // Documents du voyage + documents personnels (transverses), ces derniers marqués __personal.
 function _allDocs(){
@@ -9875,8 +10651,7 @@ function _renderDocCats(){
   if(!hero){ for(i=0;i<all.length;i++){ if(_docGroupKey(all[i])==='identite'){ hero=all[i]; break; } } }
   if(hero){
     var hv=_docValidity(hero);
-    var heroClick=hero.__personal ? ("openGlobalDocModal('"+hero.id+"')") : ("editDoc('"+hero.id+"')");
-    html += '<div class="doc-hero" onclick="'+heroClick+'">'
+    html += '<div class="doc-hero" data-act="'+(hero.__personal?'openGlobalDocModal':'editDoc')+'" data-id="'+hero.id+'">'
       + '<span class="doc-hero-ico">'+_docIcon(hero.cat)+'</span>'
       + '<div class="doc-hero-kicker">'+_docEsc((DOC_CAT[hero.cat]?DOC_CAT[hero.cat].label:'Document')).toUpperCase()+'</div>'
       + '<div class="doc-hero-name">'+_docEsc(hero.name||'Document')+'</div>'
@@ -9928,13 +10703,21 @@ function _renderDocCats(){
 
 function _resetDocForm(){
   _docSet('doc-name',''); _docSet('doc-cat','passeport'); _docSet('doc-number','');
-  _docSet('doc-expiry',''); _docSet('doc-file',''); _docSet('doc-edit-id','');
+  _docSet('doc-expiry',''); _docSet('doc-edit-id','');
   var del=document.getElementById('doc-del-btn'); if(del) del.style.display='none';
-  var fb=document.getElementById('doc-file-badge'); if(fb) fb.innerHTML='';
+  _docFillPdfSlot('');   // bloc pièce jointe vide
 }
 
-function openDocAdd(){
+// Catégorie représentative d'un groupe (pour pré-remplir depuis une tuile).
+// Ex. groupe 'assurance' → cat 'assurance' ; groupe 'identite' → 'passeport'.
+function _docDefaultCatForGroup(g){
+  for(var k in DOC_CAT){ if(DOC_CAT.hasOwnProperty(k) && DOC_CAT[k].group===g) return k; }
+  return 'autre';
+}
+// cat optionnel : pré-remplit la catégorie (ajout depuis une tuile de catégorie).
+function openDocAdd(cat){
   _resetDocForm();
+  if(cat){ _docSet('doc-cat', cat); }
   if(typeof openAddTop==='function') openAddTop('form-doc');
 }
 
@@ -9942,10 +10725,9 @@ function editDoc(id){
   var d=null; for(var i=0;i<documents.length;i++){ if(documents[i].id===id){ d=documents[i]; break; } }
   if(!d) return;
   _docSet('doc-name',d.name); _docSet('doc-cat',d.cat||'autre'); _docSet('doc-number',d.number||'');
-  _docSet('doc-expiry',d.expiry||''); _docSet('doc-file',d.file||''); _docSet('doc-edit-id',d.id);
+  _docSet('doc-expiry',d.expiry||''); _docSet('doc-edit-id',d.id);
   var del=document.getElementById('doc-del-btn'); if(del) del.style.display='';
-  var fb=document.getElementById('doc-file-badge');
-  if(fb) fb.innerHTML = d.file ? '<span class="doc-file-tag">Fichier joint</span>' : '';
+  _docFillPdfSlot(_docPdfId(d));   // pièce jointe ouvrable/remplaçable/supprimable
   if(typeof openAddTop==='function') openAddTop('form-doc');
 }
 
@@ -9959,11 +10741,16 @@ function saveDoc(){
     cat: _docVal('doc-cat')||'autre',
     number: _docVal('doc-number').trim(),
     expiry: _docVal('doc-expiry'),
-    file: _docVal('doc-file')
+    pdfId: _docVal('doc-pdf')
   };
   if(typeof documents==='undefined' || !documents) documents=[];
   if(editId){
     var idx=documents.findIndex(function(x){ return x.id===editId; });
+    // Ré-attache : purge l'ancien blob si le pointeur a changé (évite les
+    // orphelins dans pdfStore). Fait au SAVE (pas à la sélection) → « remplacer
+    // puis annuler » ne casse pas la pièce existante.
+    var prevPid = (idx!==-1) ? _docPdfId(documents[idx]) : '';
+    if(prevPid && prevPid!==rec.pdfId) _purgePdfBlob(prevPid);
     if(idx!==-1) documents[idx]=rec; else documents.push(rec);
   } else {
     documents.push(rec);
@@ -9979,6 +10766,9 @@ function saveDoc(){
 function deleteDoc(){
   var id=_docVal('doc-edit-id'); if(!id) return;
   if(!confirm('Supprimer ce document ?')) return;
+  // Purge le blob associé (aligné sur deletePass/deleteHotel) — plus d'orphelin.
+  var d=null; for(var i=0;i<documents.length;i++){ if(documents[i].id===id){ d=documents[i]; break; } }
+  _purgePdfBlob(_docPdfId(d));
   documents = documents.filter(function(x){ return x.id!==id; });
   if(typeof snapshotCurrentTrip==='function') snapshotCurrentTrip();
   _resetDocForm();
@@ -10017,7 +10807,7 @@ function renderGlobalDocs(){
     var hasPdf=d.pdfId && window.globalPdfStore && window.globalPdfStore[d.pdfId];
     var sub=(DOC_CAT[d.cat]?DOC_CAT[d.cat].label:'Document')+(d.number?' \u00b7 '+d.number:'');
     var gc=_docColor(_docGroupKey(d));
-    return '<div class="gdoc-row" onclick="openGlobalDocModal(\''+d.id+'\')">'
+    return '<div class="gdoc-row" data-act="openGlobalDocModal" data-id="'+d.id+'">'
       +'<span class="gdoc-ico" data-cat="'+_docGroupKey(d)+'" style="background:'+gc+'1e;color:'+gc+'">'+_docIcon(d.cat)+'</span>'
       +'<div class="gdoc-body">'
         +'<div class="gdoc-name">'+_docEsc(d.name)+'</div>'
@@ -10281,12 +11071,14 @@ function openDocCategory(g){
     var v=_docValidity(d), perso=!!d.__personal;
     var click = perso ? ("closeModal();openGlobalDocModal('"+d.id+"')") : ("closeModal();editDoc('"+d.id+"')");
     var sub=[]; if(d.number) sub.push('N\u00b0 '+_docEsc(d.number)); if(d.expiry) sub.push('exp. '+_docFmtExpiry(d.expiry));
+    var pid=_docPdfId(d);
+    var pdfPill = pid ? '<button type="button" class="doc-row-pdf" onclick="event.stopPropagation();openPdf(\''+pid+'\')" title="Voir la pi\u00e8ce jointe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>' : '';
     return '<div class="doc-row'+(perso?' doc-row-perso':'')+'" onclick="'+click+'">'
       + '<span class="doc-row-ico" style="background:'+color+'1e;color:'+color+'">'+_docIcon(d.cat)+'</span>'
       + '<div class="doc-row-body"><div class="doc-row-name">'+_docEsc(d.name||'Document')
         + (perso?' <span class="doc-perso-badge">Personnel</span>':'')+'</div>'
         + (sub.length?'<div class="doc-row-sub">'+sub.join(' \u00b7 ')+'</div>':'')+'</div>'
-      + _docBadge(v) + '</div>';
+      + pdfPill + _docBadge(v) + '</div>';
   }).join('');
   var html = '<div class="tld">'
     + '<div class="tld-head"><span class="tld-dot" style="background:'+color+'"></span>'
@@ -10295,7 +11087,7 @@ function openDocCategory(g){
       + (rows || '<div class="tld-empty">Aucun document dans cette cat\u00e9gorie.</div>')
     + '</div>'
     + '<div class="modal-footer"><button class="btn-ghost" onclick="closeModal()">Fermer</button>'
-      + '<button class="btn-primary" onclick="closeModal();openDocAdd()">Ajouter</button></div>'
+      + '<button class="btn-primary" onclick="closeModal();openDocAdd(\''+_docDefaultCatForGroup(g)+'\')">Ajouter</button></div>'
     + '</div>';
   openModal(html);
 }

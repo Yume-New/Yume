@@ -79,17 +79,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--surface-2);color:var(--in
 
 /* ─ HEADER ─ */
 .app-header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;position:sticky;top:0;z-index:200;display:flex;align-items:center;height:80px;gap:12px;box-shadow:var(--shadow-sm);overflow:hidden}
-.header-logo{font-family:'Noto Serif JP',serif;font-size:20px;font-weight:600;color:var(--sakura);letter-spacing:.03em;white-space:nowrap}
-.header-div{width:1px;height:20px;background:var(--border);flex-shrink:0}
-.header-trip{font-size:13px;color:var(--ink-muted)}
-
-/* ─ NAV : slider horizontal tactile ─ */
-.app-nav{background:var(--surface);border-top:1px solid var(--border);border-bottom:none;display:flex;flex-wrap:nowrap;padding:0;gap:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;position:fixed;bottom:0;left:0;right:0;z-index:200;box-shadow:0 -4px 24px rgba(26,26,46,.10);padding-bottom:env(safe-area-inset-bottom,0px)}
-.app-nav::-webkit-scrollbar{display:none}
-.nav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:10px 16px 8px;border:none;background:transparent;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:400;color:var(--ink-muted);white-space:nowrap;border-top:2px solid transparent;margin-top:-1px;transition:color .15s,border-color .15s;flex-shrink:0;touch-action:pan-x;min-height:56px}
-.nav-item:hover{color:var(--ink)}
-.nav-item.active{color:var(--sakura);font-weight:600;border-top-color:var(--sakura);border-bottom-color:transparent}
-.nav-item .nav-icon{font-size:22px;line-height:1}
 
 /* ─ LAYOUT ─ */
 /* Layout — le padding est maintenant sur .section */
@@ -249,39 +238,6 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
 .btn-primary:active{transform:scale(.98)}
 .btn-ghost{padding:9px 14px;background:transparent;border:1px solid var(--border);border-radius:var(--r-sm);font-size:13px;color:var(--ink-muted);cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .15s;white-space:nowrap}
 .btn-ghost:hover{background:var(--surface-3)}
-.add-trigger{
-  width:100%;padding:24px 12px 20px;
-  border:1.5px dashed var(--border);border-radius:var(--r-md);
-  background:transparent;cursor:pointer;
-  font-family:'DM Sans',sans-serif;transition:all .15s;margin-bottom:6px;
-  display:flex;flex-direction:column;align-items:center;gap:6px
-}
-.add-trigger::before{
-  content:'+';
-  display:flex;align-items:center;justify-content:center;
-  width:32px;height:32px;
-  border:1.5px dashed var(--border);
-  border-radius:50%;
-  font-size:20px;line-height:1;
-  color:var(--ink-hint);
-  transition:all .15s;
-}
-.add-trigger .trig-label{font-size:12px;color:var(--ink-hint);letter-spacing:.01em}
-.add-trigger:hover{border-color:var(--sakura);background:var(--sakura-light)}
-.add-trigger:hover::before{border-color:var(--sakura);color:var(--sakura)}
-.add-trigger:hover .trig-label{color:var(--sakura)}
-/* Boutons raccourcis type de transport */
-.add-trigger-secondary{
-  flex:1;padding:8px 6px;
-  border:1px solid var(--border);border-radius:var(--r-md);
-  background:var(--surface);cursor:pointer;
-  font-size:11px;font-weight:500;color:var(--ink-muted);
-  font-family:'DM Sans',sans-serif;
-  transition:all .15s;text-align:center;white-space:nowrap;
-  margin-bottom:10px;
-}
-.add-trigger-secondary:hover{border-color:var(--sakura);color:var(--sakura);background:var(--sakura-light)}
-
 /* ─ TRANSPORT PICKER ─ */
 .transport-picker{
   display:flex;flex-direction:column;gap:8px;
@@ -366,15 +322,6 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
 }
 .member-chip-del:hover{background:rgba(45,140,107,.4)}
 .members-hint{font-size:11px;color:var(--ink-hint);margin-top:6px}
-
-/* Badge groupe sur les cards de voyage */
-.trip-group-badge{
-  display:inline-flex;align-items:center;gap:3px;
-  font-size:10px;font-weight:600;color:var(--teal);
-  background:#e8f5f0;border:1px solid rgba(45,140,107,.25);
-  border-radius:20px;padding:2px 7px;margin-left:5px;
-  vertical-align:middle;
-}
 
 /* Champs groupe dans formulaire de dépense */
 .tx-group-fields{display:none;margin-top:8px;gap:8px;flex-direction:column}
@@ -612,30 +559,10 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
 }
 .tc-cancel:hover{background:var(--border)}
 
-/* ─ PASSES SECTION HEADER ─ */
-.passes-section-header{
-  display:flex;align-items:center;justify-content:space-between;
-  background:linear-gradient(135deg,var(--gold-light) 0%,#fff9ef 100%);
-  border:1.5px solid rgba(201,146,26,.25);
-  border-radius:var(--r-md);
-  padding:10px 14px;margin-bottom:10px;
-}
-.passes-section-title{
-  font-size:13px;font-weight:600;color:var(--gold);
-  display:flex;align-items:center;gap:6px;
-}
-.passes-section-icon{font-size:16px}
-.passes-section-sub{font-size:11px;color:var(--ink-hint)}
-
 /* Séparateur "Trajets" sous les pass */
 .trajets-section-header{
   display:flex;align-items:center;gap:8px;
   margin:14px 0 8px;
-}
-.trajets-section-title{
-  font-size:11px;font-weight:600;color:var(--ink-hint);
-  text-transform:uppercase;letter-spacing:.08em;
-  display:flex;align-items:center;gap:5px;
 }
 .trajets-section-header::after{
   content:'';flex:1;height:1px;background:var(--border);
@@ -673,6 +600,21 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
   padding:3px 10px;border-radius:20px;
 }
 .mob-seg2-subtitle{font-size:12px;color:var(--ink-muted)}
+
+/* ─ FORM VOL — escales dynamiques (compteur + blocs SEG/escale) ─ */
+.mob-esc-counter{display:flex;align-items:center;gap:10px;margin:2px 0 12px}
+.mob-esc-cbtn{width:30px;height:30px;flex:none;border:1px solid var(--border-strong,var(--ink-hint));border-radius:8px;background:var(--surface-2);color:var(--ink);font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.mob-esc-cbtn:active{transform:scale(.95)}
+.mob-esc-count-val{font-size:13px;font-weight:600;color:var(--ink);min-width:78px;text-align:center}
+.mob-esc-block{border:1px solid var(--border);border-left:3px solid var(--teal,var(--sakura));border-radius:0 10px 10px 0;background:var(--surface-1);padding:10px 12px;margin-bottom:10px}
+.mob-esc-block-head{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--teal,var(--sakura));margin-bottom:8px}
+.mob-esc-block-head svg{flex-shrink:0}
+.mob-seg-block{border:1px dashed var(--border-strong,var(--ink-hint));border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.mob-seg-block-head{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.mob-seg-badge{font-size:11px;font-weight:700;letter-spacing:.04em;background:var(--sakura);color:#fff;padding:3px 10px;border-radius:20px}
+.mob-seg-route{font-size:12px;font-weight:600;color:var(--ink-muted);letter-spacing:.01em}
+.mob-seg-f{display:flex;flex-direction:column;gap:3px;flex:none}
+.mob-seg-inherited{background:var(--surface-1)!important;color:var(--ink-hint)!important;border-style:dashed!important;cursor:not-allowed}
 
 /* ─ CARTE MOB — affichage deux segments ─ */
 .mob-segments{display:flex;flex-direction:column;gap:0;width:100%}
@@ -770,12 +712,10 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
 .nt-seg:hover{opacity:.8}
 .hotel-item{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:8px;background:var(--surface);transition:box-shadow .15s;position:relative;min-width:0;overflow:hidden}
 .hotel-item:hover{box-shadow:var(--shadow-md)}
-.hotel-stripe{width:4px;min-height:44px;border-radius:4px;flex-shrink:0;align-self:stretch}
 .hotel-name{font-size:14px;font-weight:500;color:var(--ink)}
 .hotel-info{font-size:12px;color:var(--ink-muted);margin-top:2px}
 .hotel-ref{font-size:11px;margin-top:4px;font-weight:500}
 .hotel-adresse{font-size:11px;color:var(--ink-muted);margin-top:3px;display:flex;align-items:flex-start;gap:3px;line-height:1.4}
-.hotel-nights{margin-left:auto;font-size:12px;font-weight:500;color:var(--ink-muted);white-space:nowrap;padding-right:8px}
 .nuits-inline-form{display:flex;align-items:center;gap:8px;margin-top:10px}
 .nuits-inline-form label{font-size:12px;color:var(--ink-muted);white-space:nowrap}
 .nuits-inline-form input{max-width:72px;min-width:60px;flex:none}
@@ -791,20 +731,9 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
 .place-card.visited{background:var(--sakura-light);border-color:var(--sakura)}
 .place-card.visited .place-name{color:var(--sakura-dark)}
 .lieu-cat-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;letter-spacing:.3px;margin-top:3px;width:fit-content}
-.lieu-cat-badge.Temples{background:#fff3e0;color:#e65100}
-.lieu-cat-badge.Parcs{background:#e8f5e9;color:#2e7d32}
-.lieu-cat-badge.Randonnees{background:#e8f5e9;color:#1b5e20}
-.lieu-cat-badge.Restaurants{background:#fce4ec;color:#880e4f}
-.lieu-cat-badge.Musees{background:#e8eaf6;color:#283593}
-.lieu-cat-badge.Shopping{background:#f3e5f5;color:#6a1b9a}
-.lieu-cat-badge.Onsen{background:#e0f2f1;color:#00695c}
-.lieu-cat-badge.default{background:var(--surface-2);color:var(--ink-muted)}
 .filter-btn.cat-btn{border-style:dashed}
-.place-emoji{font-size:22px;margin-bottom:6px;line-height:1}
 .place-name{font-size:14px;font-weight:500;color:var(--ink);margin-bottom:1px;line-height:1.3}
 .place-city{font-size:11px;color:var(--ink-muted)}
-.place-check{margin-top:4px;font-size:10px;color:var(--sakura);font-weight:500}
-.place-horaire{font-size:11px;color:var(--teal);margin-top:3px;font-weight:500}
 .place-adresse{font-size:11px;color:var(--ink-muted);margin-top:2px;line-height:1.4}
 .place-note{font-size:11px;color:var(--ink-hint);margin-top:2px;font-style:italic;line-height:1.4}
 
@@ -876,7 +805,6 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
 }
 .addr-field input:focus{ border-color:var(--sakura); background:var(--surface); }
 /* Champ Rue/N° : pleine largeur (col-span 2) */
-.addr-field.full-width{ grid-column:1/-1; }
 /* Bouton Vérifier */
 .btn-verify-addr{
   display:flex;align-items:center;gap:6px;
@@ -937,9 +865,6 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
   background:#fdf0f0;color:#c62828;
   border:1px solid #ef9a9a;
 }
-/* Anciens CSS nettoyés */
-.addr-section-label{ display:none; }
-.pays-required::after{ content:'*';color:var(--sakura);margin-left:2px;font-size:10px; }
 /* Ligne adresse dans la fiche hôtel */
 .hotel-adresse-structured{
   font-size:11px;color:var(--ink-muted);margin-top:3px;
@@ -987,7 +912,6 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
 .mob-escale-section{
   margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
 }
-#mob-escales-list{display:flex;flex-direction:column;gap:6px}
 .mob-escale-row{
   display:flex;gap:6px;align-items:center;
   background:var(--surface);border:1px solid var(--border);
@@ -1080,16 +1004,6 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
   border-radius:8px;padding:3px 9px;margin-top:8px;
 }
 
-/* ─ PASS cards ─ */
-.pass-cat-badge{
-  font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;
-  background:var(--surface-2);color:var(--ink-muted);border:1px solid var(--border);
-  margin-left:6px;
-}
-.pass-cat-badge.rail  {background:#e8f0f8;color:#2d5e8c;border-color:#b8d0eb}
-.pass-cat-badge.urban {background:#f0ebfc;color:#7c5cbf;border-color:#d5c8f5}
-.pass-cat-badge.vignette{background:#fdf3df;color:#c9921a;border-color:#f5d58a}
-
 /* ─ BUDGET ─ */
 .budget-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
 .metric-tile{background:var(--surface-2);border-radius:var(--r-md);padding:14px 16px;border:1px solid var(--border)}
@@ -1110,15 +1024,19 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
 .tx-list{display:flex;flex-direction:column}
 .tx-item{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
 .tx-item:last-child{border-bottom:none}
-.tx-icon{width:34px;height:34px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;border:1px solid var(--border)}
 .tx-body{flex:1;min-width:0}
 .tx-desc{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tx-cat{font-size:11px;color:var(--ink-muted);margin-top:1px}
 .tx-right{text-align:right;flex-shrink:0}
 .tx-amount{font-size:14px;font-weight:500;color:var(--ink)}
 .tx-date{font-size:11px;color:var(--ink-muted);margin-top:2px}
-.tx-delete{margin-left:6px;background:none;border:none;cursor:pointer;color:var(--ink-hint);font-size:14px;padding:2px 4px;border-radius:4px;transition:color .1s}
-.tx-delete:hover{color:#c0392b}
+.tx-doc,.tx-edit{margin-left:2px;background:none;border:none;cursor:pointer;color:var(--ink-hint);font-size:14px;padding:2px 4px;border-radius:4px;transition:color .1s}
+.tx-doc:hover,.tx-edit:hover{color:var(--sakura)}
+/* Confirmation de suppression (modale universelle confirmDelete) */
+.confirm-del-body{padding:6px 2px 10px}
+.confirm-del-msg{font-size:14px;color:var(--ink);line-height:1.5;margin:0}
+.confirm-doc-warn{display:flex;gap:8px;align-items:flex-start;margin-top:12px;padding:9px 11px;border-radius:8px;background:rgba(192,57,43,.10);border:1px solid rgba(192,57,43,.28);color:#c0392b;font-size:12.5px;line-height:1.45}
+.confirm-doc-warn svg{flex-shrink:0;margin-top:1px}
 .tx-devise-tag{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;margin-left:5px;vertical-align:middle}
 .tx-devise-tag.yen{background:#fdf3df;color:#c9921a}
 .tx-devise-tag.eur{background:#e8f0f8;color:#2d5e8c}
@@ -1195,7 +1113,6 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
   background: color-mix(in srgb, var(--sakura) 22%, var(--surface));
 }
 
-.conv-rate-big{font-size:32px;font-weight:600;letter-spacing:-.01em;line-height:1;margin-bottom:4px;color:var(--sakura-dark)}
 .conv-rate-sub{font-size:12px;color:var(--ink-muted);margin-bottom:16px}
 .conv-refresh-btn{padding:6px 14px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:20px;font-size:11px;font-family:'DM Sans',sans-serif;color:#fff;cursor:pointer;transition:background .15s}
 .conv-refresh-btn:hover{background:rgba(255,255,255,.25)}
@@ -1222,22 +1139,10 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
 .presets-wrap{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
 .preset-btn{padding:6px 13px;background:var(--surface-2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:500;color:var(--ink-muted);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s}
 .preset-btn:hover{background:var(--gold-light);border-color:var(--gold);color:var(--gold)}
-.ref-table-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
-.ref-table-row:last-child{border-bottom:none}
-.ref-yen{font-size:13px;font-weight:500;color:var(--ink)}
-.ref-eur{font-size:13px;color:var(--ink-muted)}
-
 /* ─ MISC ─ */
 .section-divider{display:flex;align-items:center;gap:10px;margin:20px 0 12px}
 .section-divider span{font-size:11px;font-weight:500;color:var(--ink-hint);text-transform:uppercase;letter-spacing:.1em;white-space:nowrap}
 .section-divider::before,.section-divider::after{content:'';flex:1;height:1px;background:var(--border)}
-.summary-bar{background:linear-gradient(135deg,#fceef1 0%,#fdf3df 50%,#e8f0f8 100%);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px 20px;margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap}
-.sum-item{display:flex;flex-direction:column;gap:2px}
-.sum-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted)}
-.sum-value{font-size:15px;font-weight:500;color:var(--ink)}
-.map-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;margin-bottom:14px;box-shadow:var(--shadow-sm)}
-.map-svg-wrap{background:#e8f4fc;padding:16px}
-.map-svg-wrap svg{width:100%;display:block}
 .map-legend{padding:12px 18px;display:flex;gap:16px;flex-wrap:wrap;border-top:1px solid var(--border);background:var(--surface)}
 .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-muted)}
 .legend-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
@@ -1267,17 +1172,9 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
   }
 }
 /* Padding latéral respectant les bords arrondis */
-.app-content, .app-nav{
+.app-content{
   padding-left:  max(0px, env(safe-area-inset-left,  0px));
   padding-right: max(0px, env(safe-area-inset-right, 0px));
-}
-/* Espace en bas pour le home indicator (iPhone sans bouton home) */
-.app-nav{
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-/* Home screen : contenu ne passe pas sous l'encoche */
-#home-screen{
-  padding-top: env(safe-area-inset-top, 0px);
 }
 /* Toasts : ne pas cacher le home indicator */
 #toast-container{
@@ -1287,17 +1184,6 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
 @media(max-width:639px){
   /* ─ Header mobile thumb-friendly ─ */
   .app-header{padding:0 12px;height:64px;gap:10px}
-  .header-div{display:none}
-  .app-header-stats{display:none !important}
-  .app-header-yume{font-size:20px}
-  .settings-btn{width:44px;height:44px;font-size:20px}
-  .trip-progress-wrap{max-width:none;flex:1}
-
-  /* ─ Nav bar bottom — thumb reach ─ */
-  .app-nav{display:flex !important;flex-wrap:nowrap !important;overflow-x:auto !important;overflow-y:hidden;padding:0;gap:0;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:fixed !important;bottom:0;left:0;right:0;padding-bottom:env(safe-area-inset-bottom,0px)}
-  .app-nav::-webkit-scrollbar{display:none}
-  .nav-item{flex-shrink:0 !important;flex-direction:column !important;min-height:56px;padding:8px 14px 6px;font-size:10px;gap:3px;white-space:nowrap}
-  .nav-item .nav-icon{font-size:20px;line-height:1}
 
   /* ─ Layout sections ─ */
   .section{padding:12px 10px}
@@ -1328,9 +1214,6 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
   /* ─ Vols ─ */
   .flight-meta{grid-template-columns:repeat(2,1fr);gap:8px}
   .airport-code{font-size:clamp(16px,5vw,20px);min-width:0}
-  .summary-bar{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 12px}
-  .sum-sep{display:none}
-  .sum-value{font-size:13px}
 
   /* ─ Trains ─ */
   .train-item{gap:8px;flex-wrap:wrap}
@@ -1340,13 +1223,11 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
   .train-route{font-size:13px}
 
   /* ─ Hébergements ─ */
-  .hotel-nights{display:none}
   .hotel-item{gap:8px;padding:10px}
 
   /* ─ Lieux ─ */
   .places-grid{grid-template-columns:repeat(2,1fr);gap:8px}
   .place-card{padding:10px 8px}
-  .place-emoji{font-size:18px}
   .place-name{font-size:11px}
 
   /* ─ Section top ─ */
@@ -1356,7 +1237,6 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
   /* ─ Convertisseur ─ */
   .conv-single-row{flex-direction:column;gap:8px;align-items:stretch}
   .conv-swap-center{align-self:center;transform:rotate(90deg)}
-  .conv-rate-big{font-size:clamp(20px,6vw,24px)}
   .conv-input{font-size:clamp(16px,5vw,20px)}
   .conv-box{padding:14px 12px}
 
@@ -1365,15 +1245,7 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
   .settings-validate-bar{margin-left:-14px;margin-right:-14px;padding-left:14px;padding-right:14px}
 
   /* ─ Home ─ */
-  .home-title{font-size:clamp(2rem,10vw,3rem)!important}
-  .home-sub{font-size:13px}
   .btn-new-trip{padding:12px 16px;font-size:13px;width:100%;justify-content:center}
-  .home-center-block{padding:0 8px;width:100%}
-  .home-hero-micro-stats{gap:14px}
-
-  /* ─ Carte ─ */
-  .lmap-wrap{height:300px}
-  .lmap-legend{flex-wrap:wrap;gap:8px;padding:8px 10px}
 }
 
 @media(min-width:480px) and (max-width:639px){
@@ -1391,10 +1263,6 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
   .places-grid{grid-template-columns:repeat(3,1fr)}
   .flight-meta{grid-template-columns:repeat(3,1fr)}
   .modal{max-width:500px}
-  .gmap-wrap{height:420px}
-
-  /* Carte accueil : cartes en 2 colonnes */
-  
 }
 
 /* ── Desktop (≥ 1024 px) ── */
@@ -1412,16 +1280,6 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
   /* Lieux : 4 colonnes */
   .places-grid{grid-template-columns:repeat(4,1fr);gap:12px}
   .place-card{padding:16px 14px}
-  .place-emoji{font-size:26px;margin-bottom:8px}
-
-  /* Carte Google Maps plus haute */
-  .gmap-wrap{height:520px}
-
-  /* Accueil : grille 2 colonnes pour les voyages */
-  .trips-section-wrap{max-width:680px}
-  
-  .home-title{font-size:clamp(2rem,8vw,4rem);font-size:13px}
-  .nav-item .nav-icon{font-size:16px}
 }
 
 /* ── Grand écran (≥ 1280 px) ── */
@@ -1430,13 +1288,7 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
   .places-grid{grid-template-columns:repeat(5,1fr)}
   .budget-grid{gap:16px}
   .metric-value{font-size:28px}
-  .gmap-wrap{height:600px}
 }
-
-#home-screen{position:relative;display:flex;flex-direction:column;min-height:100vh;overflow:hidden}
-#home-screen.hidden{display:none}
-#app-screen{display:none;flex-direction:column;min-height:100vh}
-#app-screen.visible{display:flex}
 
 #home-bg{
   position:absolute;inset:0;z-index:0;
@@ -1453,7 +1305,6 @@ body.bg-color-nature   #home-bg.no-image{background:#1a2e1e !important}
 body.bg-color-mer      #home-bg.no-image{background:#0a1e2e !important}
 body.bg-color-nuit     #home-bg.no-image{background:#0e0c08 !important}
 
-#app-screen{position:relative}
 #app-bg{
   position:fixed;inset:0;z-index:-1;
   background-size:cover;background-position:center;background-repeat:no-repeat;
@@ -1470,20 +1321,8 @@ body.has-bg-image .hotel-item,
 body.has-bg-image .pass-card,
 body.has-bg-image .place-card,
 body.has-bg-image .conv-box,
-body.has-bg-image .metric-tile,
-body.has-bg-image .lmap-country-panel,
-body.has-bg-image .lmap-legend,
-body.has-bg-image .lmap-search-bar{
+body.has-bg-image .metric-tile{
   background:var(--surface) !important;
-}
-:root[data-theme="nuit"] body.has-bg-image .card,
-:root[data-theme="nuit"] body.has-bg-image .add-form,
-:root[data-theme="nuit"] body.has-bg-image .hotel-item,
-:root[data-theme="nuit"] body.has-bg-image .pass-card,
-:root[data-theme="nuit"] body.has-bg-image .place-card,
-:root[data-theme="nuit"] body.has-bg-image .conv-box,
-:root[data-theme="nuit"] body.has-bg-image .metric-tile{
-  background:rgba(20,18,14,.85) !important;
 }
 
 .bg-section{margin-bottom:20px}
@@ -1495,7 +1334,6 @@ body.has-bg-image .lmap-search-bar{
   color:var(--ink-muted);text-align:center;transition:all .15s;
   display:flex;flex-direction:column;align-items:center;gap:4px
 }
-.bg-mode-btn .bm-icon{font-size:18px}
 .bg-mode-btn:hover{border-color:var(--sakura);color:var(--sakura);background:var(--sakura-light)}
 .bg-mode-btn.active{border-color:var(--sakura);background:var(--sakura-light);color:var(--sakura-dark)}
 .bg-image-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px;display:none}
@@ -1521,37 +1359,10 @@ body.has-bg-image .lmap-search-bar{
 .bg-img-card.active .bic-check{display:flex}
 .bg-img-card:hover{transform:scale(1.02);box-shadow:var(--shadow-md)}
 
-/* Tout le contenu passe au-dessus du fond */
-.home-header,
-.home-body{position:relative;z-index:1;width:100%;max-width:100%;padding:0 16px;box-sizing:border-box}
-
-.home-header{background:transparent;border-bottom:1px solid rgba(255,255,255,.12);padding:0 28px;height:64px;display:flex;align-items:center;gap:14px}
-.home-logo{font-family:'Noto Serif JP',serif;font-size:22px;font-weight:600;color:#fff;letter-spacing:.06em;text-shadow:0 1px 8px rgba(0,0,0,.3)}
-.yume-wordmark{font-family:'Noto Serif JP',serif;font-size:18px;font-weight:600;color:var(--sakura);letter-spacing:.08em;flex-shrink:0;white-space:nowrap}
-
-/* ── Héro centré ── */
-.home-body{max-width:640px;margin:0 auto;padding:0 24px 48px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center}
-.home-hero{margin-bottom:36px}
-.home-title{font-family:'Noto Serif JP',serif;font-size:clamp(2rem,8vw,4rem);font-weight:600;color:#fff;letter-spacing:.08em;line-height:1.05;margin-bottom:8px;text-shadow:0 3px 24px rgba(0,0,0,.5)}
-.home-title-sub{font-family:'Noto Serif JP',serif;font-size:clamp(0.75rem,2.5vw,1rem);font-weight:400;color:rgba(255,255,255,.55);letter-spacing:.2em;text-transform:uppercase;margin-bottom:14px}
-.home-sub{font-size:15px;color:rgba(255,255,255,.65);line-height:1.5}
-
 .btn-new-trip{display:inline-flex;align-items:center;gap:9px;padding:14px 28px;background:var(--sakura);color:white;border:none;border-radius:var(--r-lg);font-size:15px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .15s,transform .1s,box-shadow .15s;margin-bottom:36px;box-shadow:0 4px 20px rgba(232,116,138,.45)}
 .btn-new-trip:hover{background:var(--sakura-dark);box-shadow:0 6px 28px rgba(196,84,110,.55)}
 .btn-new-trip:active{transform:scale(.97)}
 .btn-new-trip .plus{font-size:22px;line-height:1}
-
-/* ── Liste des voyages (fond semi-transparent) ── */
-.trips-section-wrap{width:100%;max-width:520px;text-align:left}
-.trips-section-label{font-size:11px;font-weight:600;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.12em;margin-bottom:10px}
-
-.btn-trip-del{width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:transparent;cursor:pointer;font-size:13px;color:rgba(255,255,255,.45);display:flex;align-items:center;justify-content:center;transition:all .15s}
-.btn-trip-del:hover{border-color:#e74c3c;color:#e74c3c;background:rgba(231,76,60,.15)}
-
-.empty-trips{text-align:center;padding:40px 20px;color:rgba(255,255,255,.55)}
-.empty-trips-icon{font-size:40px;margin-bottom:12px}
-.empty-trips-title{font-size:16px;font-weight:500;color:rgba(255,255,255,.8);margin-bottom:6px}
-.empty-trips-sub{font-size:13px}
 
 /* Create trip modal */
 .create-modal{display:none;position:fixed;inset:0;background:rgba(26,26,46,.45);z-index:2000;align-items:center;justify-content:center;padding:16px}
@@ -1565,67 +1376,16 @@ body.has-bg-image .lmap-search-bar{
 .create-modal-input:focus{border-color:var(--sakura);background:var(--surface)}
 .create-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
 
-/* App header with back button */
-.app-header-back{width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--ink-muted);flex-shrink:0;transition:background .12s}
-.app-header-back:hover{background:var(--surface-2)}
-.app-header-trip-name{font-size:13px;font-weight:500;color:var(--ink-muted);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
-.app-header-yume{font-family:'Noto Serif JP',serif;font-size:26px;font-weight:600;color:var(--sakura);letter-spacing:.06em;flex-shrink:0;white-space:nowrap}
-
 /* ─ LEAFLET CARTE (OpenStreetMap) ─ */
 
 /* Override Leaflet z-index pour ne pas passer sous le header sticky */
 .leaflet-top,.leaflet-bottom{z-index:50!important}
 .leaflet-pane{z-index:40!important}
 
-/* Conteneur principal */
-.lmap-wrap{
-  position:relative;width:100%;height:460px;
-  border-radius:var(--r-lg);overflow:hidden;
-  border:1px solid var(--border);
-  background:var(--surface-3);margin-bottom:0
-}
 /* Fix : Leaflet a besoin d'un conteneur avec une hauteur définie */
 #leaflet-map{width:100%;height:100%}
 
-/* Responsive heights (reprend les mêmes breakpoints) */
-@media(max-width:479px){.lmap-wrap{height:300px}}
-@media(min-width:480px) and (max-width:639px){.lmap-wrap{height:360px}}
-@media(min-width:640px) and (max-width:1023px){.lmap-wrap{height:420px}}
-@media(min-width:1024px){.lmap-wrap{height:520px}}
-@media(min-width:1280px){.lmap-wrap{height:600px}}
-
-/* ── Panneau info pays sélectionné ── */
-.lmap-country-panel{
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--r-md);padding:12px 16px;margin-bottom:12px;
-  display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:50px
-}
-.lmap-country-flag{font-size:26px;flex-shrink:0;line-height:1}
-.lmap-country-name{font-size:16px;font-weight:600;color:var(--ink);flex:1}
-.lmap-country-none{font-size:13px;color:var(--ink-hint);font-style:italic}
-.lmap-country-actions{display:flex;gap:6px;flex-wrap:wrap}
-.lmap-country-badge{
-  display:inline-flex;align-items:center;gap:4px;
-  padding:4px 11px;border-radius:20px;font-size:11px;font-weight:600;
-  cursor:pointer;transition:all .14s;border:1px solid transparent
-}
-.lmap-country-badge.visited{background:#e4f5ec;color:#1e7a45;border-color:#b6e2c7}
-.lmap-country-badge.visited:hover{background:#cbf0d9}
-.lmap-country-badge.add-dest{background:var(--sakura-light);color:var(--sakura-dark);border-color:rgba(232,116,138,.3)}
-.lmap-country-badge.add-dest:hover{background:var(--sakura);color:#fff}
-
-/* ── Légende ── */
-.lmap-legend{
-  display:flex;gap:14px;flex-wrap:wrap;align-items:center;
-  padding:8px 14px;background:var(--surface);
-  border:1px solid var(--border);border-radius:var(--r-md);
-  margin-top:8px;margin-bottom:14px
-}
-.lmap-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-muted)}
-.lmap-legend-swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0;border:1px solid rgba(0,0,0,.1)}
-
 /* ── Pays sélectionnés liste ── */
-.lmap-selected-section{margin-top:6px}
 .lmap-selected-grid{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
 .lmap-selected-tag{
   display:inline-flex;align-items:center;gap:5px;
@@ -1642,18 +1402,6 @@ body.has-bg-image .lmap-search-bar{
 }
 .lmap-selected-tag .tag-del:hover{color:#c0392b}
 
-/* ── Barre de recherche pays ── */
-.lmap-search-bar{
-  display:flex;gap:8px;align-items:center;
-  padding:8px 12px;background:var(--surface);
-  border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:10px
-}
-.lmap-search-bar input{
-  flex:1;border:none;background:transparent;
-  font:400 13px 'DM Sans',sans-serif;color:var(--ink);outline:none
-}
-.lmap-search-icon{font-size:14px;color:var(--ink-hint);flex-shrink:0}
-
 /* Leaflet tooltip custom */
 .lmap-tooltip{
   background:var(--ink)!important;color:#fff!important;
@@ -1662,51 +1410,6 @@ body.has-bg-image .lmap-search-bar{
   padding:4px 10px!important;box-shadow:var(--shadow-md)!important
 }
 .leaflet-tooltip-top.lmap-tooltip::before{ border-top-color:var(--ink)!important }
-
-/* ── Dropdown voyages (home) ── */
-.trips-dropdown-wrap{position:relative;width:100%;max-width:min(520px,100%)}
-.trips-dropdown-btn{
-  width:100%;display:flex;align-items:center;gap:10px;
-  padding:13px 18px;background:rgba(255,255,255,.14);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  border:1.5px solid rgba(255,255,255,.25);border-radius:var(--r-lg);
-  cursor:pointer;font:500 14px 'DM Sans',sans-serif;color:#fff;
-  transition:all .18s;text-align:left
-}
-.trips-dropdown-btn:hover{background:rgba(255,255,255,.22);border-color:rgba(232,116,138,.6)}
-.trips-dropdown-btn .dd-emoji{font-size:20px;flex-shrink:0}
-.trips-dropdown-btn .dd-label{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.trips-dropdown-btn .dd-arrow{font-size:13px;color:rgba(255,255,255,.55);transition:transform .18s;flex-shrink:0}
-.trips-dropdown-btn.open .dd-arrow{transform:rotate(180deg)}
-.trips-dropdown-menu{
-  position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:300;
-  background:rgba(20,15,10,.88);backdrop-filter:blur(16px);
-  -webkit-backdrop-filter:blur(16px);
-  border:1px solid rgba(255,255,255,.18);border-radius:var(--r-lg);
-  box-shadow:0 8px 32px rgba(0,0,0,.45);overflow:hidden;
-  display:none;animation:fadeIn .15s ease
-}
-.trips-dropdown-menu.open{display:block}
-.trips-dd-item{
-  display:flex;align-items:center;gap:11px;
-  padding:12px 16px;cursor:pointer;
-  border-bottom:1px solid rgba(255,255,255,.07);
-  transition:background .13s
-}
-.trips-dd-item:last-child{border-bottom:none}
-.trips-dd-item:hover{background:rgba(232,116,138,.25)}
-.trips-dd-item .ddi-emoji{font-size:18px;flex-shrink:0}
-.trips-dd-item .ddi-body{flex:1;min-width:0}
-.trips-dd-item .ddi-name{font-size:13px;font-weight:500;color:#fff;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.trips-dd-item .ddi-meta{font-size:11px;color:rgba(255,255,255,.45);margin-top:2px}
-.trips-dd-item .ddi-del{
-  width:24px;height:24px;border-radius:50%;border:1px solid rgba(255,255,255,.2);
-  background:transparent;cursor:pointer;font-size:12px;color:rgba(255,255,255,.4);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .13s
-}
-.trips-dd-item .ddi-del:hover{border-color:#e74c3c;color:#e74c3c;background:rgba(231,76,60,.2)}
-.trips-dd-empty{padding:20px 16px;text-align:center;font-size:13px;color:rgba(255,255,255,.4);font-style:italic}
 
 /* ── Champ auto-calculé (feedback visuel) ── */
 .auto-hint{
@@ -1718,32 +1421,6 @@ input.auto-filled{
   border-color:var(--teal)!important;background:rgba(45,140,107,.06)!important;
   transition:border-color .25s,background .25s
 }
-
-.stats-bar{
-  background:rgba(10,12,26,.82);backdrop-filter:blur(14px);
-  border-bottom:1px solid rgba(255,255,255,.1);
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 24px;height:52px;color:rgba(255,255,255,.7);
-  flex-wrap:nowrap;gap:8px;position:relative;z-index:1
-}
-.stats-bar-left{display:flex;gap:24px;align-items:center}
-.stats-bar-center{position:absolute;left:50%;transform:translateX(-50%);
-  font-size:13px;font-weight:600;color:rgba(255,255,255,.9);
-  white-space:nowrap;display:flex;align-items:center;gap:6px;pointer-events:none}
-.stats-bar-right{display:flex;gap:24px;align-items:center}
-.stats-chip{display:flex;flex-direction:column;align-items:center;gap:1px;white-space:nowrap}
-.stats-chip-icon{font-size:20px;line-height:1}
-.stats-chip-count{font-size:20px;font-weight:700;color:#fff;line-height:1}
-.stats-chip-label{font-size:10px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.06em}
-/* App header stats (visible dans l'app) */
-.app-header-stats{
-  display:flex;align-items:center;gap:10px;flex-shrink:0;
-}
-.app-header-stats .hs{display:flex;flex-direction:column;align-items:center;gap:0;white-space:nowrap}
-.app-header-stats .hs .hs-icon{font-size:14px;line-height:1}
-.app-header-stats .hs b{color:var(--ink);font-weight:700;font-size:15px;line-height:1}
-.app-header-stats .hs .hs-lbl{font-size:9px;color:var(--ink-hint);text-transform:uppercase;letter-spacing:.04em}
-.app-header-dest{font-size:11px;color:var(--ink-muted);font-weight:400;display:flex;align-items:center;gap:4px}
 
 .country-input-wrap{position:relative}
 .country-suggestions{
@@ -1880,10 +1557,10 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
   border-radius:50%;cursor:pointer;font-size:13px;color:var(--ink);
   transition:all .12s;border:1px solid transparent
 }
-.cal-day:hover:not(.cal-empty):not(.cal-other){background:var(--sakura-light);color:var(--sakura)}
+.cal-day:hover:not(.cal-empty){background:var(--sakura-light);color:var(--sakura)}
 .cal-day.selected{background:var(--sakura);color:#fff}
 .cal-day.today{border-color:var(--sakura);color:var(--sakura);font-weight:600}
-.cal-day.cal-empty,.cal-day.cal-other{opacity:0;pointer-events:none}
+.cal-day.cal-empty{opacity:0;pointer-events:none}
 .cal-year-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
 .cal-year-btn{padding:8px 4px;text-align:center;border-radius:var(--r-sm);
   cursor:pointer;font-size:13px;transition:all .12s;border:1px solid transparent}
@@ -1990,16 +1667,6 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
 .ac-item:hover{background:var(--sakura-light);color:var(--sakura-dark)}
 .ac-item .ac-sub{font-size:11px;color:var(--ink-hint);margin-left:auto}
 
-/* ── Summary bar dynamique ── */
-.summary-bar{background:linear-gradient(135deg,#fceef1 0%,#fdf3df 50%,#e8f0f8 100%);
-  border:1px solid var(--border);border-radius:var(--r-lg);
-  padding:14px 20px;margin-bottom:16px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
-.sum-item{display:flex;flex-direction:column;gap:2px;min-width:0}
-.sum-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted)}
-.sum-value{font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sum-sep{width:1px;background:var(--border);align-self:stretch;flex-shrink:0}
-.sum-route{font-size:18px;font-weight:700;color:var(--sakura);letter-spacing:-.01em}
-
 /* ── Titre auto-généré ── */
 .vol-titre-preview{
   font-size:12px;color:var(--teal);font-weight:500;
@@ -2054,88 +1721,19 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
 
 /* Mini-carte destination supprimée */
 
-/* ── Masque de saisie heure (format __h__) ── */
-.heure-mask-wrap{position:relative;display:inline-flex;align-items:center}
-.heure-mask-display{
-  padding:9px 12px;font-size:15px;font-weight:600;letter-spacing:.08em;
-  font-family:'DM Sans',sans-serif;border:1px solid var(--border);
-  border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);
-  cursor:text;min-width:80px;text-align:center;user-select:none;
-  transition:border-color .15s;position:relative
-}
-.heure-mask-display:focus-within,
-.heure-mask-display.active{border-color:var(--sakura);background:var(--surface)}
-.heure-mask-display .seg{display:inline-block}
-.heure-mask-display .seg.editing{
-  background:var(--sakura);color:#fff;border-radius:3px;padding:0 2px
-}
-.heure-mask-input{
-  position:absolute;opacity:0;width:1px;height:1px;pointer-events:none
-}
-.heure-mask-clear{
-  margin-left:4px;background:none;border:none;cursor:pointer;
-  color:var(--ink-hint);font-size:13px;padding:2px 4px;
-  border-radius:4px;transition:color .1s;display:none
-}
-.heure-mask-wrap.has-value .heure-mask-clear{display:inline}
-.heure-mask-clear:hover{color:var(--sakura)}
-
 /* ── Calendrier vol : jours désactivés (minDate) ── */
 .cal-day.disabled{
   opacity:.25;pointer-events:none;cursor:not-allowed
 }
 .cal-nav-btn:disabled{opacity:.3;cursor:not-allowed}
 
-/* ── Barre de progression temporelle (header) ── */
-.trip-progress-wrap{
-  flex:1;display:flex;flex-direction:column;gap:3px;
-  min-width:0;max-width:280px;padding:0 4px;overflow:hidden
-}
-.trip-progress-label{
-  display:flex;justify-content:space-between;align-items:center;
-  font-size:10px;color:var(--ink-hint);white-space:nowrap;gap:6px
-}
-.trip-progress-label .tp-name{
-  font-size:13px;font-weight:600;color:var(--ink);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1
-}
-.trip-progress-label .tp-days{
-  font-size:10px;color:var(--ink-muted);flex-shrink:0;white-space:nowrap
-}
-.trip-progress-bar{
-  height:5px;border-radius:3px;
-  background:var(--surface-3);overflow:hidden;
-  position:relative
-}
-.trip-progress-fill{
-  height:100%;border-radius:2px;
-  background:linear-gradient(90deg,var(--sakura),var(--gold));
-  transition:width .6s ease;min-width:2px
-}
-.trip-progress-bar.departed .trip-progress-fill{
-  background:linear-gradient(90deg,var(--teal),#40c97a)
-}
 .tp-bon-voyage{
   font-size:11px;font-weight:600;color:var(--teal);
   white-space:nowrap;animation:pulse 2s infinite
 }
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
-@media(max-width:479px){
-  .trip-progress-wrap{max-width:140px}
-  .trip-progress-label .tp-name{font-size:11px}
-}
-@media(max-width:360px){.trip-progress-wrap{display:none}}
 
 /* ── Escales ── */
-.escales-toggle{
-  display:flex;align-items:center;gap:8px;
-  cursor:pointer;user-select:none;padding:6px 0;
-  font-size:13px;color:var(--ink-muted)
-}
-.escales-toggle input[type=checkbox]{
-  width:16px;height:16px;accent-color:var(--sakura);cursor:pointer;flex-shrink:0
-}
-.escales-toggle:hover{color:var(--ink)}
 .escales-section{
   display:none;border-left:3px solid var(--sakura-light);
   padding:10px 14px;margin-top:6px;border-radius:0 var(--r-sm) var(--r-sm) 0;
@@ -2161,9 +1759,6 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
 }
 .btn-add-escale:hover{border-color:var(--sakura);color:var(--sakura);background:var(--sakura-light)}
 
-/* ── Format HH:mm — couleur du séparateur ── */
-.heure-mask-display .sep{color:var(--ink-hint);font-weight:400;margin:0 1px}
-
 /* ── Sélecteurs HH/MM ── */
 /* hm triple-select CSS removed */
 .hm-duree-auto{
@@ -2176,33 +1771,14 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
 .pass-pdf-row{
   display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap
 }
-/* ── Budget devise dynamique ── */
-.tx-local-badge{
-  display:inline-flex;align-items:center;gap:4px;
-  padding:3px 8px;border-radius:10px;font-size:11px;font-weight:600;
-  background:var(--gold-light);color:var(--gold)
-}
-
 /* ── Sélecteur minutes 2-étapes ── */
 /* hm triple-select CSS removed */
-/* Indicateur visuel du champ heure complet */
-.hm-display-static{
-  display:inline-flex;align-items:center;gap:2px;
-  padding:6px 10px;background:var(--surface-2);border:1px solid var(--border);
-  border-radius:var(--r-sm);font-size:14px;font-weight:600;letter-spacing:.04em;
-  color:var(--ink);min-width:72px;justify-content:center
-}
-.hm-display-static .hm-h{color:var(--ink)}
-.hm-display-static .hm-sep{color:var(--ink-hint);font-weight:400;margin:0 1px}
-.hm-display-static .hm-m{color:var(--ink)}
-.hm-display-static.filled{border-color:var(--teal);background:rgba(45,140,107,.05)}
 /* Calendrier : indicateur mois voyage ancré */
 .cal-voyage-hint{
   text-align:center;font-size:10px;color:var(--sakura);
   padding:4px 0 2px;font-weight:500;letter-spacing:.02em
 }
 /* Jours hors période voyage */
-.cal-day.out-of-trip{opacity:.2;pointer-events:none;cursor:not-allowed}
 
 /* Thème Standard (défaut) — CONTRASTE RENFORCÉ (Phase H v3) :
    fond de page assombri (les cartes blanches ressortent), bordures
@@ -2419,21 +1995,18 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
 /* Application des variables sur les éléments principaux */
 body { background: var(--body-bg) !important; }
 .app-header { background: var(--nav-bg) !important; }
-.app-nav { background: var(--nav-bg) !important; }
-.nav-item.active { color: var(--nav-active) !important; border-bottom-color: var(--nav-active) !important; }
 .btn-primary { background: var(--btn-primary-bg) !important; color: var(--btn-primary-text) !important; }
-.trip-progress-fill { background: var(--progress-fill) !important; }
 
 /* Transition sur changement de thème — ciblé sur les éléments colorés uniquement */
-body, .app-header, .app-nav, .card, .add-form, .modal,
+body, .app-header, .card, .add-form, .modal,
 .place-card, .loc-card, .mob-item, .hotel-item, .pass-card,
 .section, .btn-primary, .btn-ghost, .btn-edit-mode,
-.nav-item, .vsn-item, .filter-btn, .badge,
+.vsn-item, .filter-btn, .badge,
 input, select, textarea {
   transition: background-color .25s ease, color .18s ease, border-color .18s ease !important;
 }
 /* Désactiver la transition sur les nav-items (scintillement au swipe) */
-.app-nav .nav-item, #voyage-subsection-nav .vsn-item { transition: none !important; }
+#voyage-subsection-nav .vsn-item { transition: none !important; }
 /* Désactiver sur les transformations (slide / swipe) */
 #voyage-sections, #tab-belt { transition: none !important; }
 
@@ -2468,30 +2041,11 @@ input, select, textarea {
    mais le JS l'utilise encore pour identifier la section courante */
 .section.active{ /* noop — visibility gérée par le belt */ }
 
-/* Désactiver les anciennes animations */
-.section.slide-in-right,
-.section.slide-in-left,
-.section.slide-out-left,
-.section.slide-out-right{
-  animation:none !important;
-}
-
 /* ── Ajuste l'app-content pour avoir une hauteur minimale correcte ── */
 .app-content{
   /* Le belt s'aligne sur le contenu de la section visible */
   display:block;
 }
-
-.settings-btn {
-  width: 48px; height: 48px; border-radius: 50%;
-  border: 1.5px solid var(--border);
-  background: var(--surface-2); color: var(--ink-muted);
-  cursor: pointer; display: flex; align-items: center;
-  justify-content: center; font-size: 22px; flex-shrink: 0;
-  margin-left: auto;
-  transition: all .18s !important;
-}
-.settings-btn:hover { border-color: var(--sakura); color: var(--sakura); background: var(--sakura-light); transform: rotate(45deg); }
 
 .settings-overlay {
   position: fixed; inset: 0; z-index: 1000;
@@ -2573,72 +2127,8 @@ input, select, textarea {
 .theme-vertdark .tc-swatch:nth-child(2) { background:#243029 }
 .theme-vertdark .tc-swatch:nth-child(3) { background:#19231d }
 .theme-vertdark .tc-swatch:nth-child(4) { background:#0f1712 }
-.theme-nature .tc-swatch:nth-child(1)   { background:#3d7a4a }
-.theme-nature .tc-swatch:nth-child(2)   { background:#8a6a2a }
-.theme-nature .tc-swatch:nth-child(3)   { background:#2d6b4e }
-.theme-nature .tc-swatch:nth-child(4)   { background:#1a2e1e }
-.theme-mer .tc-swatch:nth-child(1)      { background:#1a6b8a }
-.theme-mer .tc-swatch:nth-child(2)      { background:#1a8a7a }
-.theme-mer .tc-swatch:nth-child(3)      { background:#0e7a8c }
-.theme-mer .tc-swatch:nth-child(4)      { background:#0a1e2e }
-.theme-nuit .tc-swatch:nth-child(1)     { background:#f0c040 }
-.theme-nuit .tc-swatch:nth-child(2)     { background:#e8a820 }
-.theme-nuit .tc-swatch:nth-child(3)     { background:#4ac0a0 }
-.theme-nuit .tc-swatch:nth-child(4)     { background:#1e1c18 }
-.theme-indigo .tc-swatch:nth-child(1)   { background:#3b4f9e }
-.theme-indigo .tc-swatch:nth-child(2)   { background:#9a6a1c }
-.theme-indigo .tc-swatch:nth-child(3)   { background:#1f7a8c }
-.theme-indigo .tc-swatch:nth-child(4)   { background:#10131f }
-.theme-terre .tc-swatch:nth-child(1)    { background:#c8482e }
-.theme-terre .tc-swatch:nth-child(2)    { background:#b07818 }
-.theme-terre .tc-swatch:nth-child(3)    { background:#5a7a4a }
-.theme-terre .tc-swatch:nth-child(4)    { background:#1f1410 }
-.theme-encre .tc-swatch:nth-child(1)    { background:#7d8ce0 }
-.theme-encre .tc-swatch:nth-child(2)    { background:#d8a850 }
-.theme-encre .tc-swatch:nth-child(3)    { background:#4fb8c4 }
-.theme-encre .tc-swatch:nth-child(4)    { background:#15172a }
 /* Fonds de prévisualisation thème */
 .theme-standard { background: #fceef1 }
-.theme-nature   { background: #e8f5e9 }
-.theme-mer      { background: #e3f4f8 }
-.theme-nuit     { background: #28261e }
-.theme-nuit .tc-name { color: #e8e0d0 }
-
-/* ── Hero stats (page d'accueil) ── */
-.hero-stats{
-  display:flex;align-items:center;justify-content:center;gap:0;
-  background:rgba(255,255,255,.1);backdrop-filter:blur(10px);
-  border:1px solid rgba(255,255,255,.18);border-radius:20px;
-  padding:16px 36px;margin:20px auto 0;
-  width:fit-content;max-width:90vw
-}
-.hero-stat{
-  display:flex;flex-direction:column;align-items:center;gap:4px;
-  padding:0 28px
-}
-.hero-stat-icon{font-size:28px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
-.hero-stat-count{
-  font-family:'DM Sans',sans-serif;font-size:3rem;font-weight:700;
-  color:#fff;line-height:1;text-shadow:0 2px 12px rgba(0,0,0,.4);
-  letter-spacing:-.02em
-}
-.hero-stat-label{
-  font-size:11px;color:rgba(255,255,255,.65);text-transform:uppercase;
-  letter-spacing:.1em;font-weight:500
-}
-.hero-stat-divider{
-  width:1px;height:60px;background:rgba(255,255,255,.25);flex-shrink:0
-}
-@media(max-width:479px){
-  .hero-stats{padding:12px 20px}
-  .hero-stat{padding:0 18px}
-  .hero-stat-count{font-size:2.2rem}
-  .hero-stat-icon{font-size:22px}
-}
-/* Supprimer la home-header (plus utilisée) */
-.home-header{display:none!important}
-/* La stats-bar de l'app est toujours sur la page voyage */
-#home-stats-bar{display:none}
 
 #toast-container{
   position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
@@ -2711,9 +2201,6 @@ input, select, textarea {
 .app-header{
   background:var(--surface) !important;
 }
-.app-nav{
-  background:var(--surface) !important;
-}
 .settings-panel{
   backdrop-filter:blur(12px) !important;
   -webkit-backdrop-filter:blur(12px) !important;
@@ -2721,11 +2208,10 @@ input, select, textarea {
 }
 /* Dark mode glass */
 :root[data-theme="nuit"] .app-header{background:rgba(30,28,24,.85) !important}
-:root[data-theme="nuit"] .app-nav{background:rgba(30,28,24,.78) !important}
 :root[data-theme="nuit"] .settings-panel{background:rgba(30,28,24,.96) !important}
 
 .btn-primary,.btn-ghost,.btn-edit-mode,.btn-new-trip,
-.nav-item,.theme-card,.trips-dropdown-btn{
+.theme-card{
   transition:transform .12s ease, box-shadow .12s ease,
              background .15s ease, color .15s ease,
              border-color .15s ease !important;
@@ -2736,8 +2222,6 @@ input, select, textarea {
 .btn-ghost:active   {transform:scale(.97)!important}
 .btn-new-trip:hover {transform:translateY(-2px) scale(1.015)!important;box-shadow:0 8px 24px rgba(0,0,0,.25)!important}
 .btn-new-trip:active{transform:scale(.98)!important}
-.nav-item:hover     {transform:translateY(-1px)}
-.nav-item:active    {transform:scale(.95)}
 .theme-card:active  {transform:scale(.97)!important}
 
 .data-btn{
@@ -2776,19 +2260,6 @@ input, select, textarea {
 .toggle-switch input:checked + .toggle-slider{background:var(--sakura);border-color:var(--sakura)}
 .toggle-switch input:checked + .toggle-slider:before{transform:translateX(18px)}
 
-.home-hero{display:flex;flex-direction:column;align-items:center;margin-bottom:32px}
-.home-hero-micro-stats{
-  display:flex;gap:24px;align-items:center;margin-bottom:14px
-}
-.hms-chip{
-  display:flex;align-items:center;gap:5px;
-  font-size:12px;color:rgba(255,255,255,.55);font-weight:500;letter-spacing:.04em
-}
-.hms-chip span:first-child{font-size:16px}
-.hms-chip b{color:rgba(255,255,255,.85);font-size:13px}
-.hms-sep{width:1px;height:16px;background:rgba(255,255,255,.2)}
-/* Cacher l'ancien bloc hero-stats (3rem) désormais remplacé */
-.hero-stats{display:none!important}
 
 .donut-wrap{
   display:flex;align-items:center;gap:20px;
@@ -2838,24 +2309,6 @@ input, select, textarea {
   background:rgba(26,24,20,.93) !important;
   border-color:rgba(240,192,64,.1) !important;
 }
-
-@media(max-width:479px){
-  .home-hero-micro-stats{gap:14px}
-  .hms-chip{font-size:11px}
-}
-
-.home-body{
-  justify-content:center;
-  gap:0;
-}
-.home-center-block{
-  display:flex;flex-direction:column;align-items:center;
-  width:100%;max-width:520px;
-}
-.home-center-block .trips-dropdown-wrap{width:100%}
-.home-center-block .btn-new-trip{width:100%;justify-content:center}
-/* Garde l'espace entre le héro et le bloc central */
-.home-hero{margin-bottom:40px}
 
 .settings-validate-bar{
   display:flex;gap:10px;justify-content:flex-end;align-items:center;
@@ -2954,11 +2407,6 @@ input, select, textarea {
 }
 .spa-page.active{display:flex;flex-direction:column}
 #page-futur,#page-profil{background:var(--surface-2)}
-.spa-placeholder{padding:60px 24px;text-align:center}
-.spa-placeholder .sp-icon{font-size:52px;margin-bottom:20px}
-.spa-placeholder .sp-title{font-size:18px;font-weight:500;color:var(--ink);margin-bottom:10px}
-.spa-placeholder .sp-sub{font-size:13px;color:var(--ink-muted);line-height:1.7}
-
 #home-topbar{
   display:none;            /* bandeau blanc supprimé — remplacé par #home-mini-stats */
   align-items:center;
@@ -3035,7 +2483,6 @@ input, select, textarea {
    Masqués en desktop (le bandeau de stats desktop reste #home-stats-grid). */
 #home-mini-stats{ display:none; }
 .home-section-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-#trips-edit-toggle{ display:none; }
 #home-new-link{ display:none; }
 @media (max-width:1023px){
   /* Nouveau design : stats déplacées vers Profil, hero remplace les pills */
@@ -3052,7 +2499,6 @@ input, select, textarea {
   .home-section-label{ font-size:19px; font-weight:700; }
   /* Stylo/poubelle masqués par défaut, révélés par appui long (.is-editing) */
   .voy-actions{ display:none !important; }
-  body.trips-editing .voy-actions{ display:flex !important; }
 }
 
 /* Cartes de voyage — style premium */
@@ -3337,8 +2783,6 @@ input, select, textarea {
   animation:modalSlideUp .24s cubic-bezier(.34,1.2,.64,1);
 }
 .settings-modal-box::before{ display:none; }
-/* Ancien panel inline — supprimé */
-#profil-settings-panel{display:none!important}
 .psp-label{
   font-size:12px;font-weight:600;color:var(--ink-hint);
   text-transform:uppercase;letter-spacing:.08em;
@@ -3438,18 +2882,6 @@ input, select, textarea {
   transition:width .4s ease;
 }
 
-/* Section navigation — style pill slider */
-#voyage-section-nav{
-  background:var(--surface);
-  border-bottom:1px solid var(--border);
-  display:flex;flex-wrap:nowrap;
-  justify-content:space-around;
-  overflow-x:auto;overflow-y:hidden;
-  scrollbar-width:none;-webkit-overflow-scrolling:touch;
-  padding:4px 0;flex-shrink:0;
-  -webkit-tap-highlight-color:transparent;
-}
-#voyage-section-nav::-webkit-scrollbar{display:none}
 .vsn-item{
   flex:1;display:flex;flex-direction:column;align-items:center;
   justify-content:center;
@@ -3570,81 +3002,6 @@ input, select, textarea {
      traverse directement les 3 parties). */
   .depl-switch{ display:none !important; }
 }
-
-/* ── Cards premium pour tous les items ── */
-/* Vols */
-.flight-card{
-  background:var(--surface);border-radius:16px;
-  padding:16px;margin-bottom:10px;
-  box-shadow:0 2px 10px rgba(26,26,46,.07),0 1px 3px rgba(26,26,46,.04);
-  position:relative;overflow:hidden;
-}
-.flight-card::before{
-  content:'';position:absolute;left:0;top:0;bottom:0;
-  width:3px;background:var(--sakura);
-}
-.flight-route{
-  display:flex;align-items:center;gap:12px;margin-bottom:10px;
-}
-.fc-airport{text-align:center;flex-shrink:0;min-width:52px}
-.fc-code{font-size:22px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
-.fc-city{font-size:10px;color:var(--ink-muted);margin-top:1px}
-.fc-arrow{
-  flex:1;display:flex;align-items:center;gap:6px;
-  color:var(--ink-hint);font-size:11px;
-}
-.fc-arrow-line{
-  flex:1;height:1px;background:var(--border);position:relative;
-}
-.fc-arrow-line::after{
-  content:'';position:absolute;right:-4px;top:-4px;
-  border:4px solid transparent;border-left:6px solid var(--border);
-}
-.fc-arrow-plane{font-size:14px}
-.flight-meta-row{
-  display:flex;gap:8px;flex-wrap:wrap;
-}
-.fmr-chip{
-  font-size:11px;color:var(--ink-muted);
-  background:var(--surface-2);border-radius:6px;
-  padding:3px 8px;
-}
-.fmr-chip strong{color:var(--ink);font-weight:600}
-
-/* Trains */
-.train-card{
-  background:var(--surface);border-radius:16px;
-  padding:16px;margin-bottom:10px;
-  box-shadow:0 2px 10px rgba(26,26,46,.07),0 1px 3px rgba(26,26,46,.04);
-  display:flex;gap:14px;align-items:flex-start;
-}
-.train-card-icon{
-  width:40px;height:40px;border-radius:12px;
-  background:var(--surface-2);flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
-}
-.train-card-icon svg{width:20px;height:20px;stroke:var(--sakura);fill:none;stroke-width:2;stroke-linecap:round}
-.train-card-body{flex:1;min-width:0}
-.train-card-route{font-size:15px;font-weight:600;color:var(--ink)}
-.train-card-meta{font-size:12px;color:var(--ink-muted);margin-top:3px}
-
-/* Hébergements */
-.hotel-card{
-  background:var(--surface);border-radius:16px;
-  padding:16px;margin-bottom:10px;
-  box-shadow:0 2px 10px rgba(26,26,46,.07),0 1px 3px rgba(26,26,46,.04);
-  display:flex;gap:14px;align-items:flex-start;
-}
-.hotel-card-icon{
-  width:44px;height:44px;border-radius:12px;
-  background:var(--sakura-light);flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
-  font-size:22px;
-}
-.hotel-card-body{flex:1;min-width:0}
-.hotel-card-name{font-size:15px;font-weight:600;color:var(--ink)}
-.hotel-card-meta{font-size:12px;color:var(--ink-muted);margin-top:3px}
-.hotel-card-dates{font-size:11px;color:var(--sakura);font-weight:500;margin-top:4px}
 
 /* Empty state redesign */
 .empty-state{
@@ -3799,9 +3156,7 @@ html, body,
 .settings-panel,
 .country-suggestions,
 .ac-list,
-.trips-dropdown-menu,
 .modal,
-.app-nav,
 #voyage-group-nav,
 #voyage-subsection-nav {
   scrollbar-width: none;           /* Firefox */
@@ -3817,9 +3172,7 @@ body::-webkit-scrollbar,
 .settings-panel::-webkit-scrollbar,
 .country-suggestions::-webkit-scrollbar,
 .ac-list::-webkit-scrollbar,
-.trips-dropdown-menu::-webkit-scrollbar,
 .modal::-webkit-scrollbar,
-.app-nav::-webkit-scrollbar,
 #voyage-group-nav::-webkit-scrollbar,
 #voyage-subsection-nav::-webkit-scrollbar { display: none; }
 
@@ -4069,21 +3422,6 @@ body::-webkit-scrollbar,
 }
 .tmap-info-btn:hover{border-color:var(--brand);color:var(--brand);background:var(--sakura-light)}
 
-/* Marqueurs Leaflet custom */
-.tripmap-marker-hotel{
-  width:28px;height:28px;border-radius:50%;
-  background:#F08080;border:2.5px solid white;
-  box-shadow:0 2px 8px rgba(0,0,0,.25);
-  display:flex;align-items:center;justify-content:center;
-  font-size:13px;cursor:pointer;
-}
-.tripmap-marker-lieu{
-  width:28px;height:28px;border-radius:50%;
-  background:#5C6BC0;border:2.5px solid white;
-  box-shadow:0 2px 8px rgba(0,0,0,.25);
-  display:flex;align-items:center;justify-content:center;
-  font-size:13px;cursor:pointer;
-}
 .tripmap-loading-bar{
   position:absolute;top:0;left:0;right:0;height:3px;
   background:linear-gradient(90deg,var(--sakura) 0%,#fceef1 60%,var(--sakura) 100%);
@@ -4191,51 +3529,6 @@ body::-webkit-scrollbar,
 .create-modal-box::-webkit-scrollbar{display:none}
 #new-trip-region:focus{border-color:var(--sakura)}
 
-/* Badges V / VA sur les cartes */
-
-/* Destination tag sur les cartes */
-
-/* Carte en mode édition */
-
-  15% {transform:rotate(-1.5deg)translateX(-3px)}
-  30% {transform:rotate(1.5deg) translateX(3px)}
-  45% {transform:rotate(-1.2deg)translateX(-2px)}
-  60% {transform:rotate(1.2deg) translateX(2px)}
-  75% {transform:rotate(-.8deg) translateX(-1px)}
-  90% {transform:rotate(.8deg)  translateX(1px)}
-  100%{transform:rotate(0deg)   translateX(0)}
-
-/* Boutons d'action en mode édition */
-
-.vca-btn.edit  {background:var(--surface);color:var(--ink);border:1.5px solid var(--border)}
-
-/* Overlay d'édition rapide sur la carte */
-.vce-row{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-}
-.vce-label{font-size:11px;color:var(--ink-muted);font-weight:500;min-width:64px}
-.vce-btn{
-  padding:5px 10px;border-radius:8px;
-  border:1.5px solid var(--border);background:var(--surface-2);
-  font-family:'DM Sans',sans-serif;font-size:12px;color:var(--ink-muted);
-  cursor:pointer;transition:all .12s;
-}
-.vce-btn.active{
-  border-color:var(--sakura);background:var(--sakura-light);
-  color:var(--sakura);font-weight:600;
-}
-.vce-btn.active.va{
-  border-color:#3478f6;background:#e6f1fb;color:#3478f6;
-}
-.vce-emoji-btn{
-  font-size:22px;padding:4px 8px;border-radius:8px;
-  border:1.5px solid var(--border);background:var(--surface-2);
-  cursor:pointer;transition:all .12s;
-}
-.vce-emoji-btn.active{
-  border-color:var(--sakura);background:var(--sakura-light);
-}
-
 /* Backdrop pour fermer le mode édition */
 #edit-mode-backdrop{
   display:none;position:fixed;inset:0;z-index:50;
@@ -4243,49 +3536,6 @@ body::-webkit-scrollbar,
   pointer-events:none !important;
 }
 #edit-mode-backdrop.active{display:block;pointer-events:none !important;}
-
-/* Shake iOS */
-
-/* Carte de voyage — flux vertical naturel, JAMAIS position:absolute */
-
-/* Accent couleur gauche */
-
-/* Emoji */
-
-/* Info textuelle */
-
-/* Chevron */
-
-/* Point voyage actif */
-
-/* ── Boutons d'action (long-press) ── */
-/* Conteneur flottant AU-DESSUS de la carte */
-
-.vca-btn.edit  { background:var(--surface);color:var(--ink);border:1.5px solid var(--border); }
-
-/* Mode édition : shake + bordure rose */
-
-/* Badge V / VA */
-
-/* Conteneur liste — colonne verticale TOUJOURS */
-
-/* Carte de voyage */
-
-/* Emoji dans une pastille */
-
-/* Texte central */
-
-/* Point "voyage actif" */
-
-/* Badge V / VA */
-
-/* ── Mode édition (long-press) ── */
-
-/* Boutons flottants (hors flux, position:absolute dans le parent relative) */
-
-.voy-card.editing 
-
-/* État vide */
 
 /* ═══════════════════════════════════════════════════
    TRIP CARDS — design 3 colonnes typographique v7
@@ -4390,10 +3640,6 @@ body::-webkit-scrollbar,
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.voy-col-dates-text .date-sep {
-  color: #aaa;
-  padding: 0 3px;
-}
 
 /* COLONNE DROITE — Statut */
 .voy-col-status {
@@ -4429,30 +3675,6 @@ body::-webkit-scrollbar,
 .home-empty-title { font-size: 16px; font-weight: 600; color: var(--ink); }
 .home-empty-sub   { font-size: 13px; color: var(--ink-muted); line-height: 1.6; }
 
-/* ── Éléments conservés mais non affichés (compat) ── */
-.voy-card-emoji   { display: none !important; }
-.voy-card-chevron { display: none !important; }
-.voy-card-active-dot { display: none !important; }
-.voy-group-badge  { display: none !important; }
-.voy-type-badge   { display: none !important; }
-
-/* ── Mode édition ── */
-
-.voy-card.editing 
-
-/* État vide */
-.home-empty-state {
-  text-align: center;
-  padding: 48px 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-.home-empty-icon  { font-size: 52px; }
-.home-empty-title { font-size: 16px; font-weight: 600; color: var(--ink); }
-.home-empty-sub   { font-size: 13px; color: var(--ink-muted); line-height: 1.6; }
-
 /* Tremblement iOS */
 @keyframes cardShake {
   0%,100% { transform: rotate(0deg) translateX(0); }
@@ -4468,26 +3690,6 @@ body::-webkit-scrollbar,
   outline-offset: 2px;
   animation: cardShake .4s ease;
 }
-
-/* Bouton STYLO — haut gauche */
-
-/* Bouton CROIX — haut droite */
-
-.voy-card.is-editing .edit-btn,
-.voy-card.is-editing 
-
-/* ── Bouton de suppression — version iPhone-safe ── */
-
-.voy-card.is-editing 
-
-.edit-btn,
-
-.voy-card.is-editing .edit-btn,
-.voy-card.is-editing 
-
-
-/* ── Boutons d'édition (long-press) ── */
-.voy-card { position: relative; overflow: visible; }
 
 .delete-btn {
   position: absolute;
@@ -4844,13 +4046,6 @@ body::-webkit-scrollbar,
     color:var(--ink-hint);
   }
   #voyage-content #voyage-subsection-nav .vnav-sep + .vnav-title{ padding-top:2px; }
-  #voyage-content #voyage-subsection-nav .vsn-head{
-    display:block;
-    padding:2px 10px 10px;
-    font-size:10.5px; font-weight:600;
-    letter-spacing:.13em; text-transform:uppercase;
-    color:var(--ink-hint);
-  }
   #voyage-content #voyage-subsection-nav .vsn-item{
     flex:0 0 auto;
     flex-direction:row;
@@ -5314,10 +4509,6 @@ body::-webkit-scrollbar,
   padding:2px 9px; border-radius:20px;
   letter-spacing:.01em; white-space:nowrap;
 }
-.vlb-ongoing{ background:var(--sakura); color:#fff; }
-.vlb-upcoming{ background:var(--sakura-light); color:var(--brand); }
-.vlb-past{ background:rgba(125,125,148,.16); color:var(--ink-hint); }
-
 /* ── Cartes voyage : format compact mobile (vignette + chevron) ── */
 .voy-meta-line{ display:none; }
 .voy-chevron{ display:none; }
@@ -5354,11 +4545,11 @@ body::-webkit-scrollbar,
 /* ── Micro-transitions (sobres) ── */
 .voy-card{ transition:transform .14s ease, box-shadow .18s ease; }
 .voy-card:not(.is-editing):active{ transform:scale(.985); }
-.add-btn, .voy-act-btn, .tmap-act, .vmn-sub, .vmn-sec, .vmn-part,
-.depl-seg, .lgs-btn, .tmap-filter, #btn-new-voyage, #trips-edit-toggle{
+.voy-act-btn, .tmap-act, .vmn-sub, .vmn-sec, .vmn-part,
+.depl-seg, .lgs-btn, .tmap-filter, #btn-new-voyage{
   transition:transform .12s ease, background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
-.add-btn:active, .voy-act-btn:active, .tmap-act:active,
+.voy-act-btn:active, .tmap-act:active,
 #btn-new-voyage:active, .vmn-sub:active{ transform:scale(.95); }
 @media (prefers-reduced-motion: reduce){
   *{ transition:none !important; animation:none !important; scroll-behavior:auto !important; }
@@ -5426,16 +4617,6 @@ body::-webkit-scrollbar,
     border-radius:14px 0 0 14px;
     position:relative;
   }
-  .voy-thumb-badge{
-    position:absolute; left:8px; bottom:8px;
-    font-size:9px; font-weight:600;
-    padding:2px 7px; border-radius:9px;
-    background:rgba(255,255,255,.92); color:#14141f;
-  }
-  .vtb-ongoing{ background:#2f6b3c; color:#fff; }
-  .vtb-upcoming{ background:rgba(255,255,255,.92); color:#14141f; }
-  .vtb-past{ background:rgba(255,255,255,.85); color:#5a5a72; }
-
   /* Compteurs : sur une seule ligne compacte sous le nom */
   .voy-counters{
     display:flex; gap:16px; margin-top:7px; flex-wrap:nowrap;
@@ -5667,7 +4848,6 @@ body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
 #voyage-subsection-nav::-webkit-scrollbar{ display:none; }
 /* En-tête de groupe + icônes : desktop uniquement (réaffichés en @media).
    En mobile la nav reste une bande d'onglets texte (V2/V3 validée). */
-#voyage-subsection-nav .vsn-head{ display:none; }
 #voyage-subsection-nav .vsn-item .vsn-ico{ display:none; }
 /* Séparateur entre blocs (Préparer / Suivre / Argent) — trait vertical en mobile */
 #voyage-subsection-nav .vnav-sep{
@@ -5693,13 +4873,6 @@ body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
 #voyage-subsection-nav .vsn-item.active{
   background:transparent; color:var(--brand);
   border-bottom-color:var(--brand); font-weight:600;
-}
-#voyage-subsection-nav .vsn-badge{
-  position:absolute; top:7px; right:8px;
-  min-width:15px; height:15px; border-radius:8px;
-  background:#c0392b; color:#fff; font-size:9px; font-weight:700;
-  display:none; align-items:center; justify-content:center;
-  padding:0 4px; border:2px solid var(--surface-2);
 }
 #voyage-subsection-nav #vsn-slider{
   position:absolute; bottom:0; left:0; height:2.5px;
@@ -5879,6 +5052,14 @@ body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
 .doc-row-body{ flex:1; min-width:0; }
 .doc-row-name{ font-size:15px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .doc-row-sub{ font-size:12.5px; color:var(--ink-muted); margin-top:2px; }
+/* Pastille « voir la pièce jointe » d'une ligne document */
+.doc-row-pdf{
+  flex-shrink:0; display:inline-flex; align-items:center; justify-content:center;
+  width:30px; height:30px; border-radius:9px; padding:0; cursor:pointer;
+  background:var(--surface-2); border:1px solid var(--border); color:var(--ink-muted);
+  transition:color .12s, border-color .12s;
+}
+.doc-row-pdf:active{ color:var(--sakura); border-color:var(--sakura); }
 
 /* Badges de validité */
 .doc-badge{
@@ -5958,7 +5139,6 @@ body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
   border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--ink);
 }
 .doc-field-lbl{ font-size:13px; color:var(--ink-muted); font-weight:600; }
-.doc-file-tag{ font-size:12px; color:var(--sakura); font-weight:600; }
 .doc-del-btn{ color:#d24646 !important; }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -6043,6 +5223,38 @@ body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
   cursor:pointer; -webkit-tap-highlight-color:transparent; transition:transform .12s;
 }
 .tx-add-toggle:active{ transform:scale(.99); }
+/* Bouton export factures — action secondaire SOLIDE (distincte du bouton d'ajout pointillé) */
+.tx-export-btn{
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  width:100%; box-sizing:border-box; padding:11px; margin:2px 0 10px;
+  border:1px solid var(--border); border-radius:12px;
+  background:var(--surface-2); color:var(--ink);
+  font-family:'DM Sans',sans-serif; font-size:13.5px; font-weight:600;
+  cursor:pointer; -webkit-tap-highlight-color:transparent; transition:background .12s,border-color .12s;
+}
+.tx-export-btn:hover{ background:var(--surface-1); border-color:var(--border-strong,var(--ink-hint)); }
+.tx-export-btn:active{ transform:scale(.99); }
+.tx-export-btn svg{ color:var(--teal,var(--sakura)); }
+/* Modale export factures */
+.exp-presets{ display:flex; gap:8px; margin:4px 0 14px; }
+.exp-preset-btn{ flex:1; padding:9px 10px; border:1px solid var(--border); border-radius:9px; background:var(--surface-2); color:var(--ink); font-family:'DM Sans',sans-serif; font-size:13px; font-weight:600; cursor:pointer; transition:background .12s,border-color .12s; }
+.exp-preset-btn:hover{ background:var(--sakura-light); border-color:var(--sakura); color:var(--sakura); }
+.exp-preset-hint{ font-size:11.5px; color:var(--ink-hint); margin:-8px 0 12px; }
+.exp-cat{ border:1px solid var(--border); border-radius:10px; margin-bottom:9px; overflow:hidden; }
+.exp-cat-head{ display:flex; align-items:center; gap:9px; padding:10px 12px; background:var(--surface-1); cursor:pointer; }
+.exp-cat-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.exp-cat-name{ font-size:13.5px; font-weight:700; color:var(--ink); flex:1; }
+.exp-cat-total{ font-size:12px; color:var(--ink-muted); font-weight:600; }
+.exp-fac-row{ display:flex; align-items:center; gap:9px; padding:9px 12px 9px 30px; border-top:1px solid var(--border); cursor:pointer; }
+.exp-fac-main{ flex:1; min-width:0; }
+.exp-fac-desc{ font-size:13px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.exp-fac-meta{ font-size:11px; color:var(--ink-hint); margin-top:1px; }
+.exp-fac-amount{ font-size:12.5px; font-weight:600; color:var(--ink-muted); flex-shrink:0; }
+.exp-chk{ width:18px; height:18px; flex-shrink:0; cursor:pointer; accent-color:var(--sakura); }
+.exp-empty{ text-align:center; padding:28px 16px; color:var(--ink-muted); font-size:13.5px; }
+.exp-footer{ display:flex; align-items:center; gap:10px; margin-top:14px; padding-top:12px; border-top:1px solid var(--border); }
+.exp-count{ font-size:12.5px; color:var(--ink-muted); font-weight:600; flex:1; }
+.exp-body{ max-height:52vh; overflow-y:auto; margin:0 -2px; padding:0 2px; }
 
 /* ══════════════════════════════════════════════════════════════════
    LIEUX — cartes refondues (puce SVG, badge Visité, tag catégorie)
@@ -6076,6 +5288,13 @@ body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
 #tab-lieux .place-sub{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:3px; }
 #tab-lieux .place-city{ font-size:12px; color:var(--ink-muted); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #tab-lieux .lieu-cat-badge{ flex:none; margin-top:0; }
+
+/* Tri par glisser — lieux */
+#tab-lieux .places-grid{position:relative}
+.drag-handle{display:flex;align-items:center;padding:0 8px 0 0;cursor:grab;color:var(--ink-hint);flex-shrink:0;touch-action:none;-webkit-user-select:none;user-select:none}
+.drag-handle:active{cursor:grabbing}
+.drag-insert-line{position:absolute;left:8px;right:8px;height:2px;background:var(--sakura);border-radius:2px;pointer-events:none;display:none;z-index:10}
+#tab-lieux .places-grid.is-grouped .drag-handle{display:none}
 
 /* ══════════════════════════════════════════════════════════════════
    CARTE mobile — vue normale : la carte remplit le haut, la liste des

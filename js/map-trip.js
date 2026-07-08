@@ -162,6 +162,16 @@ function _drainQueue() {
 }
 
 
+// ── Base locale aéroports : code IATA → {lat,lng} (offline, instantané) ──
+// Préféré AVANT le géocodage réseau : « Taipei TPE » se pose à l'aéroport
+// TPE (Taoyuan) et non au centre-ville. Repli géocodage si code inconnu.
+function _airportGps(code) {
+  if (!code || typeof AIRPORTS_GPS === 'undefined') return null;
+  var g = AIRPORTS_GPS[String(code).toUpperCase().trim()];
+  return (g && g.length === 2) ? { lat: g[0], lng: g[1] } : null;
+}
+
+
 // ── §3 QUERIES DE GÉOCODAGE ───────────────────────────────────────────
 function _hotelQuery(h) {
   if (h.fullAddress && h.fullAddress.trim()) return h.fullAddress;
@@ -438,23 +448,53 @@ function _drawRoutes() {
                   covoiturage:'Cov.', metro:'Métro', taxi:'Taxi' };
     var label = (icons[type] || '—') + ' — ' + m.dep + ' → ' + m.arr;
 
-    if (type === 'vol' && m.segment2 && (m.segment2.dep || m.segment2.arr)) {
-      // Vol avec escale : deux arcs
-      var escale = m.segment2.dep || '';
-      var final  = m.segment2.arr || m.arr;
-      _geocode(m.dep, function (r1) {
-        if (!r1) return;
-        _geocode(escale, function (r2) {
-          if (!r2) return;
-          _drawSingleRoute(r1.lat, r1.lng, r2.lat, r2.lng, 'vol',
-            'Vol — ' + m.dep + ' → ' + escale + ' (tronçon 1)', m.id);
-          _geocode(final, function (r3) {
-            if (!r3) return;
-            _drawSingleRoute(r2.lat, r2.lng, r3.lat, r3.lng, 'vol',
-              'Vol — ' + escale + ' → ' + final + ' (tronçon 2)', m.id);
+    if (type === 'vol' && typeof _volChain === 'function') {
+      // Tout vol (direct ou à escales) : chaîne origine → escale1 → … → destination.
+      // N escales ⇒ N+1 arcs géodésiques chaînés (direct ⇒ 1 arc).
+      // Résolution de chaque aéroport, par ordre de priorité :
+      //   1. base locale AIRPORTS_GPS[code] (précis, instantané, corrige aussi
+      //      les vols existants dont les coords étaient au centre-ville) ;
+      //   2. lat/lng gelés sur l'aéroport (donnée figée à la sélection) ;
+      //   3. géocodage réseau du nom (repli pour un code inconnu).
+      (function () {
+        var ch     = _volChain(m);
+        var pts    = ch.airports;
+        var coords = new Array(pts.length);
+        var pending = pts.length;
+        var done = function () {
+          for (var k = 0; k < coords.length - 1; k++) {
+            var a = coords[k], b = coords[k + 1];
+            // Fallback : un aéroport sans coordonnées (donnée ancienne ou saisie
+            // sans autocomplétion) → on SAUTE l'arc, jamais de tracé vers (0,0).
+            if (!a || !b) continue;
+            var lbl = 'Vol — ' + (pts[k].name || pts[k].code || '?') + ' → ' +
+                      (pts[k + 1].name || pts[k + 1].code || '?') + ' (tronçon ' + (k + 1) + ')';
+            _drawSingleRoute(a.lat, a.lng, b.lat, b.lng, 'vol', lbl, m.id);
+          }
+        };
+        pts.forEach(function (ap, idx) {
+          // 1. Base locale par code IATA (prioritaire : écrase un vieux centre-ville)
+          var gps = _airportGps(ap.code);
+          if (gps) {
+            coords[idx] = gps;
+            if (--pending === 0) done();
+            return;
+          }
+          // 2. Coordonnées gelées valides sur l'aéroport
+          if (typeof ap.lat === 'number' && typeof ap.lng === 'number' && !(ap.lat === 0 && ap.lng === 0)) {
+            coords[idx] = { lat: ap.lat, lng: ap.lng };
+            if (--pending === 0) done();
+            return;
+          }
+          // 3. Repli : géocodage réseau du nom (ou du code si pas de nom)
+          var q = ap.name || ap.code || '';
+          if (!q) { coords[idx] = null; if (--pending === 0) done(); return; }
+          _geocode(q, function (r) {
+            coords[idx] = (r && typeof r.lat === 'number') ? { lat: r.lat, lng: r.lng } : null;
+            if (--pending === 0) done();
           });
         });
-      });
+      })();
     } else if (type === 'train' && m.depLat && m.depLng && m.arrLat && m.arrLng) {
       // Trains avec coordonnées : tracer la ligne directe IMMÉDIATEMENT,
       // puis tenter de superposer le vrai tracé ferroviaire Overpass.

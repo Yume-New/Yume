@@ -67,6 +67,20 @@ function _sortKey(dateStr, heureStr) {
   return ts;
 }
 
+// Résolution des dates HÔTEL : leur format est "JJ mois" SANS année (ex.
+// "09 août"), non géré par _parseDate. On réutilise _hotelDateObj (app.js)
+// qui déduit l'année du voyage actif. Fallback sur _parseDate.
+function _hotelDayObj(str){
+  if(typeof _hotelDateObj === 'function'){ var d = _hotelDateObj(str); if(d) return d; }
+  return _parseDate(str);
+}
+function _sortKeyFromObj(d, heureStr){
+  if(!d) return Infinity;
+  var ts = d.getTime();
+  if(heureStr){ var m = heureStr.match(/^(\d{1,2}):(\d{2})$/); if(m) ts += (+m[1]*3600 + +m[2]*60)*1000; }
+  return ts;
+}
+
 // Formate un timestamp en "Lun. 14 juil. 2025"
 var _JOURS = ['Dim.','Lun.','Mar.','Mer.','Jeu.','Ven.','Sam.'];
 var _MOIS  = ['jan.','fév.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
@@ -84,7 +98,7 @@ function _fmtHeure(h) {
 // ── §3 AGRÉGATEUR D'ÉVÉNEMENTS ────────────────────────────────────────
 // Produit un tableau plat d'événements triés par date + heure.
 // Chaque événement : { sortKey, date, dateObj, category, type, title,
-//                      sub, badge, icon, color, id, extra }
+//                      sub, badge, icon, color, id, extras[] }
 // ─────────────────────────────────────────────────────────────────────
 function _buildEvents() {
   var events = [];
@@ -106,13 +120,21 @@ function _buildEvents() {
 
     var badge = m.statut || '';
 
-    // Escale rich → sous-événement
-    var extra = null;
-    if (type === 'vol' && m.segment2 && m.segment2.dep) {
-      extra = {
-        label: 'Escale : ' + (m.segment2.dep || '') + (m.segment2.dureeEscale ? ' (' + m.segment2.dureeEscale + ')' : ''),
-        icon: _ICONS['vol']
-      };
+    // Escales → un sous-événement chronologique par escale (N escales).
+    var extras = [];
+    var isEsc = (type === 'vol' && typeof _isEscaleVol === 'function' && _isEscaleVol(m));
+    if (isEsc && typeof _volChain === 'function') {
+      var ch = _volChain(m);
+      // Titre = origine → destination FINALE (robuste même pour segment2 non migré)
+      var o = ch.airports[0], f = ch.airports[ch.airports.length - 1];
+      title = (o.name || o.code || '—') + ' → ' + (f.name || f.code || '—');
+      ch.escales.forEach(function (e, i) {
+        var nm = e.aeroport || (ch.airports[i + 1] && (ch.airports[i + 1].name || ch.airports[i + 1].code)) || '';
+        extras.push({
+          label: 'Escale : ' + nm + (e.dureeEscale ? ' (' + e.dureeEscale + ')' : ''),
+          icon: _ICONS['vol']
+        });
+      });
     }
 
     events.push({
@@ -127,21 +149,23 @@ function _buildEvents() {
       icon: _ICONS[type] || _ICONS.vol,
       color: _COLORS[type] || _COLORS.vol,
       id: m.id,
-      extra: extra,
+      extras: extras,
     });
   });
 
   // ── Hôtels : check-in et check-out comme événements séparés ──────
   _hot.forEach(function (h) {
-    var ci = h.checkin  ? _sortKey(h.checkin,  '14:00') : Infinity;
-    var co = h.checkout ? _sortKey(h.checkout, '11:00') : Infinity;
+    var ciObj = h.checkin  ? _hotelDayObj(h.checkin)  : null;
+    var coObj = h.checkout ? _hotelDayObj(h.checkout) : null;
+    var ci = _sortKeyFromObj(ciObj, '14:00');
+    var co = _sortKeyFromObj(coObj, '11:00');
     var addr = h.ville || (h.fullAddress ? h.fullAddress.split(',')[0] : '');
 
     if (h.checkin) {
       events.push({
         sortKey: ci,
         date: h.checkin,
-        dateObj: _parseDate(h.checkin),
+        dateObj: ciObj,
         category: 'hotel',
         type: 'checkin',
         title: h.nom || '—',
@@ -150,14 +174,14 @@ function _buildEvents() {
         icon: _ICONS.checkin,
         color: _COLORS.hotel,
         id: h.id,
-        extra: null,
+        extras: [],
       });
     }
     if (h.checkout) {
       events.push({
         sortKey: co,
         date: h.checkout,
-        dateObj: _parseDate(h.checkout),
+        dateObj: coObj,
         category: 'hotel',
         type: 'checkout',
         title: h.nom || '—',
@@ -166,7 +190,7 @@ function _buildEvents() {
         icon: _ICONS.checkout,
         color: _COLORS.checkout,
         id: h.id,
-        extra: null,
+        extras: [],
       });
     }
   });
@@ -188,7 +212,7 @@ function _buildEvents() {
       icon: _ICONS.lieu,
       color: _COLORS.lieu,
       id: l.id,
-      extra: null,
+      extras: [],
     });
   });
 
@@ -207,7 +231,7 @@ function _buildEvents() {
       icon: _ICONS.pass,
       color: _COLORS.pass,
       id: p.id,
-      extra: null,
+      extras: [],
     });
   });
 
@@ -240,8 +264,10 @@ function _eventCard(ev){
   var badgeHtml = ev.badge
     ? '<span class="tl-badge" style="background:'+ev.color+'22;color:'+ev.color+';border-color:'+ev.color+'44">'+ev.badge+'</span>'
     : '';
-  var extraHtml = ev.extra
-    ? '<div class="tl-extra"><span class="tl-extra-icon">'+ev.extra.icon+'</span><span class="tl-extra-label">'+ev.extra.label+'</span></div>'
+  var extraHtml = (ev.extras && ev.extras.length)
+    ? ev.extras.map(function(x){
+        return '<div class="tl-extra"><span class="tl-extra-icon">'+x.icon+'</span><span class="tl-extra-label">'+x.label+'</span></div>';
+      }).join('')
     : '';
   var visitedClass  = (ev.type==='lieu' && ev.badge==='Visité') ? ' tl-card--visited' : '';
   var checkoutClass = (ev.type==='checkout') ? ' tl-card--checkout' : '';

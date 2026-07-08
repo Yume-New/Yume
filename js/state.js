@@ -340,6 +340,7 @@ function snapshotCurrentTrip() {
 
   // ── Persistance ──────────────────────────────────────────────────
   saveAllTrips();
+  if (typeof savePdfStore === 'function') savePdfStore();
 
   // ── Notification des abonnés ─────────────────────────────────────
   // map-trip.js s'abonne à cet événement pour rafraîchir la carte
