@@ -19,6 +19,17 @@
 // ── Migration au démarrage ───────────────────────────────────────────
 // Normalise les données des voyages chargés depuis localStorage.
 // Appelé dans _initApp() après loadAllTrips().
+
+// Convertit une date ISO "AAAA-MM-JJ" (ancien champ natif l.jour) vers la
+// convention projet "JJ/MM/AAAA". Si déjà au format FR ou non reconnu,
+// renvoie la valeur telle quelle (idempotent, non destructif).
+function _isoToFrDate(v){
+  if(!v) return '';
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v).trim());
+  if(!m) return v;
+  return m[3] + '/' + m[2] + '/' + m[1];
+}
+
 function _migrateAllTrips(){
   Object.keys(allTrips||{}).forEach(function(tid){
     var t = allTrips[tid];
@@ -43,6 +54,17 @@ function _migrateAllTrips(){
     // renomme seulement le pointeur. Une fois `pdfId` posé, no-op.
     if(t.documents) t.documents.forEach(function(d){
       if(d && d.file && !d.pdfId){ d.pdfId = d.file; delete d.file; }
+    });
+    // Migration date de visite lieu : ancien champ natif `jour` (ISO
+    // "AAAA-MM-JJ") → `dateVisite` (convention projet "JJ/MM/AAAA").
+    // Idempotente : une fois `dateVisite` posé, no-op.
+    if(t.lieux) t.lieux.forEach(function(l){
+      if(l && l.jour && !l.dateVisite){ l.dateVisite = _isoToFrDate(l.jour); delete l.jour; }
+    });
+    // Liens web : garantir liens=[] sur lieux / mobilités / hôtels
+    // (non destructif : ne touche jamais un tableau déjà présent).
+    [t.lieux, t.mobilites, t.hotels].forEach(function(arr){
+      if(arr) arr.forEach(function(o){ if(o && !Array.isArray(o.liens)) o.liens = []; });
     });
   });
 }
@@ -134,6 +156,126 @@ function _collectAddrFields(prefix){
     cp:    g(prefix+'-cp'),
     rue:   g(prefix+'-rue')
   };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LIENS WEB — pièces jointes URL sur lieu / transport / hébergement.
+// Modèle : obj.liens = [{label, url}] (tableau, [] par défaut). Un jeu de
+// helpers unique sert la création, l'édition et l'accès depuis la carte.
+// ══════════════════════════════════════════════════════════════════
+var _LIEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+
+// Ajoute https:// si aucun schéma n'est fourni. '' si vide.
+function _lienNormalizeUrl(u){
+  u = String(u==null?'':u).trim();
+  if(!u) return '';
+  if(!/^[a-zA-Z][a-zA-Z0-9+.\-]*:\/\//.test(u)) u = 'https://' + u;
+  return u;
+}
+// Bloc de formulaire (création + édition) — conteneur + bouton d'ajout.
+function _liensBlockHtml(prefix){
+  return '<div class="liens-block">'
+    + '<div class="liens-block-label">Liens</div>'
+    + '<div id="'+prefix+'-liens-list" class="liens-list"></div>'
+    + '<button type="button" class="btn-add-lien" onclick="_lienAddRow(\''+prefix+'\')">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un lien</button>'
+  + '</div>';
+}
+function _lienAddRow(prefix, label, url){
+  var list = document.getElementById(prefix+'-liens-list');
+  if(!list) return;
+  var row = document.createElement('div');
+  row.className = 'lien-row';
+  row.innerHTML =
+    '<input type="text" class="lien-label" placeholder="Libellé (optionnel)" value="'+_tlEsc(label||'')+'"/>'
+    + '<input type="url" class="lien-url" placeholder="https://…" value="'+_tlEsc(url||'')+'"/>'
+    + '<button type="button" class="lien-del" title="Supprimer ce lien" onclick="_lienDelRow(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+  list.appendChild(row);
+}
+function _lienDelRow(btn){
+  var row = btn && btn.parentNode;
+  if(row && row.parentNode) row.parentNode.removeChild(row);
+}
+// Pré-remplit les lignes (édition) — vide d'abord la liste.
+function _lienFillRows(prefix, liens){
+  var list = document.getElementById(prefix+'-liens-list');
+  if(!list) return;
+  list.innerHTML = '';
+  (liens||[]).forEach(function(L){ if(L) _lienAddRow(prefix, L.label, L.url); });
+}
+// Lit les lignes → [{label,url}]. URL normalisée+requise (lignes vides ignorées).
+function _lienReadRows(prefix){
+  var list = document.getElementById(prefix+'-liens-list');
+  if(!list) return [];
+  var out = [];
+  var rows = list.querySelectorAll('.lien-row');
+  for(var i=0;i<rows.length;i++){
+    var lab = (rows[i].querySelector('.lien-label')||{}).value || '';
+    var url = _lienNormalizeUrl((rows[i].querySelector('.lien-url')||{}).value || '');
+    if(url) out.push({ label:(String(lab).trim()||'Lien'), url:url });
+  }
+  return out;
+}
+// Icône d'accès sur une carte (chaîne vide si aucun lien). IDs quotés via data-*.
+function _liensIconHtml(cat, id, liens){
+  if(!liens || !liens.length) return '';
+  var lbl = liens.length>1 ? (liens.length+' liens') : 'Ouvrir le lien';
+  return '<button class="card-lien-btn" type="button" data-liens-cat="'+cat+'" data-liens-id="'+_tlEsc(String(id))+'" title="'+lbl+'" aria-label="'+lbl+'">'+_LIEN_ICON+'</button>';
+}
+// Résout le tableau liens d'un item selon sa catégorie.
+function _liensForItem(cat, id){
+  var arr = (cat==='lieu')  ? (typeof lieux!=='undefined'?lieux:[])
+          : (cat==='hotel') ? (typeof hotels!=='undefined'?hotels:[])
+          : (typeof mobilites!=='undefined'?mobilites:[]); // 'transport'
+  for(var i=0;i<arr.length;i++){ if(String(arr[i].id)===String(id)) return arr[i].liens || []; }
+  return [];
+}
+// Accès depuis la carte : 1 lien → ouverture directe ; N → popover.
+function openLiens(cat, id, anchorEl){
+  var liens = _liensForItem(cat, id);
+  if(!liens.length) return;
+  if(liens.length === 1){ _lienOpenUrl(liens[0].url); return; }
+  _lienShowPopover(anchorEl, liens);
+}
+function _lienOpenUrl(url){
+  url = _lienNormalizeUrl(url);
+  if(!url) return;
+  var w = window.open(url, '_blank');
+  if(w){ try{ w.opener = null; }catch(e){} } // équivaut à rel=noopener
+}
+function _lienClosePopover(){
+  var pop = document.getElementById('_liens-popover');
+  if(pop && pop.parentNode) pop.parentNode.removeChild(pop);
+  document.removeEventListener('click', _lienOutsideClose, true);
+}
+function _lienOutsideClose(e){
+  var pop = document.getElementById('_liens-popover');
+  if(pop && !pop.contains(e.target)) _lienClosePopover();
+}
+function _lienShowPopover(anchor, liens){
+  _lienClosePopover();
+  if(!anchor || !anchor.getBoundingClientRect) return;
+  var pop = document.createElement('div');
+  pop.className = 'liens-popover';
+  pop.id = '_liens-popover';
+  var html = '';
+  for(var i=0;i<liens.length;i++){
+    // <a target=_blank rel=noopener> : navigation native en nouvel onglet.
+    html += '<a class="liens-pop-item" href="'+_tlEsc(_lienNormalizeUrl(liens[i].url))+'" target="_blank" rel="noopener noreferrer">'
+      + _LIEN_ICON + '<span>'+_tlEsc(liens[i].label||'Lien')+'</span></a>';
+  }
+  pop.innerHTML = html;
+  document.body.appendChild(pop);
+  var r = anchor.getBoundingClientRect();
+  pop.style.top = (r.bottom + (window.pageYOffset||0) + 4) + 'px';
+  var left = r.left + (window.pageXOffset||0);
+  pop.style.left = Math.max(8, Math.min(left, window.innerWidth - pop.offsetWidth - 8)) + 'px';
+  // Fermer après clic sur un lien (la navigation native suit son cours).
+  pop.addEventListener('click', function(e){
+    if(e.target.closest && e.target.closest('.liens-pop-item')) setTimeout(_lienClosePopover, 0);
+  });
+  // Fermeture au clic extérieur (différée pour ne pas capter le clic d'ouverture).
+  setTimeout(function(){ document.addEventListener('click', _lienOutsideClose, true); }, 0);
 }
 
 // ── Sync champ ville du bloc adresse → champ legacy + filtre lieux ──
@@ -257,6 +399,7 @@ function _resetFormFields(ctx){
   var b=document.getElementById(p+'-verify-btn');if(b)b.className='btn-verify-addr';
   var mr=document.getElementById(p+'-magic-result');if(mr){mr.className='magic-addr-result';mr.textContent='';}
   var pb=document.getElementById(ctx==='hotel'?'hotel-pdf-badge':'lieu-pdf-badge');if(pb)pb.innerHTML='';
+  if(typeof _lienFillRows==='function') _lienFillRows(p, []);
   if(ctx==='hotel'){
     ['hint-ht-ci','hint-ht-co','hint-ht-nuits'].forEach(function(id){var e=document.getElementById(id);if(e)e.classList.remove('visible');});
     ['ht-ci','ht-co','ht-nuits'].forEach(function(id){var e=document.getElementById(id);if(e)e.classList.remove('auto-filled');});
@@ -387,6 +530,9 @@ function verifierAdresse(context){
   }[context];
   if(!cfg)return;
 
+  // Vérifier une adresse = vouloir une localisation → annule un retrait en attente.
+  var _gr=document.getElementById(cfg.prefix+'-geo-remove'); if(_gr) _gr.value='0';
+
   var btn=document.getElementById(cfg.btnId),res=document.getElementById(cfg.resId);
   if(!btn||!res)return;
 
@@ -447,6 +593,19 @@ function verifierAdresse(context){
       }
     }
   );
+}
+
+// Retrait explicite de la localisation (modales d'édition lieu/hôtel).
+// Vide les champs adresse structurés + pose le drapeau `<prefix>-geo-remove`
+// à '1' ; la validation (saveLieu/saveHotel) posera obj.geoOff=true, videra
+// fullAddress/adresse et lat/lng → plus aucun pin (même pas par repli nom).
+function _addrRemoveGeo(prefix){
+  ['-rue','-cp','-pays'].forEach(function(s){ var e=document.getElementById(prefix+s); if(e) e.value=''; });
+  var flag=document.getElementById(prefix+'-geo-remove'); if(flag) flag.value='1';
+  var res=document.getElementById(prefix+'-addr-result');
+  if(res){ res.className='addr-result-badge visible ko'; res.textContent='Localisation retirée — validez pour appliquer.'; }
+  var btn=document.getElementById(prefix+'-verify-btn'); if(btn) btn.className='btn-verify-addr';
+  if(typeof showToast==='function') showToast('Localisation retirée', 'info');
 }
 
 // Migration rétrocompat : si un item a l'ancien champ 'adresse' mais pas les nouveaux,
@@ -865,7 +1024,10 @@ window.goToMapPin = function(type, id){
 
 
 var _currentSection = 'mobilite';
-var SECTION_ORDER = ['pass','mobilite','locations','hotels','lieux','documents','timeline','budget','convertir'];
+// ORDRE DU BELT = source de vérité pour le scroll horizontal (index → position).
+// DOIT rester aligné avec : (a) l'ordre DOM des <section> dans #tab-belt,
+// (b) l'ordre des sous-vues Déplacement _DEPL. Ordre : Transport · Pass · Location…
+var SECTION_ORDER = ['mobilite','pass','locations','hotels','lieux','documents','timeline','budget','convertir'];
 
 // Navigation À PLAT (Design C) : une seule barre verticale à gauche,
 // toutes les destinations visibles, séparées en 3 blocs par usage —
@@ -888,7 +1050,7 @@ var _lastNavId = null;      // dernière sous-section nav (optimisation rebuild)
 // La Carte (#page-futur) devient le 4e groupe, intégré au voyage.
 // ══════════════════════════════════════════════════════════════════════
 var SECTION_GROUPS = {
-  logistique: { label:'Logistique', subs:['pass','mobilite','locations','hotels','documents'] },
+  logistique: { label:'Logistique', subs:['mobilite','pass','locations','hotels','documents'] },
   activites:  { label:'Activités',  subs:['lieux','timeline'] },
   finance:    { label:'Finance',    subs:['budget','convertir'] },
   carte:      { label:'Carte',      subs:[] }
@@ -1257,8 +1419,8 @@ function _adaptSectionsForTrip(tid){
 
   // Mettre à jour SECTION_ORDER dynamiquement
   SECTION_ORDER = isFrance
-    ? ['pass','mobilite','locations','hotels','lieux','documents','timeline','budget']
-    : ['pass','mobilite','locations','hotels','lieux','documents','timeline','budget','convertir'];
+    ? ['mobilite','pass','locations','hotels','lieux','documents','timeline','budget']
+    : ['mobilite','pass','locations','hotels','lieux','documents','timeline','budget','convertir'];
 
   // Reconstruire les sous-onglets du groupe courant (le filtrage France
   // retire « Convertir » de Finance).
@@ -1340,6 +1502,62 @@ function _adaptSectionsForTrip(tid){
     document.addEventListener('DOMContentLoaded', initSwipeSync);
   } else {
     initSwipeSync();
+  }
+})();
+
+// ── Swipe interne au bloc « Suivi » : Planning → Carte ────────────────
+// Planning (#tab-timeline) vit dans le belt à plat ; son voisin physique
+// de droite est « Budget ». Un swipe horizontal natif y fuyait donc vers
+// Budget (onglet du haut) au lieu de rester dans Suivi. On intercepte le
+// swipe horizontal SUR la section Planning : on bloque le scroll-snap du
+// belt (preventDefault) et on route vers la Carte, qui est une vue séparée
+// (#voyage-map-host) hors belt. Le retour Carte → Planning se fait au tap
+// sur le sous-toggle (goToSection('timeline')) : on n'intercepte pas le
+// tactile de la carte pour préserver le pan/déplacement Leaflet.
+(function initSuiviSwipe(){
+  function init(){
+    var pl = document.getElementById('tab-timeline');
+    if(!pl) return;
+    var x0 = 0, y0 = 0, horiz = false, tracking = false;
+    var TH_HORIZ = 8;   // seuil px pour reconnaître l'intention horizontale
+    var TH_GO    = 45;  // seuil px pour valider la navigation
+
+    pl.addEventListener('touchstart', function(e){
+      if(e.touches.length !== 1){ tracking = false; return; }
+      tracking = true; horiz = false;
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+    }, {passive:true});
+
+    pl.addEventListener('touchmove', function(e){
+      if(!tracking) return;
+      var dx = e.touches[0].clientX - x0;
+      var dy = e.touches[0].clientY - y0;
+      // Intention horizontale nette → on prend la main sur le geste.
+      if(!horiz && Math.abs(dx) > TH_HORIZ && Math.abs(dx) > Math.abs(dy) * 1.3){
+        horiz = true;
+      }
+      // Bloque le scroll-snap natif du belt (sinon fuite vers Budget).
+      // Le scroll vertical du Planning reste libre (on ne bloque pas).
+      if(horiz && e.cancelable){ e.preventDefault(); }
+    }, {passive:false});
+
+    pl.addEventListener('touchend', function(e){
+      if(!tracking) return;
+      tracking = false;
+      if(!horiz) return;
+      var dx = e.changedTouches[0].clientX - x0;
+      // Depuis Planning, tout swipe horizontal franc reste dans Suivi et
+      // révèle la Carte (jamais Budget ni Organiser).
+      if(Math.abs(dx) >= TH_GO && typeof goToSection === 'function'){
+        goToSection('carte', null);
+        if(typeof _buildMobileNav === 'function') _buildMobileNav();
+      }
+    }, {passive:true});
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
 })();
 
@@ -3338,7 +3556,7 @@ function exportTripPDF(){
   (t.lieux||[]).forEach(function(l){
     lieuxHTML += '<div class="pdf-row"><div class="pdf-row-main">'
       + '<b>'+esc(l.nom||'Lieu')+'</b>'
-      + (l.jour?'<span class="pdf-ref">'+fmtD(l.jour.split('-').reverse().join('/'))+'</span>':'')
+      + (l.dateVisite?'<span class="pdf-ref">'+fmtD(l.dateVisite)+'</span>':'')
       + '</div><div class="pdf-row-sub">'
       + [l.ville?esc(l.ville):'', l.categorie?esc(l.categorie):''].filter(Boolean).join(' \u00b7 ')
       + (l.fullAddress||l.adresse?('<br>'+esc(l.fullAddress||l.adresse)):'')
@@ -4618,6 +4836,13 @@ function _initItemDelegation(){
     if(pin && root.contains(pin)){
       e.stopPropagation();
       if(typeof goToMapPin === 'function') goToMapPin(pin.getAttribute('data-mappin-cat'), pin.getAttribute('data-mappin-id'));
+      return;
+    }
+    // 2bis) Icône « liens » → ouvre l'URL (1) ou un popover (N)
+    var lienBtn = e.target.closest && e.target.closest('[data-liens-cat]');
+    if(lienBtn && root.contains(lienBtn)){
+      e.stopPropagation();
+      if(typeof openLiens === 'function') openLiens(lienBtn.getAttribute('data-liens-cat'), lienBtn.getAttribute('data-liens-id'), lienBtn);
       return;
     }
     // 3) Carte cliquable → modale détail (le garde-fou interne de
@@ -6358,6 +6583,7 @@ function renderMobilite(){
           +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+(statutOk?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ':'')+m.statut+'</span>'
           +(m.note?'<span class="mob-tag">'+m.note+'</span>':'')
           +passCoverHtml
+          +_liensIconHtml('transport', m.id, m.liens)
         +'</div>';
     } else {
       // Vol direct ou autre transport
@@ -6367,6 +6593,7 @@ function renderMobilite(){
           +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+(statutOk?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ':'')+m.statut+'</span>'
           +(m.note?'<span class="mob-tag">'+m.note+'</span>':'')
           +passCoverHtml
+          +_liensIconHtml('transport', m.id, m.liens)
         +'</div>';
     }
 
@@ -6451,6 +6678,7 @@ function addMobilite(){
     compagnie:_v('mob-compagnie'),
     numero:_v('mob-numero'),
     note:(document.getElementById('mob-note')||{}).value||'',
+    liens:_lienReadRows('mob'),
     pdfId:(document.getElementById('mob-pdf')||{}).value||''
   };
 
@@ -6484,6 +6712,7 @@ function addMobilite(){
     group.querySelectorAll('input[type=text],input[type=time]').forEach(function(inp){ inp.value=''; });
   }
   ['mob-note','mob-pdf'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+  _lienFillRows('mob', []);
   var badge=document.getElementById('mob-pdf-badge');if(badge)badge.innerHTML='';
   var prev=document.getElementById('mob-route-preview');if(prev)prev.classList.remove('visible');
   // Auto-reset escales : décocher + compteur=1 + toggleMobEscales (vide blocs,
@@ -6523,6 +6752,8 @@ function _editVolUnified(m){
     // Pièce jointe (billet)
     set('mob-pdf', m.pdfId);
     _mobRenderPdfBadge(m.pdfId);
+    // Liens web
+    _lienFillRows('mob', m.liens);
     // Escales : coche la case + rend + remplit les blocs (ou reste direct)
     _fillVolEscalesForm(m);
     // Bouton + titre en mode édition
@@ -6580,6 +6811,7 @@ function _saveMobiliteVolFromForm(id){
   m.compagnie=_v('mob-compagnie'); m.numero=_v('mob-numero');
   m.siege=_v('mob-siege'); m.terminal=_v('mob-terminal'); m.porte=_v('mob-porte');
   m.resa=_v('mob-resa-vol'); m.bagages=_v('mob-bagages');
+  m.liens=_lienReadRows('mob');
   m.pdfId=(document.getElementById('mob-pdf')||{}).value||'';
   _readVolEscalesInto(m); // escales[] + écrase infos racine par SEG.1 si escale
   _freezeVolRootGps(m);   // gel coords origine/destination depuis codes IATA
@@ -6660,9 +6892,11 @@ function editMobilite(id){id=isNaN(+id)?id:+id;
       +mSelect('em-statut',['Confirmé','À confirmer','Réservé','À réserver'],m.statut)
       +modalField('Note',mInput('em-note',m.note||'',''))
     +'</div>'
+    +_liensBlockHtml('em')
     +mPdfBlock('em-pdf', m.pdfId||'')
     +modalFooter('saveMobilite(\''+id+'\')','deleteMobilite(\''+id+'\')',{type:'le transport',libelle:(typeof MOB_LABELS!=='undefined'&&MOB_LABELS[m.type])||m.titre||m.type||'',hasDoc:!!m.pdfId,fn:'deleteMobilite',id:id})
   );
+  _lienFillRows('em', m.liens);
 }
 
 function saveMobilite(id){id=isNaN(+id)?id:+id;
@@ -6679,6 +6913,7 @@ function saveMobilite(id){id=isNaN(+id)?id:+id;
   m.numero   =_gv('em-num');
   m.statut   =_gv('em-statut')||m.statut;
   m.note     =_gv('em-note');
+  m.liens    =_lienReadRows('em');
   // Type-specific — champs strictement typés pour éviter la contamination croisée
   if(m.type==='vol'){
     // Les vols sont édités via le formulaire unifié (_editVolUnified / _saveMobiliteVolFromForm) :
@@ -6915,21 +7150,30 @@ function getVilleColor(ville){
 // ── Auto-sync totalNuits depuis les nuits d'hébergement ──────────────
 // Appelé après chaque ajout/modification/suppression d'hôtel.
 
-// FIX nuitées : nombre de nuits d'un hôtel. Si h.nuits est absent/0
-// (cas des hôtels saisis avant le correctif calendrier), il est calculé
-// depuis les dates check-in/check-out. Utilisé par TOUTES les
-// agrégations pour que la barre de répartition se remplisse toujours.
+// Nombre de nuits calculé depuis deux dates check-in/check-out, quel que
+// soit leur format (« JJ/MM/AAAA » du formulaire d'ajout OU « JJ mois »
+// de la modale d'édition). S'appuie sur _hotelDateObj qui gère les deux.
+// Renvoie 0 si l'une des dates manque/est invalide ou si diff <= 0
+// (jamais NaN). Source de vérité unique du calcul des nuits.
+function _calcNights(ciStr, coStr){
+  if(typeof _hotelDateObj !== 'function') return 0;
+  var ci = _hotelDateObj(ciStr), co = _hotelDateObj(coStr);
+  if(!ci || !co) return 0;
+  var d = Math.round((co - ci) / 86400000);
+  return d > 0 ? d : 0;
+}
+
+// FIX nuitées : nombre de nuits d'un hôtel. Les dates sont la source de
+// vérité (nuits calculées, jamais saisies à la main) ; on retombe sur
+// h.nuits stocké uniquement si les dates sont absentes/incomplètes
+// (données héritées). Utilisé par TOUTES les agrégations pour que la
+// barre de répartition se remplisse toujours.
 function _hotelNights(h){
-  var n = parseInt(h && h.nuits, 10);
-  if(!isNaN(n) && n > 0) return n;
-  if(h && h.checkin && h.checkout && typeof parseDDMMYYYY === 'function'){
-    var ci = parseDDMMYYYY(h.checkin), co = parseDDMMYYYY(h.checkout);
-    if(ci && co && typeof daysBetween === 'function'){
-      var d = daysBetween(ci, co);
-      if(d > 0) return d;
-    }
-  }
-  return 0;
+  if(!h) return 0;
+  var byDate = _calcNights(h.checkin, h.checkout);
+  if(byDate > 0) return byDate;
+  var n = parseInt(h.nuits, 10);
+  return (!isNaN(n) && n > 0) ? n : 0;
 }
 
 // Met à jour totalNuits avec le max(somme hotels, durée du voyage).
@@ -7039,6 +7283,7 @@ function renderHotels(){
         +'<div class="hotel-top">'
           +'<div class="hotel-name">'+h.nom+'</div>'
           +'<button class="hotel-map-btn" data-mappin-cat="hotel" data-mappin-id="'+h.id+'" title="Voir sur la carte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z"/><line x1="9" y1="3" x2="9" y2="17"/><line x1="15" y1="6.5" x2="15" y2="20.5"/></svg></button>'
+          +_liensIconHtml('hotel', h.id, h.liens)
         +'</div>'
         +(_rem?'<div class="hotel-reminder'+(_rem.urgent?' urgent':'')+'">'+_luOut+'<span>'+_rem.text+'</span></div>':'')
         +(_bits.length?'<div class="hotel-info">'+_bits.join(' · ')+'</div>':'')
@@ -7065,7 +7310,7 @@ function editHotel(id){id=isNaN(+id)?id:+id;
     +'<div class="modal-row">'
       +mDateRow('Check-in','eh-ci-jour','eh-ci-mois',cij,cim)
       +mDateRow('Check-out','eh-co-jour','eh-co-mois',coj,com)
-      +'<div class="modal-field" style="flex:none"><label>Nuits</label><input type="number" id="eh-nuits" value="'+(h.nuits||'')+'" style="max-width:70px;min-width:60px;flex:none;padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none"/></div>'
+      +'<div class="modal-field" style="flex:none"><label>Nuits <span style="font-weight:400;color:var(--ink-hint)">(auto)</span></label><input type="number" id="eh-nuits" class="nuits-auto" value="'+(_hotelNights(h)||'')+'" readonly tabindex="-1" aria-readonly="true" title="Calculé automatiquement depuis les dates" style="max-width:70px;min-width:60px;flex:none;padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);outline:none"/></div>'
     +'</div>'
     +'<div class="modal-row">'
       +modalField('Type de chambre',mInput('eh-type',h.type,'Chambre double'))
@@ -7091,14 +7336,43 @@ function editHotel(id){id=isNaN(+id)?id:+id;
         +'<div class="addr-field"><label>Rue / N°</label>'
           +'<input type="text" id="eh-rue" value="'+(h.rue||'')+'" placeholder="1-2-3 Shinjuku…"/></div>'
       +'</div>'
-      +'<button class="btn-verify-addr" id="eh-verify-btn" type="button" onclick="verifierAdresse(\'hotel-edit\')">'
-        +'<span class="verify-icon"></span> Vérifier l\'adresse'
-      +'</button>'
+      +'<input type="hidden" id="eh-geo-remove" value=""/>'
+      +'<div class="addr-actions">'
+        +'<button class="btn-verify-addr" id="eh-verify-btn" type="button" onclick="verifierAdresse(\'hotel-edit\')">'
+          +'<span class="verify-icon"></span> Vérifier l\'adresse'
+        +'</button>'
+        +'<button class="btn-remove-geo" type="button" onclick="_addrRemoveGeo(\'eh\')" title="Retirer la localisation de la carte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="13" height="13"><path d="M12 21s-7-6.4-7-11a7 7 0 0 1 12-4.9"/><line x1="4" y1="4" x2="20" y2="20"/></svg> Retirer la localisation</button>'
+      +'</div>'
       +'<div class="addr-result-badge" id="eh-addr-result"></div>'
     +'</div>'
+    +_liensBlockHtml('eh')
     +mPdfBlock('eh-pdf', h.pdfId||'')
     +modalFooter('saveHotel(\''+id+'\')','deleteHotel(\''+id+'\')',{type:"l'hébergement",libelle:h.nom||'',hasDoc:!!h.pdfId,fn:'deleteHotel',id:id})
   );
+  // Recalcul auto des nuits à chaque changement de date (selects JJ/mois).
+  setTimeout(function(){
+    ['eh-ci-jour','eh-ci-mois','eh-co-jour','eh-co-mois'].forEach(function(sid){
+      var el=document.getElementById(sid);
+      if(el) el.addEventListener('change', autoHotelEdit);
+    });
+    autoHotelEdit(); // normalise l'affichage initial
+    _lienFillRows('eh', h.liens);
+  }, 0);
+}
+// Recalcule le champ Nuits (lecture seule) de la modale d'édition depuis
+// les selects check-in/check-out (format « JJ mois »). Dates incomplètes
+// → champ vidé (jamais NaN). Source unique : _calcNights.
+function autoHotelEdit(){
+  var nEl=document.getElementById('eh-nuits');
+  if(!nEl) return;
+  var cij=(document.getElementById('eh-ci-jour')||{}).value||'';
+  var cim=(document.getElementById('eh-ci-mois')||{}).value||'';
+  var coj=(document.getElementById('eh-co-jour')||{}).value||'';
+  var com=(document.getElementById('eh-co-mois')||{}).value||'';
+  var ciStr=(cij&&cim)?(cij+' '+cim):'';
+  var coStr=(coj&&com)?(coj+' '+com):'';
+  var nights=_calcNights(ciStr, coStr);
+  nEl.value=nights>0?nights:'';
 }
 function saveHotel(id){id=isNaN(+id)?id:+id;
   var h=hotels.find(function(x){return x.id==id;});if(!h)return;
@@ -7108,33 +7382,48 @@ function saveHotel(id){id=isNaN(+id)?id:+id;
   var coj=document.getElementById('eh-co-jour').value,com=document.getElementById('eh-co-mois').value;
   if(cij&&cim) h.checkin=cij+' '+cim;
   if(coj&&com) h.checkout=coj+' '+com;
-  h.nuits=parseInt(document.getElementById('eh-nuits').value)||h.nuits;
+  // Nuits TOUJOURS recalculées depuis les dates (jamais la saisie).
+  var _cn=_calcNights(h.checkin, h.checkout);
+  h.nuits=_cn>0?_cn:h.nuits;
   h.type=document.getElementById('eh-type').value;
   h.resa=document.getElementById('eh-resa').value;
   var _ehA=document.getElementById('eh-heure-arr'); if(_ehA) h.heureArr=_ehA.value;
   var _ehD=document.getElementById('eh-heure-dep'); if(_ehD) h.heureDep=_ehD.value;
   var _ehN=document.getElementById('eh-note'); if(_ehN) h.note=_ehN.value;
-  // Adresse structurée
-  var newRue =(document.getElementById('eh-rue')||{value:''}).value.trim();
-  var newCp  =(document.getElementById('eh-cp')||{value:''}).value.trim();
-  var newPays=(document.getElementById('eh-pays')||{value:''}).value.trim();
-  var newFull= buildFullAddress(newRue, newCp, h.ville, newPays);
-  // Si l'adresse a changé → reset coords pour forcer nouveau géocodage
-  if(newFull !== h.fullAddress){ h.lat=null; h.lng=null; }
-  h.rue=newRue; h.cp=newCp; h.pays=newPays;
-  h.fullAddress=newFull;
-  h.adresse=newFull; // compat legacy
+  h.liens=_lienReadRows('eh');
   // PDF
   var ehPdf=document.getElementById('eh-pdf');
   if(ehPdf) h.pdfId=ehPdf.value;
-  // Géocodage si nouvelle adresse sans coords
-  if(h.fullAddress && (!h.lat || !h.lng)){
-    fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(h.fullAddress),{headers:{'Accept-Language':'fr,en'}})
-    .then(function(r){return r.json();})
-    .then(function(data){
-      if(data&&data.length){h.lat=parseFloat(data[0].lat);h.lng=parseFloat(data[0].lon);}
-      snapshotCurrentTrip();
-    }).catch(function(){snapshotCurrentTrip();});
+  // Adresse structurée / localisation. Drapeau : '1'=retrait, '0'=réactivation.
+  var newRue =(document.getElementById('eh-rue')||{value:''}).value.trim();
+  var newCp  =(document.getElementById('eh-cp')||{value:''}).value.trim();
+  var newPays=(document.getElementById('eh-pays')||{value:''}).value.trim();
+  var _rm=(document.getElementById('eh-geo-remove')||{}).value;
+  if(_rm==='1'){
+    h.geoOff=true; h.lat=null; h.lng=null;
+    h.rue=''; h.cp=''; h.pays=''; h.fullAddress=''; h.adresse='';
+  } else {
+    if(_rm==='0') h.geoOff=false;
+    h.rue=newRue; h.cp=newCp; h.pays=newPays;
+    // Réactivation implicite : une rue/CP/pays ressaisi après un retrait relocalise.
+    if(h.geoOff && (newRue||newCp||newPays)) h.geoOff=false;
+    if(h.geoOff){
+      h.fullAddress=''; h.adresse='';
+    } else {
+      var newFull= buildFullAddress(newRue, newCp, h.ville, newPays);
+      // Adresse changée → reset coords pour forcer un nouveau géocodage.
+      if(newFull !== h.fullAddress){ h.lat=null; h.lng=null; }
+      h.fullAddress=newFull;
+      h.adresse=newFull; // compat legacy
+      if(h.fullAddress && (!h.lat || !h.lng)){
+        fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(h.fullAddress),{headers:{'Accept-Language':'fr,en'}})
+        .then(function(r){return r.json();})
+        .then(function(data){
+          if(data&&data.length){h.lat=parseFloat(data[0].lat);h.lng=parseFloat(data[0].lon);}
+          renderHotels(); snapshotCurrentTrip();
+        }).catch(function(){snapshotCurrentTrip();});
+      }
+    }
   }
   closeModal(); _syncTotalNuits(); renderHotels();snapshotCurrentTrip();
   showToast('Hébergement mis à jour ','success');
@@ -7155,8 +7444,8 @@ function addHotel(){
   var fullAddress = buildFullAddress(addr.rue, addr.cp, addr.ville, addr.pays);
   hotels.push({id:uid(), nom:n, ville:v,
     checkin:ciRaw, checkout:coRaw,
-    nuits:parseInt(document.getElementById('ht-nuits').value)
-          || _hotelNights({checkin:ciRaw, checkout:coRaw}),
+    liens:_lienReadRows('ht'),
+    nuits:_calcNights(ciRaw, coRaw),
     type:document.getElementById('ht-type').value,
     resa:document.getElementById('ht-resa').value,
     heureArr:(document.getElementById('ht-heure-arr')||{}).value||'',
@@ -7179,6 +7468,7 @@ function addHotel(){
   ['hint-ht-ci','hint-ht-co','hint-ht-nuits'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove('visible');});
   ['ht-ci','ht-co','ht-nuits'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove('auto-filled');});
   var hid=document.getElementById('hotel-pdf-badge'); if(hid) hid.innerHTML='';
+  _lienFillRows('ht', []);
   // Reset bloc adresse
   var res=document.getElementById('ht-addr-result'); if(res){res.className='addr-result-badge';res.textContent='';}
   var btn=document.getElementById('ht-verify-btn'); if(btn) btn.className='btn-verify-addr';
@@ -7239,7 +7529,7 @@ function _renderLieuCard(l){
       + '<div class="place-chip" style="background:' + meta.tint + ';color:' + meta.color + '">' + meta.svg + '</div>'
       + '<div class="place-body">'
         + '<div class="place-head"><span class="place-name">' + l.nom + '</span>' + visBadge + '</div>'
-        + '<div class="place-sub"><span class="place-city">' + locLine + mapBtn + '</span>' + catBadge + '</div>'
+        + '<div class="place-sub"><span class="place-city">' + locLine + mapBtn + _liensIconHtml('lieu', l.id, l.liens) + '</span>' + catBadge + '</div>'
         + horaires + adresseDetail
         + (l.note ? '<div class="place-note">' + l.note + '</div>' : '')
         + pdfHtml
@@ -7281,7 +7571,7 @@ function renderLieux(){
     lieux.forEach(function(l){
       var g;
       if(key === 'jour'){
-        g = (l.jour && String(l.jour).trim()) || NO_DATE;
+        g = (l.dateVisite && String(l.dateVisite).trim()) || NO_DATE;
       } else {
         g = (l[key] && String(l[key]).trim()) || (key==='ville' ? 'Sans ville' : 'Sans catégorie');
       }
@@ -7289,26 +7579,33 @@ function renderLieux(){
       groups[g].push(l);
     });
 
+    // Clé de tri chronologique depuis "JJ/MM/AAAA" → "AAAA-MM-JJ"
+    function _jourSortKey(k){
+      var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(k);
+      if(!m) return k;
+      return m[3] + '-' + ('0'+m[2]).slice(-2) + '-' + ('0'+m[1]).slice(-2);
+    }
     if(key === 'jour'){
-      // Tri chronologique (AAAA-MM-JJ), « Sans date » en dernier
+      // Tri chronologique (JJ/MM/AAAA), « Sans date » en dernier
       order.sort(function(a,b){
         if(a === NO_DATE) return 1;
         if(b === NO_DATE) return -1;
-        return a < b ? -1 : a > b ? 1 : 0;
+        var ka = _jourSortKey(a), kb = _jourSortKey(b);
+        return ka < kb ? -1 : ka > kb ? 1 : 0;
       });
     } else {
       order.sort(function(a,b){ return a.localeCompare(b, 'fr'); });
     }
 
-    // Formatage lisible d'une clé jour (AAAA-MM-JJ → « Lun. 21 juil. 2025 »)
+    // Formatage lisible d'une clé jour (JJ/MM/AAAA → « Lun. 21 juil. 2025 »)
     function _fmtJour(k){
       if(k === NO_DATE) return k;
-      var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(k);
+      var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(k);
       if(!m) return k;
-      var d = new Date(+m[1], +m[2]-1, +m[3]);
+      var d = new Date(+m[3], +m[2]-1, +m[1]);
       var jours = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
       var mois  = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
-      return jours[d.getDay()] + '. ' + (+m[3]) + ' ' + mois[+m[2]-1] + ' ' + m[1];
+      return jours[d.getDay()] + '. ' + (+m[1]) + ' ' + mois[+m[2]-1] + ' ' + m[3];
     }
 
     order.forEach(function(g){
@@ -7413,9 +7710,13 @@ function editLieu(id){id=isNaN(+id)?id:+id;
         +'<div class="addr-field"><label>Rue / N°</label>'
           +'<input type="text" id="el-rue" value="'+(l.rue||'')+'" placeholder="ex: 1 Gion-machi"/></div>'
       +'</div>'
-      +'<button class="btn-verify-addr" id="el-verify-btn" type="button" onclick="verifierAdresse(\'lieu-edit\')">'
-        +'<span class="verify-icon"></span> Vérifier l\'adresse'
-      +'</button>'
+      +'<input type="hidden" id="el-geo-remove" value=""/>'
+      +'<div class="addr-actions">'
+        +'<button class="btn-verify-addr" id="el-verify-btn" type="button" onclick="verifierAdresse(\'lieu-edit\')">'
+          +'<span class="verify-icon"></span> Vérifier l\'adresse'
+        +'</button>'
+        +'<button class="btn-remove-geo" type="button" onclick="_addrRemoveGeo(\'el\')" title="Retirer la localisation de la carte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="13" height="13"><path d="M12 21s-7-6.4-7-11a7 7 0 0 1 12-4.9"/><line x1="4" y1="4" x2="20" y2="20"/></svg> Retirer la localisation</button>'
+      +'</div>'
       +'<div class="addr-result-badge" id="el-addr-result"></div>'
     +'</div>'
     +'<div class="modal-row">'
@@ -7427,7 +7728,8 @@ function editLieu(id){id=isNaN(+id)?id:+id;
 +'<option value="Plages"><option value="Points de vue"></datalist>')
 +'</div>'
 +modalField('Note',mInput('el-note',l.note||'','Conseil, prix…'))
-    +modalField('Jour de visite (optionnel)','<input type="date" id="el-jour" value="'+(l.jour||'')+'" style="width:100%"/>')
+    +modalField('Date de visite (optionnel)','<input type="text" id="el-jour" class="cal-trigger" value="'+(l.dateVisite||'')+'" placeholder="JJ/MM/AAAA" style="width:100%;cursor:pointer" readonly onclick="openCalendar(\'el-jour\')"/>')
+    +_liensBlockHtml('el')
     +mPdfBlock('el-pdf', l.pdfId||'')
     +modalFooter('saveLieu(\''+id+'\')','deleteLieu(\''+id+'\')',{type:'le lieu',libelle:l.nom||'',hasDoc:!!l.pdfId,fn:'deleteLieu',id:id})
   );
@@ -7437,6 +7739,7 @@ function editLieu(id){id=isNaN(+id)?id:+id;
     if(ouvEl) ouvEl.onclick=function(){ openTimePicker('el-ouv','Heure d\'ouverture'); };
     if(ferEl) ferEl.onclick=function(){ openTimePicker('el-fer','Heure de fermeture'); };
     if(typeof _populatePaysDatalists==='function') _populatePaysDatalists();
+    _lienFillRows('el', l.liens);
   }, 0);
 }
 function saveLieu(id){id=isNaN(+id)?id:+id;
@@ -7450,15 +7753,43 @@ function saveLieu(id){id=isNaN(+id)?id:+id;
   var cp   =document.getElementById('el-cp');    if(cp)    l.cp   =cp.value.trim();
   var pays =document.getElementById('el-pays');  if(pays)  l.pays =pays.value.trim();
   var note =document.getElementById('el-note');  if(note)  l.note =note.value.trim();
-  var jour =document.getElementById('el-jour');  if(jour)  l.jour =jour.value;
+  var jour =document.getElementById('el-jour');  if(jour)  l.dateVisite =jour.value;
   var cat  =document.getElementById('el-categorie'); if(cat) l.categorie=cat.value.trim();
   // PDF
   var elPdf=document.getElementById('el-pdf');
   if(elPdf) l.pdfId=elPdf.value;
   if(l.ville) l.ville=_normalizeLieuVille(l.ville);
-  var newFull = buildFullAddress(l.rue||'', l.cp||'', l.ville||'', l.pays||'');
-  l.fullAddress = newFull;
-  l.adresse     = newFull; // compat legacy
+  // Liens web
+  l.liens = _lienReadRows('el');
+  // Adresse / localisation. Drapeau : '1'=retrait, '0'=réactivation, ''=inchangé.
+  var _rm=(document.getElementById('el-geo-remove')||{}).value;
+  if(_rm==='1'){
+    // Retrait explicite → aucun pin (fullAddress vidé, coords nulles, geoOff)
+    l.geoOff=true; l.lat=null; l.lng=null; l.fullAddress=''; l.adresse='';
+  } else {
+    if(_rm==='0') l.geoOff=false; // « Vérifier » a réactivé la localisation
+    // Réactivation implicite : une rue/CP/pays ressaisi après un retrait relocalise.
+    if(l.geoOff && (l.rue||l.cp||l.pays)) l.geoOff=false;
+    if(l.geoOff){
+      // Localisation toujours retirée (non réactivée) → ne rien géocoder
+      l.fullAddress=''; l.adresse='';
+    } else {
+      // Reconstruit fullAddress + .adresse (compat). Adresse changée → reset
+      // coords + re-géocodage pour mettre à jour le pin carte.
+      var newFull = buildFullAddress(l.rue||'', l.cp||'', l.ville||'', l.pays||'');
+      if(newFull !== l.fullAddress){ l.lat=null; l.lng=null; }
+      l.fullAddress = newFull;
+      l.adresse     = newFull;
+      if(l.fullAddress && (!l.lat || !l.lng)){
+        fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(l.fullAddress),{headers:{'Accept-Language':'fr,en'}})
+        .then(function(r){return r.json();})
+        .then(function(data){
+          if(data&&data.length){ l.lat=parseFloat(data[0].lat); l.lng=parseFloat(data[0].lon); }
+          renderLieux(); snapshotCurrentTrip();
+        }).catch(function(){ snapshotCurrentTrip(); });
+      }
+    }
+  }
   closeModal(); renderLieux(); snapshotCurrentTrip();
   showToast('Lieu mis à jour ', 'success');
 }
@@ -7479,7 +7810,7 @@ function addLieu(){
   var ouv   = (document.getElementById('lieu-ouverture')||{}).value||'';
   var fer   = (document.getElementById('lieu-fermeture')||{}).value||'';
   var note  = (document.getElementById('lieu-note')||{}).value||'';
-  var jour  = (document.getElementById('lieu-date')||{}).value||'';
+  var dateVisite = (document.getElementById('lieu-date')||{}).value||'';
   var pdfId = (document.getElementById('lieu-pdf')||{}).value||'';
   var addr  = _collectAddrFields('lieu');
   addr.ville = ville;
@@ -7487,11 +7818,13 @@ function addLieu(){
   lieux.push({id:uid(), emoji:emoji, nom:nom, ville:ville, visited:false,
     rue:addr.rue, cp:addr.cp, pays:addr.pays,
     fullAddress:fullAddress, adresse:fullAddress,
-    ouverture:ouv, fermeture:fer, note:note, jour:jour, pdfId:pdfId,
+    ouverture:ouv, fermeture:fer, note:note, dateVisite:dateVisite, pdfId:pdfId,
+    liens:_lienReadRows('lieu'),
     ordre: lieux.length,
     lat:parseFloat((document.getElementById('lieu-adresse-lat')||{}).value)||null,
     lng:parseFloat((document.getElementById('lieu-adresse-lng')||{}).value)||null
   });
+  _lienFillRows('lieu', []);
   ['lieu-nom','lieu-emoji','lieu-ville','lieu-ville-addr','lieu-categorie','lieu-ouverture','lieu-fermeture',
    'lieu-rue','lieu-cp','lieu-pays','lieu-note','lieu-date','lieu-pdf',
    'lieu-adresse-lat','lieu-adresse-lng','lieu-magic-input']
@@ -7994,6 +8327,17 @@ function editTransaction(id){
   // Mêmes devises que le formulaire de création, déjà construit pour le voyage actif
   var deviseOptionsHtml = (document.getElementById('tx-devise')||{}).innerHTML || '<option value="EUR">€ Euro</option>';
   var catOptions = ['🍱 Repas','🚉 Transport','🏯 Hébergement','🎌 Activités','🛍 Shopping','💊 Santé','📱 Divers'];
+  // Normalise une catégorie (retire l'emoji + espaces de tête) pour la
+  // comparaison : t.cat peut être hérité SANS emoji, avec un espacement
+  // différent ou un ancien emoji → une égalité stricte (o===t.cat)
+  // échouait et le <select> retombait sur sa 1re option (« Repas »).
+  function _catKey(c){ return String(c==null?'':c).replace(/^[^A-Za-zÀ-ÿ]+/,'').trim().toLowerCase(); }
+  var curKey  = _catKey(t.cat);
+  var matched = catOptions.some(function(o){ return _catKey(o)===curKey; });
+  // Catégorie hors liste (inconnue) → on la conserve en tête, sélectionnée,
+  // pour ne jamais la perdre à l'édition.
+  var catOptsHtml = (matched ? '' : '<option selected>'+_tlEsc(t.cat||'')+'</option>')
+    + catOptions.map(function(o){ return '<option'+(_catKey(o)===curKey?' selected':'')+'>'+o+'</option>'; }).join('');
   openModal(
     '<div class="modal-header"><div class="modal-title">Modifier cette transaction</div><button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
     +'<div class="modal-row">'
@@ -8005,7 +8349,7 @@ function editTransaction(id){
     +'</div>'
     +'<div class="modal-row">'
       +'<div class="modal-field"><label>Catégorie</label><select id="etx-cat" style="flex:1;min-width:0;padding:9px 12px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none">'
-        +catOptions.map(function(o){return '<option'+(o===t.cat?' selected':'')+'>'+o+'</option>';}).join('')
+        +catOptsHtml
       +'</select></div>'
       +modalField('Date','<input type="date" id="etx-date" value="'+(t.date||'')+'" style="padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none;width:100%"/>')
     +'</div>'
@@ -9249,30 +9593,19 @@ function flashAuto(el, hintId){
 
 
 // ── Hôtel : logique 3 variables CI / CO / Nuits ──
+// Nuits = TOUJOURS calculées depuis check-in/check-out (champ en lecture
+// seule). L'utilisateur ne saisit jamais les nuits : à chaque changement
+// de l'une des deux dates, on recalcule. Dates incomplètes → champ vidé
+// (jamais NaN). Le paramètre `changed` est conservé pour la compatibilité
+// des appelants (oninput des dates, openCalendar).
 function autoHotel(changed){
-  var ciEl=document.getElementById('ht-ci');
   var coEl=document.getElementById('ht-co');
+  var ciEl=document.getElementById('ht-ci');
   var nEl=document.getElementById('ht-nuits');
   if(!ciEl||!coEl||!nEl) return;
-  var ci=parseDDMMYYYY(ciEl.value);
-  var co=parseDDMMYYYY(coEl.value);
-  var nuits=parseInt(nEl.value,10);
-
-  if(changed==='ci'||changed==='co'){
-    if(ci&&co){ // CI + CO → Nuits
-      var diff=daysBetween(ci,co);
-      if(diff>0){ nEl.value=diff; flashAuto(nEl,'hint-ht-nuits'); }
-    } else if(ci&&!coEl.value.trim()&&!isNaN(nuits)&&nuits>0){ // CI + Nuits → CO
-      coEl.value=formatDDMMYYYY(addDays(ci,nuits)); flashAuto(coEl,'hint-ht-co');
-    } else if(!ciEl.value.trim()&&co&&!isNaN(nuits)&&nuits>0){ // CO + Nuits → CI
-      ciEl.value=formatDDMMYYYY(addDays(co,-nuits)); flashAuto(ciEl,'hint-ht-ci');
-    }
-  }
-  if(changed==='nuits'&&!isNaN(nuits)&&nuits>0){
-    if(ci&&!coEl.value.trim()){ coEl.value=formatDDMMYYYY(addDays(ci,nuits)); flashAuto(coEl,'hint-ht-co'); }
-    else if(!ciEl.value.trim()&&co){ ciEl.value=formatDDMMYYYY(addDays(co,-nuits)); flashAuto(ciEl,'hint-ht-ci'); }
-    else if(ci&&co){ var diff2=daysBetween(ci,co); if(diff2>0){ nEl.value=diff2; } }
-  }
+  var nights=_calcNights(ciEl.value, coEl.value);
+  if(nights>0){ nEl.value=nights; flashAuto(nEl,'hint-ht-nuits'); }
+  else { nEl.value=''; }
 }
 
 
@@ -10170,6 +10503,7 @@ window._resetFormMobilite = function(){
   ['mob-note','mob-pdf'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.value = '';
   });
+  _lienFillRows('mob', []);
   var badge = document.getElementById('mob-pdf-badge');
   if(badge) badge.innerHTML = '';
   // Statut

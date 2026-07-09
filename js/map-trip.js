@@ -37,6 +37,40 @@ var _userCirc     = null;   // cercle de précision GPS
 
 // Filtres multi-select : {} = tout voir ; { hotels:true } = hôtels seulement
 var _activeFilters = {};
+// Filtre par jour : '' = tous les jours ; 'AAAA-MM-JJ' = un jour précis.
+var _activeDay = '';
+
+// ── Résolution date/heure d'un élément (pour tri chronologique + filtre jour) ──
+var _TMAP_JOURS = ['Dim.','Lun.','Mar.','Mer.','Jeu.','Ven.','Sam.'];
+var _TMAP_MOIS  = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+function _tmapPad2(n){ return (n<10?'0':'')+n; }
+function _tmapTimeMs(t){
+  if(!t) return 0;
+  var m = String(t).match(/^(\d{1,2})\s*[:hH]\s*(\d{2})/);
+  if(m) return (+m[1]*3600 + +m[2]*60)*1000;
+  var m2 = String(t).match(/^(\d{1,2})\s*[hH]\s*$/);
+  if(m2) return (+m2[1]*3600)*1000;
+  return 0;
+}
+// cat: 'transport' | 'hotel' | 'lieu'. Renvoie {sortKey, dayKey, dayLabel}.
+// Sans date → sortKey Infinity (fin de liste), dayKey '' (hors filtre jour).
+function _tmapWhen(cat, id){
+  var arr = cat==='transport' ? ((typeof mobilites!=='undefined')?mobilites:[])
+          : cat==='hotel'     ? ((typeof hotels!=='undefined')?hotels:[])
+          :                     ((typeof lieux!=='undefined')?lieux:[]);
+  var it=null, i;
+  for(i=0;i<arr.length;i++){ if(String(arr[i].id)===String(id)){ it=arr[i]; break; } }
+  if(!it) return { sortKey:Infinity, dayKey:'', dayLabel:'' };
+  var dObj=null, t='';
+  if(cat==='transport'){ dObj=(typeof parseDDMMYYYY==='function')?parseDDMMYYYY(it.date):null; t=it.heureDep||''; }
+  else if(cat==='hotel'){ dObj=(typeof _hotelDateObj==='function')?_hotelDateObj(it.checkin):null; t='14:00'; }
+  else { dObj=(typeof parseDDMMYYYY==='function')?parseDDMMYYYY(it.dateVisite):null; t=it.ouverture||''; }
+  if(!dObj || isNaN(dObj.getTime())) return { sortKey:Infinity, dayKey:'', dayLabel:'' };
+  var key   = dObj.getFullYear()+'-'+_tmapPad2(dObj.getMonth()+1)+'-'+_tmapPad2(dObj.getDate());
+  var label = _TMAP_JOURS[dObj.getDay()]+' '+dObj.getDate()+' '+_TMAP_MOIS[dObj.getMonth()];
+  return { sortKey: dObj.getTime()+_tmapTimeMs(t), dayKey:key, dayLabel:label };
+}
+function _tmapCatOf(pinType){ return pinType==='hotel' ? 'hotel' : (pinType==='transport' ? 'transport' : 'lieu'); }
 
 // Couleurs par type de transport
 var _COLORS = {
@@ -563,6 +597,7 @@ function _loadTripPoints() {
 
   // ── Hôtels ──────────────────────────────────────────────────────
   (hotels || []).forEach(function (h, i) {
+    if (h.geoOff) return; // localisation explicitement retirée → aucun pin
     var query = _hotelQuery(h);
     if (!query) return;
     var pin = {
@@ -588,6 +623,7 @@ function _loadTripPoints() {
   // ── Lieux ────────────────────────────────────────────────────────
   // FIX 2 : utiliser l.lat/l.lng quand ils existent (bug : étaient forcés à null)
   (lieux || []).forEach(function (l, i) {
+    if (l.geoOff) return; // localisation explicitement retirée → aucun pin
     var query = _lieuQuery(l);
     if (!query) return;
     var alreadyGeocoded = !!(l.lat && l.lng);
@@ -667,14 +703,17 @@ function _applyFilters() {
 
   _markers.forEach(function (m) {
     var show = (m.type === 'hotel' && showH) || (m.type === 'lieu' && showL);
+    if (show && _activeDay) show = (_tmapWhen(_tmapCatOf(m.type), m.id).dayKey === _activeDay);
     if (show) m.marker.addTo(_map);
     else      _map.removeLayer(m.marker);
   });
 
   _routes.forEach(function (r) {
+    var showRoute = showR;
+    if (showRoute && _activeDay) showRoute = (_tmapWhen('transport', r.id).dayKey === _activeDay);
     r.layers.forEach(function (layer) {
-      if (showR) layer.addTo(_map);
-      else       _map.removeLayer(layer);
+      if (showRoute) layer.addTo(_map);
+      else           _map.removeLayer(layer);
     });
   });
 
@@ -721,6 +760,50 @@ function _routeIcon(type){
   return '<span style="display:inline-flex;align-items:center;color:'+col+'">'+svg+'</span>';
 }
 
+function _routeCardHtml(r){
+  var isVol  = r.type === 'vol';
+  var sw     = 'height:2px;width:28px;border-radius:2px;';
+  var swatch = isVol
+    ? 'background:' + (_COLORS[r.type] || '#888') + ';' + sw
+    : 'background:repeating-linear-gradient(90deg,'
+      + (_COLORS[r.type] || '#888') + ' 0,'
+      + (_COLORS[r.type] || '#888') + ' 8px,transparent 8px,transparent 14px);' + sw;
+  var rid = (r.id != null) ? String(r.id).replace(/'/g, "\\'") : '';
+  return '<div class="tmap-pin-card"'
+    + (rid ? ' onclick="if(window.tripmapFocusRoute)tripmapFocusRoute(\'' + rid + '\')" style="cursor:pointer"' : ' style="cursor:default"')
+    + '>'
+    + '<div class="tmap-pin-icon" style="background:#f4f4f8;border:none;font-size:13px;font-weight:600">' + _routeIcon(r.type) + '</div>'
+    + '<div class="tmap-pin-body">'
+      + '<div class="tmap-pin-name">' + r.label + '</div>'
+      + '<div class="tmap-pin-sub" style="display:flex;align-items:center;gap:6px;margin-top:3px">'
+        + '<span style="' + swatch + '"></span>' + (isVol ? 'Arc géodésique' : 'Tracé pointillé')
+      + '</div>'
+    + '</div>'
+    + (rid ? _infoBtn('transport', rid) : '')
+    + '</div>';
+}
+function _pinCardHtml(p){
+  var statusClass = p.geocoding ? 'geocoding' : (p.lat ? 'located' : 'notfound');
+  var statusLabel = p.geocoding ? 'Géocodage…' : (p.lat ? 'Localisé' : 'Introuvable');
+  var mapsUrl = p.lat
+    ? (_isIOS ? 'maps://?ll=' + p.lat + ',' + p.lng + '&q=' + encodeURIComponent(p.name)
+              : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.label))
+    : null;
+  return '<div class="tmap-pin-card" onclick="tripmapFocusPin(\'' + p.id + '\',\'' + p.type + '\')">'
+    + (function(){ var _ic=(typeof _pinIcon==="function")?_pinIcon(p):{svg:(p.emoji||""),bg:"#5C6BC0"}; return '<div class="tmap-pin-icon ' + p.type + '" style="background:'+_ic.bg+'1e;color:'+_ic.bg+'">' + _ic.svg + '</div>'; })()
+    + '<div class="tmap-pin-body">'
+      + '<div class="tmap-pin-name">' + p.name + '</div>'
+      + '<div class="tmap-pin-sub">'  + p.sub  + '</div>'
+    + '</div>'
+    + '<span class="tmap-pin-status ' + statusClass + '">' + statusLabel + '</span>'
+    + (mapsUrl ? '<a class="tmap-pin-open-btn" href="' + mapsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + (_isIOS ? 'Plans' : 'Maps') + '</a>' : '')
+    + _infoBtn(p.type === 'hotel' ? 'hotel' : 'lieu', p.id)
+    + '</div>';
+}
+
+// Liste unifiée triée CHRONOLOGIQUEMENT (le plus tôt en haut), filtrée par
+// type (Logements/Activités/Itinéraire) et par jour (_activeDay). Les jours
+// distincts rencontrés alimentent le sélecteur « par jour ».
 function _renderList() {
   var el = document.getElementById('tripmap-list-inner');
   if (!el) return;
@@ -728,76 +811,58 @@ function _renderList() {
   var showH = _showHotels();
   var showL = _showLieux();
   var showR = _showItineraire();
-  var parts = [];
 
-  // Routes
-  if (showR && _routes.length) {
-    parts.push(_routes.map(function (r) {
-      var isVol  = r.type === 'vol';
-      var sw     = 'height:2px;width:28px;border-radius:2px;';
-      var swatch = isVol
-        ? 'background:' + (_COLORS[r.type] || '#888') + ';' + sw
-        : 'background:repeating-linear-gradient(90deg,'
-          + (_COLORS[r.type] || '#888') + ' 0,'
-          + (_COLORS[r.type] || '#888') + ' 8px,transparent 8px,transparent 14px);' + sw;
-      var rid = (r.id != null) ? String(r.id).replace(/'/g, "\\'") : '';
-      return '<div class="tmap-pin-card"'
-        + (rid
-            ? ' onclick="if(window.tripmapFocusRoute)tripmapFocusRoute(\'' + rid + '\')" style="cursor:pointer"'
-            : ' style="cursor:default"')
-        + '>'
-        + '<div class="tmap-pin-icon" style="background:#f4f4f8;border:none;font-size:13px;font-weight:600">'
-          + _routeIcon(r.type)
-        + '</div>'
-        + '<div class="tmap-pin-body">'
-          + '<div class="tmap-pin-name">' + r.label + '</div>'
-          + '<div class="tmap-pin-sub" style="display:flex;align-items:center;gap:6px;margin-top:3px">'
-            + '<span style="' + swatch + '"></span>'
-            + (isVol ? 'Arc géodésique' : 'Tracé pointillé')
-          + '</div>'
-        + '</div>'
-        + (rid ? _infoBtn('transport', rid) : '')
-        + '</div>';
-    }).join(''));
+  var entries = [];   // { sortKey, html }
+  var days    = {};   // dayKey -> dayLabel (tous jours, indépendamment du filtre)
+
+  if (showR) {
+    _routes.forEach(function (r) {
+      var w = _tmapWhen('transport', r.id);
+      if (w.dayKey) days[w.dayKey] = w.dayLabel;
+      if (_activeDay && w.dayKey !== _activeDay) return;
+      entries.push({ sortKey: w.sortKey, html: _routeCardHtml(r) });
+    });
   }
 
-  // Marqueurs filtrés
-  var filtered = _pins.filter(function (p) {
-    return (p.type === 'hotel' && showH) || (p.type === 'lieu' && showL);
+  _pins.forEach(function (p) {
+    if (!((p.type === 'hotel' && showH) || (p.type === 'lieu' && showL))) return;
+    var w = _tmapWhen(_tmapCatOf(p.type), p.id);
+    if (w.dayKey) days[w.dayKey] = w.dayLabel;
+    if (_activeDay && w.dayKey !== _activeDay) return;
+    entries.push({ sortKey: w.sortKey, html: _pinCardHtml(p) });
   });
 
-  if (filtered.length) {
-    parts.push(filtered.map(function (p) {
-      var statusClass = p.geocoding ? 'geocoding' : (p.lat ? 'located' : 'notfound');
-      var statusLabel = p.geocoding ? 'Géocodage…' : (p.lat ? 'Localisé' : 'Introuvable');
-      var mapsUrl = p.lat
-        ? (_isIOS
-            ? 'maps://?ll=' + p.lat + ',' + p.lng + '&q=' + encodeURIComponent(p.name)
-            : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.label))
-        : null;
+  entries.sort(function (a, b) { return a.sortKey - b.sortKey; });
 
-      return '<div class="tmap-pin-card" '
-        + 'onclick="tripmapFocusPin(\'' + p.id + '\',\'' + p.type + '\')">'
-        + (function(){ var _ic=(typeof _pinIcon==="function")?_pinIcon(p):{svg:(p.emoji||""),bg:"#5C6BC0"}; return '<div class="tmap-pin-icon ' + p.type + '" style="background:'+_ic.bg+'1e;color:'+_ic.bg+'">' + _ic.svg + '</div>'; })()
-        + '<div class="tmap-pin-body">'
-          + '<div class="tmap-pin-name">' + p.name + '</div>'
-          + '<div class="tmap-pin-sub">'  + p.sub  + '</div>'
-        + '</div>'
-        + '<span class="tmap-pin-status ' + statusClass + '">' + statusLabel + '</span>'
-        + (mapsUrl
-          ? '<a class="tmap-pin-open-btn" href="' + mapsUrl + '" target="_blank" rel="noopener" '
-            + 'onclick="event.stopPropagation()">'
-            + (_isIOS ? 'Plans' : 'Maps') + '</a>'
-          : '')
-        + _infoBtn(p.type === 'hotel' ? 'hotel' : 'lieu', p.id)
-        + '</div>';
-    }).join(''));
-  }
-
-  var html = parts.filter(Boolean).join('');
+  var html = entries.map(function (e) { return e.html; }).join('');
   el.innerHTML = html || '<div style="text-align:center;padding:20px;color:var(--ink-muted);font-size:13px">'
     + 'Aucun élément dans cette sélection</div>';
+
+  _tmapBuildDayFilter(days);
 }
+
+// (Re)construit le sélecteur « par jour » à partir des jours rencontrés.
+function _tmapBuildDayFilter(days){
+  var sel = document.getElementById('tmap-day-filter');
+  if (!sel) return;
+  var keys = Object.keys(days).sort();
+  // Si le jour actif n'existe plus (données modifiées), revenir à « Tous ».
+  if (_activeDay && keys.indexOf(_activeDay) === -1) _activeDay = '';
+  var html = '<option value="">Tous les jours</option>';
+  keys.forEach(function (k) {
+    html += '<option value="' + k + '"' + (_activeDay === k ? ' selected' : '') + '>' + days[k] + '</option>';
+  });
+  sel.innerHTML = html;
+  sel.value = _activeDay;
+  sel.style.display = keys.length ? '' : 'none';
+}
+
+// Changement de jour depuis le sélecteur.
+window.tripmapSetDay = function (val) {
+  _activeDay = val || '';
+  _applyFilters();       // masque marqueurs/routes hors jour + reconstruit la liste
+  if (typeof tripmapRecenter === 'function') { try { tripmapRecenter(); } catch (e) {} }
+};
 
 // Petit bouton « info » : ouvre la fiche détail de l'activité (modale),
 // même comportement que le planning. stopPropagation pour ne pas
@@ -856,11 +921,13 @@ var tripmapRecenter = function () {
   _markers.forEach(function (m) {
     var visible = (m.type === 'hotel' && _showHotels())
                || (m.type === 'lieu'  && _showLieux());
+    if (visible && _activeDay) visible = (_tmapWhen(_tmapCatOf(m.type), m.id).dayKey === _activeDay);
     if (visible && m.lat != null) allPts.push([m.lat, m.lng]);
   });
 
   if (_showItineraire()) {
     _routes.forEach(function (r) {
+      if (_activeDay && _tmapWhen('transport', r.id).dayKey !== _activeDay) return;
       r.layers.forEach(function (layer) {
         layer.getLatLngs().forEach(function (pt) {
           // getLatLngs peut retourner des tableaux imbriqués (multipolyline)
@@ -1006,6 +1073,10 @@ window.initTripMap = function (options) {
   setTimeout(function () {
     _map.invalidateSize();
     _loadTripPoints();
+    // Recentrage à CHAQUE montage (chaque arrivée sur la carte), pas seulement
+    // au 1er chargement : _loadTripPoints ne recentre que s'il y a du géocodage
+    // en attente, donc une carte déjà en cache ne bougeait plus.
+    setTimeout(function () { if (typeof tripmapRecenter === 'function') { try { tripmapRecenter(); } catch (e) {} } }, 260);
   }, 120);
 };
 
@@ -1047,5 +1118,49 @@ YumeState.on('map:refresh', function () {
     _loadTripPoints();
   }, 150);
 });
+
+// ── §14 VOLET REDIMENSIONNABLE (desktop) ──────────────────────────────
+// Poignée verticale entre le volet infos (gauche) et la carte (droite).
+// Pilote la variable CSS --tmap-panel-w sur #voyage-map-host, persistée.
+(function initTripmapResizer(){
+  function init(){
+    var host = document.getElementById('voyage-map-host');
+    var rez  = document.getElementById('tripmap-resizer');
+    if(!host || !rez || rez._wired) return;
+    rez._wired = true;
+    try { var saved = localStorage.getItem('yume_tmap_panel_w');
+      if(saved) host.style.setProperty('--tmap-panel-w', saved); } catch(e){}
+    var dragging = false;
+    function onMove(clientX){
+      var rect = host.getBoundingClientRect();
+      var w = clientX - rect.left;
+      var maxW = Math.max(260, rect.width - 340); // laisse ≥340px à la carte
+      w = Math.max(210, Math.min(w, Math.min(640, maxW)));
+      host.style.setProperty('--tmap-panel-w', w + 'px');
+    }
+    function start(e){
+      dragging = true; rez.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      if(e.preventDefault) e.preventDefault();
+    }
+    function end(){
+      if(!dragging) return;
+      dragging = false; rez.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      try { localStorage.setItem('yume_tmap_panel_w', host.style.getPropertyValue('--tmap-panel-w')); } catch(e){}
+      if (_map && _map.invalidateSize) _map.invalidateSize();
+    }
+    rez.addEventListener('mousedown', start);
+    document.addEventListener('mousemove', function(e){ if(dragging) onMove(e.clientX); });
+    document.addEventListener('mouseup', end);
+    rez.addEventListener('touchstart', function(e){ start(e); }, { passive:false });
+    document.addEventListener('touchmove', function(e){
+      if(dragging && e.touches && e.touches[0]){ onMove(e.touches[0].clientX); if(e.preventDefault) e.preventDefault(); }
+    }, { passive:false });
+    document.addEventListener('touchend', end);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
 
 })(); // fin IIFE map-trip

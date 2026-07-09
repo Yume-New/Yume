@@ -806,6 +806,17 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
 .addr-field input:focus{ border-color:var(--sakura); background:var(--surface); }
 /* Champ Rue/N° : pleine largeur (col-span 2) */
 /* Bouton Vérifier */
+/* Ligne d'actions du bloc adresse (Vérifier + Retirer la localisation) */
+.addr-actions{ display:flex;gap:8px;margin-top:8px;align-items:stretch;flex-wrap:wrap }
+.addr-actions .btn-verify-addr{ margin-top:0;flex:1;min-width:150px }
+.btn-remove-geo{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:8px 12px;background:var(--surface);
+  border:1.5px solid var(--border);border-radius:var(--r-sm);
+  font-size:12px;font-weight:500;color:var(--ink-muted);
+  cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;flex:none
+}
+.btn-remove-geo:hover{ border-color:#c0392b;color:#c0392b;background:#fef0f0 }
 .btn-verify-addr{
   display:flex;align-items:center;gap:6px;
   width:100%;margin-top:8px;
@@ -1421,6 +1432,58 @@ input.auto-filled{
   border-color:var(--teal)!important;background:rgba(45,140,107,.06)!important;
   transition:border-color .25s,background .25s
 }
+/* Champ « Nuits » calculé automatiquement : non éditable, lecture seule.
+   Rendu volontairement atténué (fond gris, curseur par défaut) pour
+   signaler qu'il n'est pas saisissable. */
+input.nuits-auto{
+  background:var(--surface-2);color:var(--ink-muted);
+  cursor:default;pointer-events:none;
+  text-align:center;font-weight:600
+}
+
+/* ── Bloc Liens (formulaire création + édition) ── */
+.liens-block{ margin:8px 0 4px; }
+.liens-block-label{
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--ink-muted);margin-bottom:6px
+}
+.liens-list{ display:flex;flex-direction:column;gap:6px; }
+.lien-row{ display:flex;gap:6px;align-items:center; }
+.lien-row .lien-label{ flex:1;min-width:0; }
+.lien-row .lien-url{ flex:1.6;min-width:0; }
+.lien-del{
+  flex:none;background:none;border:none;cursor:pointer;color:var(--ink-hint);
+  padding:4px;border-radius:var(--r-sm);display:inline-flex;align-items:center;transition:color .14s
+}
+.lien-del:hover{ color:#c0392b }
+.btn-add-lien{
+  margin-top:8px;padding:6px 14px;background:transparent;
+  border:1.5px dashed var(--border);border-radius:var(--r-sm);
+  font-size:12px;color:var(--ink-muted);cursor:pointer;
+  font-family:'DM Sans',sans-serif;transition:all .14s;width:100%;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px
+}
+.btn-add-lien:hover{ border-color:var(--sakura);color:var(--sakura);background:var(--sakura-light) }
+
+/* ── Icône lien sur une carte ── */
+.card-lien-btn{
+  background:none;border:none;cursor:pointer;color:var(--ink-muted);
+  padding:0;margin-left:5px;display:inline-flex;align-items:center;vertical-align:middle;transition:color .14s
+}
+.card-lien-btn:hover{ color:var(--sakura) }
+
+/* ── Popover liste des liens ── */
+.liens-popover{
+  position:absolute;z-index:2200;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-md);box-shadow:var(--shadow-md);padding:5px;min-width:170px;max-width:280px;
+  display:flex;flex-direction:column;gap:2px
+}
+.liens-pop-item{
+  display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--r-sm);
+  font-size:13px;color:var(--ink);text-decoration:none;cursor:pointer;transition:background .12s
+}
+.liens-pop-item:hover{ background:var(--surface-2) }
+.liens-pop-item span{ overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
 
 .country-input-wrap{position:relative}
 .country-suggestions{
@@ -3260,6 +3323,18 @@ body::-webkit-scrollbar,
   font-family:'DM Sans',sans-serif;transition:all .15s;flex-shrink:0;
 }
 .tmap-filter.active{background:var(--sakura);color:white;border-color:var(--sakura)}
+/* Sélecteur « par jour » — même gabarit que les chips filtres */
+.tmap-day-filter{
+  padding:5px 30px 5px 13px;border-radius:20px;border:1.5px solid var(--border);
+  background:var(--surface-2);color:var(--ink-muted);
+  font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;
+  font-family:'DM Sans',sans-serif;transition:all .15s;
+  -webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a8290' stroke-width='2.4'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat:no-repeat;background-position:right 10px center;
+}
+.tmap-day-filter:hover{border-color:var(--sakura);color:var(--sakura)}
+.tmap-day-filter:focus{outline:none;border-color:var(--sakura)}
 .tmap-filter:hover:not(.active){border-color:var(--sakura);color:var(--sakura)}
 /* Couleurs distinctes par filtre actif */
 .tmap-filter[data-filter="hotels"].active{background:#e8748a;border-color:#e8748a}
@@ -3378,6 +3453,7 @@ body::-webkit-scrollbar,
   padding:12px 14px calc(80px + env(safe-area-inset-bottom,0px));
 }
 #tripmap-list-inner{display:flex;flex-direction:column;gap:8px}
+#tripmap-resizer{display:none} /* visible seulement en desktop (grille) */
 
 .tmap-pin-card{
   display:flex;align-items:center;gap:12px;
@@ -3397,7 +3473,7 @@ body::-webkit-scrollbar,
 .tmap-pin-body{flex:1;min-width:0}
 .tmap-pin-name{font-size:13px;font-weight:500;color:var(--ink);
   white-space:normal;line-height:1.3;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
   word-break:break-word}
 .tmap-pin-sub{font-size:11px;color:var(--ink-muted);margin-top:1px}
 .tmap-pin-status{font-size:10px;font-weight:600;padding:2px 8px;
@@ -4233,12 +4309,29 @@ body::-webkit-scrollbar,
     order:3;
     flex:1 1 auto; min-width:0;
     display:grid;
-    grid-template-columns:clamp(248px, 21vw, 320px) minmax(0,1fr);
+    grid-template-columns:var(--tmap-panel-w, clamp(248px, 21vw, 320px)) minmax(0,1fr);
     grid-template-rows:auto minmax(0,1fr);
     height:calc(100vh - var(--topbar-h));
     overflow:hidden;
     padding-bottom:0;
+    position:relative;
   }
+  /* Poignée de redimensionnement du volet gauche (desktop) */
+  #tripmap-resizer{
+    display:block; position:absolute; top:0; bottom:0;
+    left:var(--tmap-panel-w, clamp(248px, 21vw, 320px));
+    width:11px; transform:translateX(-5px);
+    cursor:col-resize; z-index:30; background:transparent;
+  }
+  #tripmap-resizer::before{
+    content:''; position:absolute; top:0; bottom:0; left:5px; width:1px;
+    background:var(--border); transition:background .15s, width .15s;
+  }
+  #tripmap-resizer:hover::before, #tripmap-resizer.dragging::before{
+    background:var(--sakura); width:3px; left:4px;
+  }
+  /* Plein écran : pas de poignée */
+  #voyage-content #voyage-map-host.is-full #tripmap-resizer{ display:none; }
   /* Colonne GAUCHE = infos (légende en haut + liste des points dessous),
      fond surface, séparée de la carte par un filet, pleine hauteur. */
   #voyage-content #voyage-map-host #tripmap-legend-bar{
@@ -5246,9 +5339,9 @@ body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
 .exp-cat-name{ font-size:13.5px; font-weight:700; color:var(--ink); flex:1; }
 .exp-cat-total{ font-size:12px; color:var(--ink-muted); font-weight:600; }
 .exp-fac-row{ display:flex; align-items:center; gap:9px; padding:9px 12px 9px 30px; border-top:1px solid var(--border); cursor:pointer; }
-.exp-fac-main{ flex:1; min-width:0; }
-.exp-fac-desc{ font-size:13px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.exp-fac-meta{ font-size:11px; color:var(--ink-hint); margin-top:1px; }
+.exp-fac-main{ flex:1; min-width:0; display:flex; flex-direction:column; }
+.exp-fac-desc{ display:block; font-size:13px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.exp-fac-meta{ display:block; font-size:11px; color:var(--ink-hint); margin-top:1px; }
 .exp-fac-amount{ font-size:12.5px; font-weight:600; color:var(--ink-muted); flex-shrink:0; }
 .exp-chk{ width:18px; height:18px; flex-shrink:0; cursor:pointer; accent-color:var(--sakura); }
 .exp-empty{ text-align:center; padding:28px 16px; color:var(--ink-muted); font-size:13.5px; }

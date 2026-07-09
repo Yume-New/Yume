@@ -354,21 +354,10 @@
 <!-- ═══════════════════════════════════════════════════════
      SECTION : TRAJETS & PASS (Vols, Trains, Bus, Bateau, Covoiturage, Pass)
 ════════════════════════════════════════════════════════ -->
-<!-- ══ SOUS-SECTION PASS (séparée de Transports) ══ -->
-<section class="section active" id="tab-pass">
-  <div class="section-top">
-    <div class="section-top-title">Pass &amp; Abonnements</div>
-    <div class="section-top-actions">
-      <button class="btn-add-top" onclick="pickTransport('pass')" title="Ajouter un pass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter</button>
-      <button class="btn-edit-mode" id="bedit-passes" onclick="toggleEmode('passes')">Modifier</button>
-    </div>
-  </div>
-  <div class="edit-banner" id="ebanner-passes">Mode édition — cliquez sur l'icône d'un pass pour le modifier ou le supprimer</div>
-  <div id="passes-list"></div>
-</section>
-
 <!-- ══ SOUS-SECTION TRANSPORTS (trajets) ══ -->
-<section class="section" id="tab-mobilite">
+<!-- NB : ordre du belt = Transport · Pass · Location (cf. _DEPL et
+     SECTION_ORDER). Ces 3 doivent rester dans le MÊME ordre. -->
+<section class="section active" id="tab-mobilite">
   <div class="section-top">
     <div class="section-top-title">Transports</div>
     <div class="section-top-actions">
@@ -659,6 +648,12 @@
     <div class="form-row" id="mob-note-row" style="align-items:center;margin-top:2px">
       <input type="text" id="mob-note" placeholder="Note (optionnel)" style="flex:1"/>
     </div>
+    <!-- ── Liens (masqué pour pass via mob-group) ── -->
+    <div class="liens-block" id="mob-liens-block">
+      <div class="liens-block-label">Liens</div>
+      <div id="mob-liens-list" class="liens-list"></div>
+      <button type="button" class="btn-add-lien" onclick="_lienAddRow('mob')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un lien</button>
+    </div>
     <!-- ── Actions (toujours visibles) ── -->
     <div class="form-row" id="mob-action-row" style="align-items:center;margin-top:6px;justify-content:flex-end">
       <button class="btn-primary" id="mob-submit-btn" onclick="addMobilite()">+ Ajouter</button>
@@ -705,6 +700,19 @@
     <select id="vol-arr-jour"></select><select id="vol-arr-mois"></select>
     <select id="tr-jour"></select><select id="tr-mois"></select>
   </div>
+</section>
+
+<!-- ══ SOUS-SECTION PASS (séparée de Transports) ══ -->
+<section class="section" id="tab-pass">
+  <div class="section-top">
+    <div class="section-top-title">Pass &amp; Abonnements</div>
+    <div class="section-top-actions">
+      <button class="btn-add-top" onclick="pickTransport('pass')" title="Ajouter un pass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter</button>
+      <button class="btn-edit-mode" id="bedit-passes" onclick="toggleEmode('passes')">Modifier</button>
+    </div>
+  </div>
+  <div class="edit-banner" id="ebanner-passes">Mode édition — cliquez sur l'icône d'un pass pour le modifier ou le supprimer</div>
+  <div id="passes-list"></div>
 </section>
 <section class="section" id="tab-locations">
   <div class="section-top">
@@ -833,8 +841,8 @@
         <select id="ht-co-mois" style="display:none"></select>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex:none">
-        <label style="font-size:12px;color:var(--ink-muted)">Nuits</label>
-        <input type="number" id="ht-nuits" placeholder="—" style="max-width:70px;min-width:60px;flex:none" oninput="autoHotel('nuits')"/>
+        <label style="font-size:12px;color:var(--ink-muted)">Nuits <span style="font-weight:400;color:var(--ink-hint)">(auto)</span></label>
+        <input type="number" id="ht-nuits" class="nuits-auto" placeholder="—" style="max-width:70px;min-width:60px;flex:none" readonly tabindex="-1" aria-readonly="true" title="Calculé automatiquement depuis les dates"/>
         <span class="auto-hint" id="hint-ht-nuits">Calculé</span>
       </div>
     </div>
@@ -910,6 +918,11 @@
     </div>
     <div class="form-row">
       <textarea id="ht-note" rows="2" placeholder="Note libre (petit-déj inclus, code wifi, étage…)" style="width:100%;resize:vertical;font-family:DM Sans,sans-serif"></textarea>
+    </div>
+    <div class="liens-block">
+      <div class="liens-block-label">Liens</div>
+      <div id="ht-liens-list" class="liens-list"></div>
+      <button type="button" class="btn-add-lien" onclick="_lienAddRow('ht')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un lien</button>
     </div>
     <div class="form-row" style="align-items:center">
       <label class="pdf-btn">Confirmation / Bon
@@ -1030,8 +1043,13 @@
     <div class="form-row">
       <input type="text" id="lieu-note" placeholder="Note / conseil (optionnel)" style="flex:1"/>
     </div>
+    <div class="liens-block">
+      <div class="liens-block-label">Liens</div>
+      <div id="lieu-liens-list" class="liens-list"></div>
+      <button type="button" class="btn-add-lien" onclick="_lienAddRow('lieu')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un lien</button>
+    </div>
     <div class="form-row">
-      <input type="date" id="lieu-date" placeholder="Jour de visite (optionnel)" style="flex:1" title="Jour de visite (optionnel)"/>
+      <input type="text" id="lieu-date" class="cal-trigger" placeholder="Date de visite (optionnel) — JJ/MM/AAAA" style="flex:1" title="Date de visite (optionnel)" readonly onclick="openCalendar('lieu-date')"/>
     </div>
     <div class="form-row" style="align-items:center">
       <button class="btn-primary" onclick="addLieu()">Ajouter</button>
@@ -1287,6 +1305,7 @@
     <button class="tmap-filter"        data-filter="hotels"     onclick="tripmapFilter('hotels')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><rect x="2" y="6" width="20" height="16" rx="2"/><path d="M2 12h20"/><rect x="7" y="16" width="3" height="6"/><rect x="14" y="16" width="3" height="6"/></svg> Logements</button>
     <button class="tmap-filter"        data-filter="lieux"      onclick="tripmapFilter('lieux')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg> Activités</button>
     <button class="tmap-filter"        data-filter="itineraire" onclick="tripmapFilter('itineraire')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M21 16l-3-8-3 3-5-5-3 3 2 3-4 2 1 2 5-1 1 3 3-1 1 3 3-3z"/></svg> Itinéraire</button>
+    <select id="tmap-day-filter" class="tmap-day-filter" onchange="tripmapSetDay(this.value)" aria-label="Filtrer par jour" style="display:none"><option value="">Tous les jours</option></select>
     <span id="tmap-active-count" style="display:none"></span>
     <!-- Actions GPS / Recentrer (mobile uniquement, empilées à droite) -->
     <div id="tmap-legend-actions">
@@ -1321,6 +1340,8 @@
   <div id="tripmap-list-wrap">
     <div id="tripmap-list-inner"></div>
   </div>
+  <!-- Poignée de redimensionnement du volet (desktop uniquement) -->
+  <div id="tripmap-resizer" title="Redimensionner le volet" aria-label="Redimensionner le volet"></div>
     </div>
 
 

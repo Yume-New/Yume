@@ -67,6 +67,17 @@ function _sortKey(dateStr, heureStr) {
   return ts;
 }
 
+// Normalise une heure d'ouverture de lieu ("09h00", "9h", "09:00") vers
+// "HH:MM" pour _sortKey. Renvoie '' si non exploitable.
+function _heureOuvHHMM(h) {
+  if (!h) return '';
+  var m = String(h).match(/^(\d{1,2})\s*[h:]\s*(\d{2})$/);
+  if (m) return ('0' + m[1]).slice(-2) + ':' + m[2];
+  var m2 = String(h).match(/^(\d{1,2})\s*h$/);
+  if (m2) return ('0' + m2[1]).slice(-2) + ':00';
+  return '';
+}
+
 // Résolution des dates HÔTEL : leur format est "JJ mois" SANS année (ex.
 // "09 août"), non géré par _parseDate. On réutilise _hotelDateObj (app.js)
 // qui déduit l'année du voyage actif. Fallback sur _parseDate.
@@ -196,18 +207,24 @@ function _buildEvents() {
   });
 
   // ── Lieux ─────────────────────────────────────────────────────────
-  // Les lieux n'ont pas toujours de date — on les place à minuit
-  // du jour de visite si disponible, sinon à la fin de la timeline.
+  // Les lieux n'ont pas toujours de date de visite — avec dateVisite
+  // (JJ/MM/AAAA) on les insère chronologiquement au jour dit (+ heure
+  // d'ouverture si dispo), sinon à la fin de la timeline (sortKey=Infinity).
   _lx.forEach(function (l) {
-    var sk = Infinity; // sans date → fin de liste
+    var dv   = l.dateVisite || '';
+    var hOuv = _heureOuvHHMM(l.ouverture);        // "09h00" → "09:00" (ou '')
+    var dObj = dv ? _parseDate(dv) : null;
+    var sk   = dv ? _sortKey(dv, hOuv) : Infinity; // sans date → fin de liste
+    var sub  = l.ville || '';
+    if (hOuv) sub = (l.ville ? l.ville + '  ·  ' : '') + hOuv;
     events.push({
       sortKey: sk,
-      date: '',
-      dateObj: null,
+      date: dv,
+      dateObj: dObj,
       category: 'lieu',
       type: 'lieu',
       title: l.nom || '—',
-      sub: l.ville || '',
+      sub: sub,
       badge: l.visited ? 'Visité' : '',
       icon: _ICONS.lieu,
       color: _COLORS.lieu,
