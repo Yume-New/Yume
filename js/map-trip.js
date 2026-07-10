@@ -597,7 +597,13 @@ function _loadTripPoints() {
 
   // ── Hôtels ──────────────────────────────────────────────────────
   (hotels || []).forEach(function (h, i) {
-    if (h.geoOff) return; // localisation explicitement retirée → aucun pin
+    // Localisation explicitement retirée → présent dans la liste mais NON
+    // localisé (« Introuvable »), jamais géocodé, aucun marqueur sur la carte.
+    if (h.geoOff) {
+      _pins.push({ id:String(h.id), type:'hotel', name:h.nom, sub:'', emoji:'H',
+                   label:'', lat:null, lng:null, geocoding:false, _idxRef:String(i) });
+      return;
+    }
     var query = _hotelQuery(h);
     if (!query) return;
     var pin = {
@@ -623,7 +629,13 @@ function _loadTripPoints() {
   // ── Lieux ────────────────────────────────────────────────────────
   // FIX 2 : utiliser l.lat/l.lng quand ils existent (bug : étaient forcés à null)
   (lieux || []).forEach(function (l, i) {
-    if (l.geoOff) return; // localisation explicitement retirée → aucun pin
+    // Localisation explicitement retirée → présent dans la liste mais NON
+    // localisé (« Introuvable »), jamais géocodé, aucun marqueur sur la carte.
+    if (l.geoOff) {
+      _pins.push({ id:String(l.id), type:'lieu', cat:l.categorie||'', name:l.nom, sub:'',
+                   emoji:l.emoji||'', label:'', lat:null, lng:null, geocoding:false, _idxRef:String(i) });
+      return;
+    }
     var query = _lieuQuery(l);
     if (!query) return;
     var alreadyGeocoded = !!(l.lat && l.lng);
@@ -918,29 +930,20 @@ var tripmapRecenter = function () {
   if (!_map) return;
   var allPts = [];
 
+  // CADRAGE = uniquement les marqueurs d'HÉBERGEMENTS et de LIEUX. Les arcs de
+  // vol et trajets de train (_routes) restent VISIBLES mais n'entrent JAMAIS
+  // dans le calcul des bounds — sinon Paris→Tokyo étire la vue sur toute
+  // l'Eurasie. On ignore aussi le filtre de type (Tout/Logements/Activités/
+  // Itinéraire) : le cadrage porte toujours sur hôtels+lieux, même si le filtre
+  // « Itinéraire » masque leurs marqueurs. Seul le filtre par JOUR restreint.
   _markers.forEach(function (m) {
-    var visible = (m.type === 'hotel' && _showHotels())
-               || (m.type === 'lieu'  && _showLieux());
-    if (visible && _activeDay) visible = (_tmapWhen(_tmapCatOf(m.type), m.id).dayKey === _activeDay);
-    if (visible && m.lat != null) allPts.push([m.lat, m.lng]);
+    if (m.type !== 'hotel' && m.type !== 'lieu') return; // jamais une route
+    if (m.lat == null) return;
+    if (_activeDay && _tmapWhen(_tmapCatOf(m.type), m.id).dayKey !== _activeDay) return;
+    allPts.push([m.lat, m.lng]);
   });
 
-  if (_showItineraire()) {
-    _routes.forEach(function (r) {
-      if (_activeDay && _tmapWhen('transport', r.id).dayKey !== _activeDay) return;
-      r.layers.forEach(function (layer) {
-        layer.getLatLngs().forEach(function (pt) {
-          // getLatLngs peut retourner des tableaux imbriqués (multipolyline)
-          if (Array.isArray(pt)) {
-            pt.forEach(function (p) { if (p.lat != null) allPts.push([p.lat, p.lng]); });
-          } else if (pt.lat != null) {
-            allPts.push([pt.lat, pt.lng]);
-          }
-        });
-      });
-    });
-  }
-
+  // Fallback inchangé : zéro hôtel/lieu géolocalisé → centrer sur le pays.
   if (!allPts.length) {
     var country = currentTripId && allTrips[currentTripId]
       ? (allTrips[currentTripId].meta || {}).country || '' : '';
@@ -952,9 +955,10 @@ var tripmapRecenter = function () {
     return;
   }
 
+  // Un seul point → zoom ville (maxZoom raisonnable, pas de zoom excessif).
   if (allPts.length === 1) { _map.setView(allPts[0], 13); return; }
   try {
-    _map.fitBounds(L.latLngBounds(allPts), { padding: [40, 40], maxZoom: 14 });
+    _map.fitBounds(L.latLngBounds(allPts), { padding: [40, 40], maxZoom: 13 });
   } catch (e) {}
 };
 window.tripmapRecenter = tripmapRecenter;

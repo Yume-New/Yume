@@ -601,6 +601,10 @@ function verifierAdresse(context){
 // fullAddress/adresse et lat/lng → plus aucun pin (même pas par repli nom).
 function _addrRemoveGeo(prefix){
   ['-rue','-cp','-pays'].forEach(function(s){ var e=document.getElementById(prefix+s); if(e) e.value=''; });
+  // Ville : vider TOUTES les occurrences (l'hôtel a un doublon d'id eh-ville :
+  // champ « Ville » du haut + champ du bloc adresse) → aucune valeur ne survit.
+  var villes=document.querySelectorAll('[id="'+prefix+'-ville"]');
+  for(var i=0;i<villes.length;i++){ villes[i].value=''; }
   var flag=document.getElementById(prefix+'-geo-remove'); if(flag) flag.value='1';
   var res=document.getElementById(prefix+'-addr-result');
   if(res){ res.className='addr-result-badge visible ko'; res.textContent='Localisation retirée — validez pour appliquer.'; }
@@ -988,8 +992,6 @@ function showPage(pageId, btn){
       showPage('home', document.querySelector('.tb-item[data-page="home"]'));
       return;
     }
-  } else if(pageId === 'explorer'){
-    if(typeof renderExplorer === 'function') renderExplorer();
   } else if(pageId === 'profil'){
     if(typeof loadProfilPage === 'function') loadProfilPage();
   }
@@ -1613,22 +1615,11 @@ function updateVoyageProgressBar(){
 // ══════════════════════════════════════════════════════════
 // Wrapper qui commit directement sans passer par draft
 function applyThemeFromProfil(theme){
-  // Fermer draft si ouvert pour éviter conflit
-  if(_draft){ _draft.theme = theme; }
   _state.theme = theme;
   _currentTheme = theme;
   localStorage.setItem('yume_theme', theme);
-  _renderTheme(theme);
+  _renderTheme(theme);   // gère aussi l'état actif des .theme-card
   _renderBackground(_state);
-
-  // Sync chips dans le profil
-  document.querySelectorAll('#psp-theme-grid .theme-chip').forEach(function(c){
-    c.classList.toggle('active', c.getAttribute('data-theme') === theme);
-  });
-  // Sync chips dans l'overlay settings aussi
-  document.querySelectorAll('.theme-grid .theme-chip').forEach(function(c){
-    c.classList.toggle('active', c.getAttribute('data-theme') === theme);
-  });
 }
 
 // Wrappers brightness/blur qui fonctionnent sans draft
@@ -1720,99 +1711,6 @@ function _moveGroupSlider(){
   slider.style.width     = aRect.width + 'px';
   slider.style.transform = 'translateX(' + left + 'px)';
   slider.style.opacity   = '1';
-}
-
-// Rendu de la page Explorer (recherche + carrousel d'inspiration réutilisé)
-function renderExplorer(){
-  var host = document.getElementById('explorer-inspiration');
-  if(!host) return;
-  var cfg = (window.YUME_INSPIRATION || []).filter(function(c){
-    return c && c.images && c.images.length;
-  });
-  // Nettoyer d'anciens minuteurs Explorer
-  if(window._explTimers){ Object.keys(window._explTimers).forEach(function(k){ clearInterval(window._explTimers[k]); }); }
-  window._explTimers = {};
-  window._explIdx = window._explIdx || {};
-
-  if(!cfg.length){
-    host.innerHTML = '<div class="expl-empty">Aucune destination pour le moment.</div>';
-    return;
-  }
-
-  // Cadres par pays empilés verticalement, images qui défilent (10 s)
-  host.innerHTML = '<div class="hi-label" style="margin-bottom:14px">Où partir ensuite ?</div>'
-    + cfg.map(function(c){
-        var label = c.label || c.country || '';
-        var idx = (window._explIdx[label] || 0) % c.images.length;
-        return '<div class="expl-card" data-label="'+label.replace(/"/g,'&quot;')+'">'
-          + '<img src="'+c.images[idx].replace(/"/g,'&quot;')+'" alt="'+label+'" loading="lazy" onerror="this.style.opacity=0"/>'
-          + '<div class="expl-grad"></div>'
-          + '<span class="expl-name">'+label+'</span>'
-          + (c.images.length>1 ? '<span class="expl-dots">'+c.images.map(function(_,di){
-              return '<i class="'+(di===idx?'on':'')+'"></i>';
-            }).join('')+'</span>' : '')
-        + '</div>';
-      }).join('')
-    + '<div class="expl-empty" id="expl-noresult" style="display:none">Aucune destination ne correspond à votre recherche.</div>';
-
-  // Défilement auto des images (10 s) + clic = image suivante (reset)
-  function _advance(label, reset){
-    var c = cfg.find(function(x){ return (x.label||x.country) === label; });
-    if(!c) return;
-    window._explIdx[label] = ((window._explIdx[label] || 0) + 1) % c.images.length;
-    var card = host.querySelector('.expl-card[data-label="'+CSS.escape(label)+'"]');
-    if(card){
-      var i = window._explIdx[label];
-      var img = card.querySelector('img');
-      if(img){ img.style.opacity='0'; setTimeout(function(){ img.src=c.images[i]; img.style.opacity='1'; }, 180); }
-      card.querySelectorAll('.expl-dots i').forEach(function(d,di){ d.classList.toggle('on', di===i); });
-    }
-    if(reset && window._explTimers[label]){
-      clearInterval(window._explTimers[label]);
-      window._explTimers[label] = setInterval(function(){ if(!host.isConnected){clearInterval(window._explTimers[label]);return;} _advance(label,false); }, 10000);
-    }
-  }
-  cfg.forEach(function(c){
-    var label = c.label || c.country || '';
-    if(c.images.length < 2) return;
-    window._explTimers[label] = setInterval(function(){ if(!host.isConnected){clearInterval(window._explTimers[label]);return;} _advance(label,false); }, 10000);
-  });
-  host.querySelectorAll('.expl-card').forEach(function(card){
-    card.onclick = function(){ _advance(card.getAttribute('data-label'), true); };
-  });
-
-  // Recherche : filtre en direct les cadres pays par nom (insensible
-  // à la casse et aux accents). Remplace l'ancien message « à venir ».
-  var search = document.getElementById('explorer-search');
-  if(search){
-    if(!search._wired){
-      search._wired = true;
-      search._norm = function(s){
-        return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-      };
-      search._filter = function(){
-        var h = document.getElementById('explorer-inspiration');
-        if(!h) return;
-        var q = search._norm(search.value.trim());
-        var shown = 0;
-        h.querySelectorAll('.expl-card').forEach(function(card){
-          var match = !q || search._norm(card.getAttribute('data-label')).indexOf(q) !== -1;
-          card.style.display = match ? '' : 'none';
-          if(match) shown++;
-        });
-        var nr = document.getElementById('expl-noresult');
-        if(nr) nr.style.display = (q && shown === 0) ? '' : 'none';
-        var lbl = h.querySelector('.hi-label');
-        if(lbl) lbl.style.display = q ? 'none' : '';
-      };
-      search.addEventListener('input', search._filter);
-      search.addEventListener('keydown', function(e){
-        if(e.key === 'Enter'){ e.preventDefault(); search.blur(); }
-      });
-    }
-    // Ré-appliquer un filtre éventuel après reconstruction des cartes
-    if(search.value) search._filter();
-  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -1922,9 +1820,9 @@ function loadProfilPage(){
   if(brLbl) brLbl.textContent = Math.round(br*100)+'%';
   if(blLbl) blLbl.textContent = bl+'px';
 
-  // Sync theme chips
+  // Sync cartes thème
   var theme = localStorage.getItem('yume_theme') || 'standard';
-  document.querySelectorAll('#psp-theme-grid .theme-chip').forEach(function(c){
+  document.querySelectorAll('#psp-theme-grid .theme-card').forEach(function(c){
     c.classList.toggle('active', c.getAttribute('data-theme')===theme);
   });
 }
@@ -1959,7 +1857,7 @@ function openSettingsModal(){
   if(blLbl) blLbl.textContent = bl+'px';
   // Sync thème actif
   var theme = localStorage.getItem('yume_theme') || 'standard';
-  document.querySelectorAll('#psp-theme-grid .theme-chip').forEach(function(c){
+  document.querySelectorAll('#psp-theme-grid .theme-card').forEach(function(c){
     c.classList.toggle('active', c.getAttribute('data-theme') === theme);
   });
   overlay.classList.add('open');
@@ -2320,7 +2218,7 @@ function renderHomeHero(){
     + '<div class="hh-top">'
       + '<div class="hh-greet"><span class="hh-hi">' + hello + '</span>'
       + '<span class="hh-kicker">' + kicker + '</span></div>'
-      + '<button class="hh-bell" onclick="event.stopPropagation();openSettings && openSettings()" aria-label="Notifications">' + ICO_BELL + '</button>'
+      + '<button class="hh-bell" onclick="event.stopPropagation();if(window.openSettingsModal)openSettingsModal()" aria-label="Paramètres">' + ICO_BELL + '</button>'
     + '</div>'
     + '<div class="hh-body">'
       + (pill ? '<span class="hh-pill hh-pill-'+pillCls+'">' + ICO_CLOCK + ' ' + pill + '</span>' : '')
@@ -2340,7 +2238,7 @@ function renderHomeHero(){
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// ACCUEIL — DASHBOARD (stats cumulées + cartes enrichies + inspiration)
+// ACCUEIL — DASHBOARD (stats cumulées + cartes enrichies)
 // ══════════════════════════════════════════════════════════════════════
 
 // Lit les tableaux d'un voyage. Pour le voyage ACTIF, les données vivent
@@ -2412,151 +2310,11 @@ function renderHomeStats(){
   }).join('');
 }
 
-// ── Option 4 : carrousel d'inspiration façon SNCF (v2) ──
-// 3 cases visibles. Flèches ‹ › DE PART ET D'AUTRE (gauche de la 1re
-// case, droite de la 3e), centrées verticalement. Décalage des pays
-// avec animation de glissement. Dans chaque case, l'image change toutes
-// les 10 s ; un clic passe à l'image suivante ET remet le minuteur à 0.
-var _inspWindow = 0;
-var _inspImgIdx = {};                // label → index image courante
-var _inspTimers = {};                // label → timer 10s individuel
-// Wrapper : rend l'inspiration dans un conteneur cible (Accueil ou Explorer)
-window._renderInspirationInto = function(el){
-  if(!el) return;
-  renderHomeInspiration(el.id);
-};
-
-function renderHomeInspiration(targetId){
-  var el = document.getElementById(targetId || 'home-inspiration');
-  if(!el) return;
-  var cfg = (window.YUME_INSPIRATION || []).filter(function(c){
-    return c && c.images && c.images.length;
-  });
-  // Nettoyer les anciens minuteurs
-  Object.keys(_inspTimers).forEach(function(k){ clearInterval(_inspTimers[k]); });
-  _inspTimers = {};
-  if(!cfg.length){ el.innerHTML = ''; el.style.display = 'none'; return; }
-  el.style.display = '';
-
-  var VISIBLE = Math.min(3, cfg.length);
-  var hasNav  = cfg.length > VISIBLE;
-
-  // Squelette (construit une fois) : flèches + fenêtre + piste
-  el.innerHTML =
-    '<div class="ic-head"><div class="hi-label">Où partir ensuite ?</div></div>'
-    + '<div class="ic-stage">'
-      + (hasNav ? '<button class="ic-arrow ic-arrow-l" id="ic-prev" aria-label="Précédent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M15 18l-6-6 6-6"/></svg></button>' : '')
-      + '<div class="ic-viewport"><div class="ic-track" id="ic-track"></div></div>'
-      + (hasNav ? '<button class="ic-arrow ic-arrow-r" id="ic-next" aria-label="Suivant"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M9 18l6-6-6-6"/></svg></button>' : '')
-    + '</div>';
-
-  var track = document.getElementById('ic-track');
-
-  // Construit le HTML d'une case pour un pays
-  function _cardHTML(country){
-    var label = country.label || country.country || '';
-    var imgs  = country.images;
-    var idx   = (_inspImgIdx[label] || 0) % imgs.length;
-    var src   = imgs[idx];
-    return '<div class="ic-card" data-label="'+label.replace(/"/g,'&quot;')+'">'
-      + '<img src="'+src.replace(/"/g,'&quot;')+'" alt="'+label+'" loading="lazy" onerror="this.style.opacity=0"/>'
-      + '<div class="ic-grad"></div>'
-      + '<span class="ic-name">'+label+'</span>'
-      + (imgs.length>1 ? '<span class="ic-dots">'+imgs.map(function(_,di){
-          return '<i class="'+(di===idx?'on':'')+'"></i>';
-        }).join('')+'</span>' : '')
-    + '</div>';
-  }
-
-  // Affiche les VISIBLE pays à partir de _inspWindow
-  function _renderWindow(){
-    var html = '';
-    for(var k=0;k<VISIBLE;k++){
-      html += _cardHTML(cfg[(_inspWindow + k) % cfg.length]);
-    }
-    track.innerHTML = html;
-    _bindCards();
-    _startTimers();
-  }
-
-  // (Re)démarre les minuteurs 10s des cases visibles
-  function _startTimers(){
-    Object.keys(_inspTimers).forEach(function(k){ clearInterval(_inspTimers[k]); });
-    _inspTimers = {};
-    for(var k=0;k<VISIBLE;k++){
-      (function(country){
-        var label = country.label || country.country || '';
-        if(country.images.length < 2) return;
-        _inspTimers[label] = setInterval(function(){
-          if(!track.isConnected) { clearInterval(_inspTimers[label]); return; }
-          _advanceImage(label, false);
-        }, 10000);
-      })(cfg[(_inspWindow + k) % cfg.length]);
-    }
-  }
-
-  // Passe à l'image suivante d'un pays ; reset=true remet le minuteur à 0
-  function _advanceImage(label, reset){
-    var country = cfg.find(function(c){ return (c.label||c.country) === label; });
-    if(!country) return;
-    _inspImgIdx[label] = ((_inspImgIdx[label] || 0) + 1) % country.images.length;
-    // Mettre à jour uniquement la case concernée (transition douce d'image)
-    var card = track.querySelector('.ic-card[data-label="'+CSS.escape(label)+'"]');
-    if(card){
-      var idx = _inspImgIdx[label];
-      var img = card.querySelector('img');
-      if(img){ img.style.opacity='0'; setTimeout(function(){ img.src=country.images[idx]; img.style.opacity='1'; }, 180); }
-      var dots = card.querySelectorAll('.ic-dots i');
-      dots.forEach(function(d,di){ d.classList.toggle('on', di===idx); });
-    }
-    if(reset && _inspTimers[label]){
-      clearInterval(_inspTimers[label]);
-      _inspTimers[label] = setInterval(function(){
-        if(!track.isConnected){ clearInterval(_inspTimers[label]); return; }
-        _advanceImage(label, false);
-      }, 10000);
-    }
-  }
-
-  // Clic sur une case → image suivante + reset du minuteur
-  function _bindCards(){
-    track.querySelectorAll('.ic-card').forEach(function(card){
-      card.onclick = function(){ _advanceImage(card.getAttribute('data-label'), true); };
-    });
-  }
-
-  // Décalage de la fenêtre de pays avec animation de glissement
-  var sliding = false;
-  function _shift(dir){
-    if(sliding) return;
-    sliding = true;
-    track.classList.add(dir>0 ? 'slide-left' : 'slide-right');
-    setTimeout(function(){
-      _inspWindow = (_inspWindow + dir + cfg.length) % cfg.length;
-      track.classList.remove('slide-left','slide-right');
-      track.classList.add('slide-reset');
-      _renderWindow();
-      // Forcer un reflow puis retirer la classe pour l'entrée en fondu
-      void track.offsetWidth;
-      track.classList.remove('slide-reset');
-      sliding = false;
-    }, 300);
-  }
-
-  var prev = document.getElementById('ic-prev');
-  var next = document.getElementById('ic-next');
-  if(prev) prev.onclick = function(){ _shift(-1); };
-  if(next) next.onclick = function(){ _shift(1); };
-
-  _renderWindow();
-}
-
 // Accueil mobile : révèle/masque les boutons stylo/poubelle des voyages
 
 function renderTripsList(){
   renderHomeHero();
   renderHomeStats();
-  renderHomeInspiration();
   var container = document.getElementById('trips-list-container');
   if(!container) return;
   container.innerHTML = '';
@@ -3379,25 +3137,11 @@ function saveProfileAvatar(fileInput){
   reader.onload = function(e){
     _profileAvatar = e.target.result;
     localStorage.setItem('yume_profile_avatar', _profileAvatar);
-    renderProfileAvatar();
+    // Rafraîchir l'avatar affiché sur la page Profil
+    if(typeof loadProfilPage === 'function') loadProfilPage();
     showToast('Photo de profil mise à jour', 'success');
   };
   reader.readAsDataURL(file);
-}
-
-function renderProfileAvatar(){
-  var img  = document.getElementById('profile-avatar-img');
-  var ph   = document.getElementById('profile-avatar-placeholder');
-  if(_profileAvatar && img){
-    img.src = _profileAvatar;
-    img.style.display = 'block';
-    if(ph) ph.style.display = 'none';
-  } else {
-    if(img) img.style.display = 'none';
-    if(ph) ph.style.display = 'flex';
-  }
-  var inp = document.getElementById('profile-name-input');
-  if(inp) inp.value = _profileName;
 }
 
 function updateGreeting(){
@@ -3703,28 +3447,17 @@ function resetApp(){
 // ════════════════════════════════════════════════════════════════
 // THÈME AUTO (suit le système)
 // ════════════════════════════════════════════════════════════════
+// Le réglage se fait via localStorage yume_auto_theme (l'UI de bascule a été
+// retirée avec l'ancienne modale Paramètres de l'Accueil) ; le moteur reste :
+// application au chargement (initProfile) + écoute des changements système.
 var _autoTheme = localStorage.getItem('yume_auto_theme') === '1';
-
-function toggleAutoTheme(enabled){
-  _autoTheme = enabled;
-  localStorage.setItem('yume_auto_theme', enabled ? '1' : '0');
-  var grid = document.getElementById('theme-grid-manual');
-  if(grid) grid.style.opacity = enabled ? '.4' : '1';
-  if(grid) grid.style.pointerEvents = enabled ? 'none' : '';
-  if(enabled){
-    applyAutoTheme();
-    showToast('Thème automatique activé', 'info');
-  } else {
-    showToast('Thème manuel', 'info');
-  }
-}
 
 function applyAutoTheme(){
   if(!_autoTheme) return;
   var isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   var isGreen = (_currentTheme === 'vert' || _currentTheme === 'vert-dark');
-  if(isGreen){ applyTheme(isDark ? 'vert-dark' : 'vert'); }
-  else       { applyTheme(isDark ? 'dark' : 'standard'); }
+  if(isGreen){ applyThemeFromProfil(isDark ? 'vert-dark' : 'vert'); }
+  else       { applyThemeFromProfil(isDark ? 'dark' : 'standard'); }
 }
 
 // Écouter les changements de thème système
@@ -3734,10 +3467,6 @@ if(window.matchMedia){
   });
 }
 
-// ════════════════════════════════════════════════════════════════
-// PATCH openSettings — logique profil + rappels intégrée dans openSettings()
-// ════════════════════════════════════════════════════════════════
-
 // Initialisation au chargement
 (function initProfile(){
   _profileName   = localStorage.getItem('yume_profile_name')   || '';
@@ -3745,7 +3474,6 @@ if(window.matchMedia){
   _autoTheme     = localStorage.getItem('yume_auto_theme') === '1';
   updateGreeting();
   if(_autoTheme) applyAutoTheme();
-  setTimeout(renderProfileAvatar, 50);
 })();
 
 
@@ -3836,20 +3564,12 @@ setTimeout(updateOfflineBadge, 200);
 // ════════════════════════════════════════════════════════════════
 // RAPPELS DE VOYAGE — système de toasts programmés
 // ════════════════════════════════════════════════════════════════
+// Réglés via localStorage yume_reminder_vol/hotel (l'UI de bascule a été
+// retirée avec l'ancienne modale Paramètres de l'Accueil) ; actifs par défaut.
 var _reminders = {
   vol:   localStorage.getItem('yume_reminder_vol')   !== '0',
   hotel: localStorage.getItem('yume_reminder_hotel') !== '0'
 };
-
-function toggleReminder(type, enabled){
-  _reminders[type] = enabled;
-  localStorage.setItem('yume_reminder_'+type, enabled ? '1' : '0');
-  showToast(
-    (enabled ? 'Rappels actifs ' : 'Rappels désactivés ')
-    +(type==='vol'?'vols':'hôtels')
-    +(enabled?' activés':' désactivés'), 'info', 2500
-  );
-}
 
 function checkReminders(){
   if(!currentTripId || !allTrips[currentTripId]) return;
@@ -3965,23 +3685,16 @@ var _state = {
 var _bgMode    = _state.bgMode;
 var _bgManual  = _state.bgImg;
 
-// ── Snapshot temporaire pendant l'édition des paramètres ──
-var _draft = null;
-
-// ── Capture un snapshot de l'état validé ──
-function _snapshotState(){
-  return {
-    theme:      _state.theme,
-    bgMode:     _state.bgMode,
-    bgImg:      _state.bgImg,
-    brightness: _state.brightness,
-    blur:       _state.blur
-  };
-}
-
 // ─────────────────────────────────────────
 // Rendu du fond à partir d'un objet état
 // ─────────────────────────────────────────
+// Garde anti-rafale : un background-image en 404 n'est JAMAIS mis en cache
+// par le navigateur → chaque réapplication du style relançait une requête
+// réseau (rafale de 404 observée avec ./japon.jpg absent du repo — cause
+// probable de chauffe). On précharge donc chaque URL UNE seule fois et on
+// mémorise le verdict : true = applicable, false = introuvable (on n'y
+// touche plus). Les data-URI (fond personnalisé importé) passent direct.
+var _bgImgOk = {};
 function _renderBackground(s){
   var theme      = s.theme;
   var bgMode     = s.bgMode;
@@ -3992,6 +3705,20 @@ function _renderBackground(s){
   var img = null;
   if(bgMode !== 'none'){
     img = (bgMode === 'manual') ? bgImg : (THEME_BG_MAP[theme] || './japon.jpg');
+  }
+  if(img && img.indexOf('data:') !== 0 && _bgImgOk[img] !== true){
+    // Verdict inconnu (undefined) : précharger UNE fois. 'pending'/false :
+    // ne rien relancer. Dans tous ces cas, pas d'application du fond.
+    if(_bgImgOk[img] === undefined){
+      (function(url, state){
+        _bgImgOk[url] = 'pending';
+        var probe = new Image();
+        probe.onload  = function(){ _bgImgOk[url] = true;  _renderBackground(state); };
+        probe.onerror = function(){ _bgImgOk[url] = false; _renderBackground(state); };
+        probe.src = url;
+      })(img, s);
+    }
+    img = null;
   }
 
   var homeBg = document.getElementById('home-bg');
@@ -4047,178 +3774,6 @@ function _applyBackground(){
   _currentTheme = _state.theme;
   _renderTheme(_state.theme);
   _renderBackground(_state);
-}
-
-// ─────────────────────────────────────────
-// OUVERTURE des paramètres — prendre un snapshot + charger l'état UI
-// ─────────────────────────────────────────
-function openSettings(){
-  _draft = _snapshotState();
-  document.getElementById('settings-overlay').classList.add('open');
-  _renderTheme(_draft.theme);
-  _refreshBgUI(_draft);
-  // Profil
-  renderProfileAvatar();
-  var toggle = document.getElementById('auto-theme-toggle');
-  if(toggle){ toggle.checked = _autoTheme; }
-  var grid = document.getElementById('theme-grid-manual');
-  if(grid){ grid.style.opacity = _autoTheme ? '.4' : '1'; grid.style.pointerEvents = _autoTheme ? 'none' : ''; }
-  // Rappels
-  var rvt = document.getElementById('reminder-vol-toggle');
-  var rht = document.getElementById('reminder-hotel-toggle');
-  if(rvt) rvt.checked = _reminders.vol;
-  if(rht) rht.checked = _reminders.hotel;
-}
-
-// ─────────────────────────────────────────
-// VALIDER — écrire l'état draft dans _state + localStorage
-// ─────────────────────────────────────────
-function validateSettings(){
-  _state = {
-    theme:      _draft.theme,
-    bgMode:     _draft.bgMode,
-    bgImg:      _draft.bgImg,
-    brightness: _draft.brightness,
-    blur:       _draft.blur
-  };
-  // Sync aliases
-  _currentTheme = _state.theme;
-  _bgMode       = _state.bgMode;
-  _bgManual     = _state.bgImg;
-  // Persister
-  localStorage.setItem('yume_theme',          _state.theme);
-  localStorage.setItem('yume_bg_mode',        _state.bgMode);
-  localStorage.setItem('yume_bg_manual',      _state.bgImg);
-  localStorage.setItem('yume_bg_brightness',  _state.brightness);
-  localStorage.setItem('yume_bg_blur',        _state.blur);
-  // Appliquer
-  _renderTheme(_state.theme);
-  _renderBackground(_state);
-  _draft = null;
-  document.getElementById('settings-overlay').classList.remove('open');
-  showToast('Paramètres sauvegardés ', 'success');
-}
-
-// ─────────────────────────────────────────
-// ANNULER — remettre l'état validé
-// ─────────────────────────────────────────
-function cancelSettings(){
-  if(_draft){
-    _renderTheme(_state.theme);
-    _renderBackground(_state);
-    _draft = null;
-  }
-  document.getElementById('settings-overlay').classList.remove('open');
-}
-
-function closeSettings(){ cancelSettings(); }
-function closeSettingsOnBg(e){
-  if(e.target === document.getElementById('settings-overlay')) cancelSettings();
-}
-
-// ─────────────────────────────────────────
-// Interactions dans le panneau — modifient le DRAFT seulement
-// ─────────────────────────────────────────
-function applyTheme(theme){
-  if(_draft){
-    // Panneau ouvert : modifier le draft seulement
-    _draft.theme = theme;
-    _renderTheme(theme);
-    _renderBackground(_draft);
-    _refreshBgUI(_draft);
-  } else {
-    // Appel direct (ex: applyAutoTheme) : commit immédiat
-    _state.theme = theme;
-    _currentTheme = theme;
-    localStorage.setItem('yume_theme', theme);
-    _renderTheme(theme);
-    _renderBackground(_state);
-  }
-}
-
-function setBgMode(mode){
-  if(!_draft) return;
-  _draft.bgMode = mode;
-  _renderBackground(_draft);
-  _refreshBgUI(_draft);
-}
-
-function setBgManual(img){
-  if(!_draft) return;
-  _draft.bgImg = img;
-  _renderBackground(_draft);
-  _refreshBgUI(_draft);
-}
-
-function onBgBrightnessInput(val){
-  if(!_draft) return;
-  _draft.brightness = val / 100;
-  var lbl = document.getElementById('bg-brightness-val');
-  if(lbl) lbl.textContent = val + '%';
-  // Appliquer en temps réel sur les deux éléments de fond
-  var filterVal = 'brightness('+_draft.brightness+')'+((_draft.blur||0)>0?' blur('+_draft.blur+'px)':'');
-  var homeBg = document.getElementById('home-bg');
-  var appBg  = document.getElementById('app-bg');
-  if(homeBg) homeBg.style.filter = filterVal;
-  if(appBg)  appBg.style.filter  = filterVal;
-}
-
-function onBgBlurInput(val){
-  if(!_draft) return;
-  _draft.blur = parseFloat(val);
-  var lbl = document.getElementById('bg-blur-val');
-  if(lbl) lbl.textContent = val + 'px';
-  // Appliquer en temps réel
-  var brightness = (typeof _draft.brightness === 'number') ? _draft.brightness : 1;
-  var filterVal = 'brightness('+brightness+')'+(parseFloat(val)>0?' blur('+val+'px)':'');
-  var homeBg = document.getElementById('home-bg');
-  var appBg  = document.getElementById('app-bg');
-  if(homeBg) homeBg.style.filter = filterVal;
-  if(appBg)  appBg.style.filter  = filterVal;
-}
-
-// Legacy no-ops
-
-// ─────────────────────────────────────────
-// Rafraîchir l'UI du panneau depuis un état
-// ─────────────────────────────────────────
-function _refreshBgUI(s){
-  s = s || _state;
-  // Mode buttons
-  ['auto','manual','none'].forEach(function(m){
-    var btn = document.getElementById('bg-mode-'+m);
-    if(btn) btn.classList.toggle('active', s.bgMode===m);
-  });
-  // Hint text
-  var hints = {
-    auto:   'Auto : le fond correspond au thème sélectionné',
-    manual: 'Manuel : choisir une image indépendamment du thème',
-    none:   'Couleur : fond uni, sans image de fond'
-  };
-  var hint = document.getElementById('bg-mode-hint');
-  if(hint) hint.textContent = hints[s.bgMode] || '';
-  // Grid images
-  var grid = document.getElementById('bg-image-grid');
-  if(grid) grid.classList.toggle('visible', s.bgMode==='manual');
-  // Active card
-  document.querySelectorAll('.bg-img-card').forEach(function(c){
-    c.classList.toggle('active', s.bgMode==='manual' && c.getAttribute('data-img')===s.bgImg);
-  });
-  // Curseur luminosité
-  var bPct   = Math.round((typeof s.brightness === 'number' ? s.brightness : 1) * 100);
-  var bRange = document.getElementById('bg-brightness-range');
-  var bLabel = document.getElementById('bg-brightness-val');
-  if(bRange){ bRange.value = bPct; }
-  if(bLabel){ bLabel.textContent = bPct + '%'; }
-  // Curseur flou
-  var blurVal   = typeof s.blur === 'number' ? s.blur : 0;
-  var blurRange = document.getElementById('bg-blur-range');
-  var blurLabel = document.getElementById('bg-blur-val');
-  if(blurRange){ blurRange.value = blurVal; }
-  if(blurLabel){ blurLabel.textContent = blurVal + 'px'; }
-  // Afficher/masquer les curseurs selon mode
-  var sw = document.getElementById('bg-sliders-wrap');
-  if(sw) sw.style.display = (s.bgMode === 'none') ? 'none' : '';
 }
 
 // ─────────────────────────────────────────
@@ -7400,8 +6955,13 @@ function saveHotel(id){id=isNaN(+id)?id:+id;
   var newPays=(document.getElementById('eh-pays')||{value:''}).value.trim();
   var _rm=(document.getElementById('eh-geo-remove')||{}).value;
   if(_rm==='1'){
-    h.geoOff=true; h.lat=null; h.lng=null;
-    h.rue=''; h.cp=''; h.pays=''; h.fullAddress=''; h.adresse='';
+    // Retrait explicite → état géographiquement VIERGE : TOUS les champs géo
+    // remis à vide sur le même objet, ville comprise (sinon suppression
+    // partielle). Plus aucun pin.
+    h.geoOff=true;
+    h.ville=''; h.rue=''; h.cp=''; h.pays='';
+    h.fullAddress=''; h.adresse='';
+    h.lat=null; h.lng=null;
   } else {
     if(_rm==='0') h.geoOff=false;
     h.rue=newRue; h.cp=newCp; h.pays=newPays;
@@ -7764,8 +7324,13 @@ function saveLieu(id){id=isNaN(+id)?id:+id;
   // Adresse / localisation. Drapeau : '1'=retrait, '0'=réactivation, ''=inchangé.
   var _rm=(document.getElementById('el-geo-remove')||{}).value;
   if(_rm==='1'){
-    // Retrait explicite → aucun pin (fullAddress vidé, coords nulles, geoOff)
-    l.geoOff=true; l.lat=null; l.lng=null; l.fullAddress=''; l.adresse='';
+    // Retrait explicite → état géographiquement VIERGE (identique à un lieu
+    // jamais géocodé) : TOUS les champs géo remis à vide sur le même objet,
+    // y compris la ville (sinon suppression partielle). Plus aucun pin.
+    l.geoOff=true;
+    l.ville=''; l.rue=''; l.cp=''; l.pays='';
+    l.fullAddress=''; l.adresse='';
+    l.lat=null; l.lng=null;
   } else {
     if(_rm==='0') l.geoOff=false; // « Vérifier » a réactivé la localisation
     // Réactivation implicite : une rue/CP/pays ressaisi après un retrait relocalise.

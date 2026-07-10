@@ -102,8 +102,6 @@
     </div>
     <div id="trips-list-container"></div>
 
-    <!-- Option 4 : Carrousel d'inspiration par pays (images contrôlées par l'admin) -->
-    <div id="home-inspiration" aria-hidden="false"></div>
 
   </div>
   <!-- Compat IDs -->
@@ -277,11 +275,7 @@
 <!-- PAGE : MON VOYAGE -->
 <div class="spa-page" id="page-voyage">
 
-  <!-- Bouton flottant : exporter le dossier de voyage en PDF -->
-  <button id="pdf-export-fab" onclick="exportTripPDF()" title="Exporter le dossier de voyage en PDF">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6M9 17h6"/></svg>
-    <span>Exporter PDF</span>
-  </button>
+  <!-- (FAB « Exporter PDF » retiré — l'export reste dans Profil ▸ Paramètres) -->
 
   <!-- Placeholder si aucun voyage actif -->
   <div id="voyage-placeholder">
@@ -1281,24 +1275,6 @@
 
     <!-- Section CARTE (groupe « Carte ») — déplacée ici depuis page-futur -->
     <div id="voyage-map-host" style="display:none">
-<!-- Topbar -->
-  <div id="tripmap-topbar">
-    <div id="tripmap-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M9 3L3 6.5v14L9 17l6 3.5 6-3.5V3l-6 3.5L9 3z"/><line x1="9" y1="3" x2="9" y2="17"/><line x1="15" y1="6.5" x2="15" y2="20.5"/></svg> Carte du voyage</div>
-    <div id="tripmap-topbar-btns">
-      <button id="tripmap-geolocate-btn" onclick="tripmapGeolocate()" title="Ma position GPS">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
-          <circle cx="12" cy="12" r="7" stroke-dasharray="2 3" opacity=".5"/>
-        </svg>
-      </button>
-      <button id="tripmap-recenter-btn" onclick="tripmapRecenter()" title="Recentrer sur tous les points">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><path d="M12 7a5 5 0 100 10A5 5 0 0012 7z" opacity=".3"/></svg>
-        Recentrer
-      </button>
-    </div>
-  </div>
-
   <!-- Légende / filtres rapides -->
   <div id="tripmap-legend-bar">
     <button class="tmap-filter active" data-filter="all"        onclick="tripmapFilter('all')">Tout</button>
@@ -1307,17 +1283,6 @@
     <button class="tmap-filter"        data-filter="itineraire" onclick="tripmapFilter('itineraire')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M21 16l-3-8-3 3-5-5-3 3 2 3-4 2 1 2 5-1 1 3 3-1 1 3 3-3z"/></svg> Itinéraire</button>
     <select id="tmap-day-filter" class="tmap-day-filter" onchange="tripmapSetDay(this.value)" aria-label="Filtrer par jour" style="display:none"><option value="">Tous les jours</option></select>
     <span id="tmap-active-count" style="display:none"></span>
-    <!-- Actions GPS / Recentrer (mobile uniquement, empilées à droite) -->
-    <div id="tmap-legend-actions">
-      <button class="tmap-act" onclick="tripmapGeolocate()" title="Ma position GPS" aria-label="Ma position GPS">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 3" opacity=".5"/></svg>
-        <span>Position</span>
-      </button>
-      <button class="tmap-act tmap-act-primary" onclick="tripmapRecenter()" title="Recentrer" aria-label="Recentrer">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-        <span>Recentrer</span>
-      </button>
-    </div>
   </div>
 
   <!-- Carte Leaflet dédiée -->
@@ -1328,6 +1293,15 @@
       <svg class="ic-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
       <svg class="ic-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
     </button>
+    <!-- Contrôles flottants GPS + Recentrer (overlay carte, coin bas-droite) -->
+    <div id="tripmap-map-controls">
+      <button id="tripmap-geolocate-btn" onclick="tripmapGeolocate()" title="Ma position GPS" aria-label="Ma position GPS">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 3" opacity=".55"/></svg>
+      </button>
+      <button id="tripmap-recenter-btn" onclick="tripmapRecenter()" title="Recentrer sur tous les points" aria-label="Recentrer sur tous les points">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3.4M12 18.6V22M2 12h3.4M18.6 12H22"/></svg>
+      </button>
+    </div>
     <!-- Placeholder si pas de voyage -->
     <div id="tripmap-placeholder">
       <div style="margin-bottom:12px;opacity:0.5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="36" height="36"><circle cx="12" cy="12" r="10"/><polygon points="12 2 14.5 9.5 22 12 14.5 14.5 12 22 9.5 14.5 2 12 9.5 9.5"/></svg></div>
@@ -1348,209 +1322,8 @@
   </div><!-- /voyage-content -->
 
   <!-- Settings overlay — global, outside swipe area -->
-<div class="settings-overlay" id="settings-overlay" onclick="closeSettingsOnBg(event)">
-  <div class="settings-panel" id="settings-panel">
-    <button class="settings-close" onclick="closeSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-    <div class="settings-title">Paramètres</div>
-    <div class="settings-sub">Personnalise ton expérience Yume</div>
-
-    <!-- Profil voyageur -->
-    <div class="settings-section-title">Profil voyageur</div>
-    <div class="profile-avatar-wrap">
-      <div>
-        <img class="profile-avatar" id="profile-avatar-img" src="" alt="Photo"
-          onclick="document.getElementById('profile-avatar-input').click()"
-          onerror="this.src=''" style="display:none"/>
-        <div id="profile-avatar-placeholder" onclick="document.getElementById('profile-avatar-input').click()"
-          style="width:56px;height:56px;border-radius:50%;background:var(--sakura-light);
-                 border:2.5px dashed var(--sakura);display:flex;align-items:center;justify-content:center;
-                 font-size:24px;cursor:pointer;flex-shrink:0;transition:opacity .15s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
-        <input type="file" id="profile-avatar-input" accept="image/*"
-          onchange="saveProfileAvatar(this)" style="display:none"/>
-        <div class="profile-avatar-label" onclick="document.getElementById('profile-avatar-input').click()">Changer</div>
-      </div>
-      <input class="profile-name-input" id="profile-name-input" type="text"
-        placeholder="Ton prénom (ex: Sophie)"
-        oninput="saveProfileName(this.value)"/>
-    </div>
-
-    <!-- Thèmes -->
-    <div class="settings-section-title">Thème de couleur</div>
-    <!-- Thème auto système -->
-    <div class="auto-theme-row">
-      <div>
-        <div style="font-size:13px;font-weight:500;color:var(--ink)">Suivre le thème du système</div>
-        <div style="font-size:11px;color:var(--ink-hint)">Bascule auto Clair / Sombre</div>
-      </div>
-      <label class="toggle-switch">
-        <input type="checkbox" id="auto-theme-toggle" onchange="toggleAutoTheme(this.checked)"/>
-        <span class="toggle-slider"></span>
-      </label>
-    </div>
-    <div class="theme-grid" id="theme-grid-manual">
-      <div class="theme-card theme-standard" data-theme="standard" onclick="applyTheme('standard')">
-        <div class="tc-check"></div>
-        <div class="tc-name">Rose clair</div>
-        <div class="tc-palette">
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-        </div>
-      </div>
-      <div class="theme-card theme-dark" data-theme="dark" onclick="applyTheme('dark')">
-        <div class="tc-check"></div>
-        <div class="tc-name">Rose sombre</div>
-        <div class="tc-palette">
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-        </div>
-      </div>
-      <div class="theme-card theme-vert" data-theme="vert" onclick="applyTheme('vert')">
-        <div class="tc-check"></div>
-        <div class="tc-name">Vert clair</div>
-        <div class="tc-palette">
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-        </div>
-      </div>
-      <div class="theme-card theme-vertdark" data-theme="vert-dark" onclick="applyTheme('vert-dark')">
-        <div class="tc-check"></div>
-        <div class="tc-name">Vert sombre</div>
-        <div class="tc-palette">
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-          <div class="tc-swatch"></div><div class="tc-swatch"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Fond d'écran -->
-    <div class="settings-section-title">Fond d'écran</div>
-    <div class="bg-section">
-      <div class="bg-mode-grid">
-        <div class="bg-mode-btn active" id="bg-mode-auto" onclick="setBgMode('auto')">
-          Auto
-        </div>
-        <div class="bg-mode-btn" id="bg-mode-manual" onclick="setBgMode('manual')">
-          Manuel
-        </div>
-        <div class="bg-mode-btn" id="bg-mode-none" onclick="setBgMode('none')">
-          Couleur
-        </div>
-      </div>
-      <div style="font-size:11px;color:var(--ink-hint);margin-bottom:10px" id="bg-mode-hint">
-        Auto : le fond correspond au thème sélectionné
-      </div>
-      <div class="bg-image-grid" id="bg-image-grid">
-        <div class="bg-img-card" id="bgcard-japon" data-img="./japon.jpg" onclick="setBgManual('./japon.jpg')">
-          <img src="./japon.jpg" alt="Japon" loading="lazy"/>
-          <div class="bic-label">Japon</div>
-          <div class="bic-check"></div>
-        </div>
-        <div class="bg-img-card" id="bgcard-mer" data-img="./mer.png" onclick="setBgManual('./mer.png')">
-          <img src="./mer.png" alt="Mer" loading="lazy"/>
-          <div class="bic-label">Mer</div>
-          <div class="bic-check"></div>
-        </div>
-        <div class="bg-img-card" id="bgcard-nature" data-img="./nature.png" onclick="setBgManual('./nature.png')">
-          <img src="./nature.png" alt="Nature" loading="lazy"/>
-          <div class="bic-label">Nature</div>
-          <div class="bic-check"></div>
-        </div>
-        <div class="bg-img-card" id="bgcard-nuit" data-img="./nuit.png" onclick="setBgManual('./nuit.png')">
-          <img src="./nuit.png" alt="Nuit" loading="lazy"/>
-          <div class="bic-label">Nuit étoilée</div>
-          <div class="bic-check"></div>
-        </div>
-      </div>
-      <!-- Curseurs luminosité + flou artistique -->
-      <div class="bg-slider-row" id="bg-sliders-wrap">
-        <div class="bg-slider-label">
-          <span>Luminosité</span>
-          <span id="bg-brightness-val">100%</span>
-        </div>
-        <input class="bg-range" type="range" id="bg-brightness-range"
-          min="20" max="100" value="100"
-          oninput="onBgBrightnessInput(this.value)"/>
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-hint);margin-top:2px">
-          <span>Sombre</span><span>Normal</span>
-        </div>
-        <div class="bg-slider-label" style="margin-top:12px">
-          <span>Flou artistique</span>
-          <span id="bg-blur-val">0px</span>
-        </div>
-        <input class="bg-range" type="range" id="bg-blur-range"
-          min="0" max="20" value="0"
-          oninput="onBgBlurInput(this.value)"/>
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-hint);margin-top:2px">
-          <span>Net</span><span>Flou max</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Données -->
-    <div class="settings-section-title">Mes données</div>
-    <button class="data-btn" onclick="exportData()">
-      <span class="db-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
-      <span class="db-text">Exporter mes données
-        <span class="db-sub">Télécharge un fichier JSON de sauvegarde</span>
-      </span>
-    </button>
-    <button class="data-btn" onclick="document.getElementById('import-input').click()">
-      <span class="db-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
-      <span class="db-text">Importer une sauvegarde
-        <span class="db-sub">Charge un fichier JSON précédemment exporté</span>
-      </span>
-    </button>
-    <input type="file" id="import-input" accept=".json,application/json"
-      onchange="importData(this)" style="display:none"/>
-    <button class="data-btn danger" onclick="resetApp()">
-      <span class="db-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></span>
-      <span class="db-text">Réinitialiser l'application
-        <span class="db-sub">Supprime toutes les données — irréversible</span>
-      </span>
-    </button>
-
-    <!-- Rappels -->
-    <div class="settings-section-title">Rappels de voyage</div>
-    <div class="reminder-section">
-      <div class="auto-theme-row" style="padding:8px 0">
-        <div>
-          <div style="font-size:13px;font-weight:500;color:var(--ink)">Rappel 24h avant le vol</div>
-          <div style="font-size:11px;color:var(--ink-hint)">Toast d'alerte la veille du départ</div>
-        </div>
-        <label class="toggle-switch">
-          <input type="checkbox" id="reminder-vol-toggle"
-            onchange="toggleReminder('vol',this.checked)"/>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <div class="auto-theme-row" style="padding:8px 0">
-        <div>
-          <div style="font-size:13px;font-weight:500;color:var(--ink)">Rappel check-in hôtel</div>
-          <div style="font-size:11px;color:var(--ink-hint)">Alerte le jour du check-in</div>
-        </div>
-        <label class="toggle-switch">
-          <input type="checkbox" id="reminder-hotel-toggle"
-            onchange="toggleReminder('hotel',this.checked)"/>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <!-- À propos -->
-    <div class="settings-section-title" style="margin-top:8px">À propos</div>
-    <div style="font-size:12px;color:var(--ink-muted);line-height:1.6">
-      <b style="font-family:'Noto Serif JP',serif;color:var(--sakura)">夢 Yume</b> — Tes voyages, ta mémoire.<br/>
-      Application hors-ligne · Données 100% locales · v3.0
-    </div>
-
-    <!-- Bouton Valider -->
-    <div class="settings-validate-bar">
-      <button class="btn-ghost settings-cancel-btn" onclick="cancelSettings()">Annuler</button>
-      <button class="btn-primary settings-validate-btn" onclick="validateSettings()">Valider les modifications</button>
-    </div>
-  </div>
-</div>
-
+<!-- (Ancienne modale Paramètres de l'Accueil supprimée — les paramètres
+     vivent désormais dans la modale de la page Profil, #settings-modal-overlay.) -->
     <!-- Belt des sections (Vols, Trains, etc.) -->
 <main class="app-content" style="flex:1;overflow-y:auto;padding-bottom:calc(80px + env(safe-area-inset-bottom,0px))">
 
@@ -1562,14 +1335,14 @@
      pour compat si du code l'active encore. -->
 <div class="spa-page" id="page-futur"></div>
 
-<!-- PAGE : EXPLORER (recherche + inspiration) -->
+<!-- PAGE : EXPLORER -->
 <div class="spa-page" id="page-explorer">
   <div id="explorer-scroll">
-    <div class="explorer-searchbar">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
-      <input type="text" id="explorer-search" placeholder="Rechercher une destination, une idée de voyage…" autocomplete="off"/>
+    <div class="explorer-empty">
+      <div class="explorer-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" width="40" height="40"><circle cx="12" cy="12" r="10"/><polygon points="16 8 14 14 8 16 10 10 16 8"/></svg></div>
+      <div class="explorer-empty-title">Explorer — bientôt disponible</div>
+      <div class="explorer-empty-sub">De nouvelles idées de destinations arriveront ici.</div>
     </div>
-    <div id="explorer-inspiration"></div>
   </div>
   <footer id="site-footer-explorer" class="site-footer-clone">
     <div class="sf-grid">
@@ -1750,13 +1523,41 @@
       <button class="settings-modal-close" onclick="closeSettingsModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
 
-    <!-- Thème -->
+    <!-- Thème — cartes à palette (design repris de l'ancienne modale Accueil) -->
     <div class="psp-label">Thème</div>
     <div class="theme-grid" id="psp-theme-grid">
-      <div class="theme-chip tc-standard active" data-theme="standard" onclick="applyThemeFromProfil('standard')">Rose clair</div>
-      <div class="theme-chip tc-dark"     data-theme="dark"     onclick="applyThemeFromProfil('dark')">Rose sombre</div>
-      <div class="theme-chip tc-vert"     data-theme="vert"     onclick="applyThemeFromProfil('vert')">Vert clair</div>
-      <div class="theme-chip tc-vertdark" data-theme="vert-dark" onclick="applyThemeFromProfil('vert-dark')">Vert sombre</div>
+      <div class="theme-card theme-standard active" data-theme="standard" onclick="applyThemeFromProfil('standard')">
+        <div class="tc-check"></div>
+        <div class="tc-name">Rose clair</div>
+        <div class="tc-palette">
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+        </div>
+      </div>
+      <div class="theme-card theme-dark" data-theme="dark" onclick="applyThemeFromProfil('dark')">
+        <div class="tc-check"></div>
+        <div class="tc-name">Rose sombre</div>
+        <div class="tc-palette">
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+        </div>
+      </div>
+      <div class="theme-card theme-vert" data-theme="vert" onclick="applyThemeFromProfil('vert')">
+        <div class="tc-check"></div>
+        <div class="tc-name">Vert clair</div>
+        <div class="tc-palette">
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+        </div>
+      </div>
+      <div class="theme-card theme-vertdark" data-theme="vert-dark" onclick="applyThemeFromProfil('vert-dark')">
+        <div class="tc-check"></div>
+        <div class="tc-name">Vert sombre</div>
+        <div class="tc-palette">
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+          <div class="tc-swatch"></div><div class="tc-swatch"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Dossier de voyage — export PDF (visible uniquement si un voyage est ouvert) -->
@@ -1915,7 +1716,6 @@
 <script src="./data/airports-gps.js"></script>
 <script src="./data/transport-refs.js"></script>
 <script src="./data/finance-data.js"></script>
-<script src="./data/inspiration-images.js"></script>
 
 <!-- 2. Store centralisé -->
 <script src="./js/state.js"></script>

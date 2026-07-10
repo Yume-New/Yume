@@ -1253,7 +1253,6 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
 
   /* ─ Paramètres ─ */
   .theme-grid{grid-template-columns:repeat(2,1fr)}
-  .settings-validate-bar{margin-left:-14px;margin-right:-14px;padding-left:14px;padding-right:14px}
 
   /* ─ Home ─ */
   .btn-new-trip{padding:12px 16px;font-size:13px;width:100%;justify-content:center}
@@ -1335,40 +1334,6 @@ body.has-bg-image .conv-box,
 body.has-bg-image .metric-tile{
   background:var(--surface) !important;
 }
-
-.bg-section{margin-bottom:20px}
-.bg-mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
-.bg-mode-btn{
-  padding:8px 10px;border-radius:var(--r-md);
-  border:2px solid var(--border);background:var(--surface-2);
-  cursor:pointer;font:500 12px 'DM Sans',sans-serif;
-  color:var(--ink-muted);text-align:center;transition:all .15s;
-  display:flex;flex-direction:column;align-items:center;gap:4px
-}
-.bg-mode-btn:hover{border-color:var(--sakura);color:var(--sakura);background:var(--sakura-light)}
-.bg-mode-btn.active{border-color:var(--sakura);background:var(--sakura-light);color:var(--sakura-dark)}
-.bg-image-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px;display:none}
-.bg-image-grid.visible{display:grid}
-.bg-img-card{
-  border-radius:var(--r-md);overflow:hidden;cursor:pointer;
-  border:2.5px solid transparent;transition:all .15s;position:relative;
-  aspect-ratio:16/9
-}
-.bg-img-card img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
-.bg-img-card .bic-label{
-  position:absolute;bottom:0;left:0;right:0;padding:5px 8px;
-  background:linear-gradient(transparent,rgba(0,0,0,.6));
-  font-size:11px;font-weight:600;color:#fff;letter-spacing:.02em
-}
-.bg-img-card .bic-check{
-  position:absolute;top:6px;right:6px;width:20px;height:20px;
-  border-radius:50%;background:var(--sakura);color:#fff;
-  font-size:10px;display:none;align-items:center;justify-content:center;
-  box-shadow:0 2px 6px rgba(0,0,0,.3)
-}
-.bg-img-card.active{border-color:var(--sakura);box-shadow:0 0 0 1px var(--sakura)}
-.bg-img-card.active .bic-check{display:flex}
-.bg-img-card:hover{transform:scale(1.02);box-shadow:var(--shadow-md)}
 
 .btn-new-trip{display:inline-flex;align-items:center;gap:9px;padding:14px 28px;background:var(--sakura);color:white;border:none;border-radius:var(--r-lg);font-size:15px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .15s,transform .1s,box-shadow .15s;margin-bottom:36px;box-shadow:0 4px 20px rgba(232,116,138,.45)}
 .btn-new-trip:hover{background:var(--sakura-dark);box-shadow:0 6px 28px rgba(196,84,110,.55)}
@@ -2110,40 +2075,6 @@ input, select, textarea {
   display:block;
 }
 
-.settings-overlay {
-  position: fixed; inset: 0; z-index: 1000;
-  background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
-  display: none; align-items: center; justify-content: center;
-  animation: fadeIn .2s ease;
-}
-.settings-overlay.open { display: flex; }
-.settings-panel {
-  background: var(--surface); border-radius: 20px;
-  box-shadow: var(--shadow-xl);
-  width: min(480px, 96vw); max-height: 85vh;
-  overflow-y: auto; padding: 28px 28px 24px;
-  position: relative;
-}
-.settings-title {
-  font-size: 18px; font-weight: 600; color: var(--ink);
-  margin-bottom: 4px; display: flex; align-items: center; gap: 8px;
-}
-.settings-sub {
-  font-size: 13px; color: var(--ink-muted); margin-bottom: 24px;
-}
-.settings-close {
-  position: absolute; top: 16px; right: 16px;
-  width: 30px; height: 30px; border-radius: 50%;
-  border: 1px solid var(--border); background: var(--surface-2);
-  color: var(--ink-muted); cursor: pointer; font-size: 14px;
-  display: flex; align-items: center; justify-content: center;
-  transition: all .15s !important;
-}
-.settings-close:hover { background: var(--sakura-light); color: var(--sakura); }
-.settings-section-title {
-  font-size: 11px; font-weight: 600; color: var(--ink-hint);
-  text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px;
-}
 .theme-grid {
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
   margin-bottom: 24px;
@@ -2234,28 +2165,6 @@ input, select, textarea {
 }
 .empty-state .es-cta:hover{background:var(--sakura);color:#fff}
 
-.profile-avatar-wrap{
-  display:flex;align-items:center;gap:14px;
-  padding:14px 0;margin-bottom:6px
-}
-.profile-avatar{
-  width:56px;height:56px;border-radius:50%;object-fit:cover;
-  border:2.5px solid var(--sakura);background:var(--surface-3);
-  flex-shrink:0;cursor:pointer;transition:opacity .15s
-}
-.profile-avatar:hover{opacity:.8}
-.profile-avatar-label{
-  font-size:11px;color:var(--ink-hint);margin-top:4px;cursor:pointer
-}
-.profile-name-input{
-  flex:1;padding:9px 12px;font-size:14px;
-  font-family:'DM Sans',sans-serif;
-  border:1.5px solid var(--border);border-radius:var(--r-sm);
-  background:var(--surface-2);color:var(--ink);outline:none;
-  transition:border-color .15s
-}
-.profile-name-input:focus{border-color:var(--sakura);background:var(--surface)}
-
 .home-greeting{
   font-size:14px;color:rgba(255,255,255,.7);
   margin-bottom:6px;font-style:italic;letter-spacing:.02em
@@ -2264,14 +2173,8 @@ input, select, textarea {
 .app-header{
   background:var(--surface) !important;
 }
-.settings-panel{
-  backdrop-filter:blur(12px) !important;
-  -webkit-backdrop-filter:blur(12px) !important;
-  background:rgba(var(--surface-rgb,255,255,255),.94) !important;
-}
 /* Dark mode glass */
 :root[data-theme="nuit"] .app-header{background:rgba(30,28,24,.85) !important}
-:root[data-theme="nuit"] .settings-panel{background:rgba(30,28,24,.96) !important}
 
 .btn-primary,.btn-ghost,.btn-edit-mode,.btn-new-trip,
 .theme-card{
@@ -2302,28 +2205,6 @@ input, select, textarea {
 .data-btn .db-text{flex:1}
 .data-btn .db-sub{display:block;font-size:11px;color:var(--ink-hint);font-weight:400;margin-top:1px}
 
-.auto-theme-row{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:10px 0;margin-bottom:12px
-}
-.toggle-switch{
-  position:relative;width:42px;height:24px;flex-shrink:0
-}
-.toggle-switch input{opacity:0;width:0;height:0}
-.toggle-slider{
-  position:absolute;inset:0;border-radius:24px;cursor:pointer;
-  background:var(--surface-3);transition:background .2s;
-  border:1.5px solid var(--border)
-}
-.toggle-slider:before{
-  content:'';position:absolute;width:16px;height:16px;
-  border-radius:50%;background:#fff;bottom:3px;left:3px;
-  transition:transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.2)
-}
-.toggle-switch input:checked + .toggle-slider{background:var(--sakura);border-color:var(--sakura)}
-.toggle-switch input:checked + .toggle-slider:before{transform:translateX(18px)}
-
-
 .donut-wrap{
   display:flex;align-items:center;gap:20px;
   padding:16px 0 8px;margin-bottom:16px
@@ -2346,93 +2227,12 @@ input, select, textarea {
 
 /* offline-badge removed */
 
-.reminder-section{margin-top:4px}
-
 .btn-new-trip.pulse-hint{
   /* animation pulsée retirée : box-shadow animée = repaint continu (chauffe) */
 }
 @keyframes btnPulse{
   0%,100%{box-shadow:0 0 0 0 rgba(232,116,138,.4),0 8px 32px rgba(0,0,0,.25)}
   50%    {box-shadow:0 0 0 10px rgba(232,116,138,0),0 8px 32px rgba(0,0,0,.25)}
-}
-
-.settings-overlay{
-  backdrop-filter:blur(8px) saturate(1.2) !important;
-  -webkit-backdrop-filter:blur(8px) saturate(1.2) !important;
-  background:rgba(0,0,0,.45) !important;
-}
-.settings-panel{
-  backdrop-filter:blur(12px) !important;
-  -webkit-backdrop-filter:blur(12px) !important;
-  background:rgba(var(--surface-rgb,255,255,255),.88) !important;
-  border:1px solid rgba(255,255,255,.35) !important;
-  box-shadow:0 20px 80px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.1) !important;
-}
-:root[data-theme="nuit"] .settings-panel{
-  background:rgba(26,24,20,.93) !important;
-  border-color:rgba(240,192,64,.1) !important;
-}
-
-.settings-validate-bar{
-  display:flex;gap:10px;justify-content:flex-end;align-items:center;
-  margin-top:24px;padding-top:18px;
-  border-top:1px solid var(--border);
-  position:sticky;bottom:0;
-  background:rgba(var(--surface-rgb,255,255,255),.95);
-  backdrop-filter:blur(12px);
-  -webkit-backdrop-filter:blur(12px);
-  margin-left:-28px;margin-right:-28px;
-  padding-left:28px;padding-right:28px;
-  padding-bottom:4px;
-}
-:root[data-theme="nuit"] .settings-validate-bar{
-  background:rgba(26,24,20,.97)
-}
-.settings-validate-btn{
-  flex:1;max-width:260px;
-  padding:11px 20px !important;
-  font-size:13px !important;
-  font-weight:600 !important;
-  letter-spacing:.01em;
-  box-shadow:0 4px 14px rgba(232,116,138,.35)
-}
-.settings-cancel-btn{
-  padding:11px 16px !important;
-  font-size:13px !important;
-}
-
-.bg-slider-row{
-  display:flex;flex-direction:column;gap:6px;
-  margin-top:14px;padding-top:14px;
-  border-top:1px solid var(--border)
-}
-.bg-slider-label{
-  display:flex;justify-content:space-between;align-items:center;
-  font-size:12px;font-weight:500;color:var(--ink)
-}
-.bg-slider-label span{
-  font-size:11px;font-weight:600;color:var(--sakura);
-  background:var(--sakura-light);padding:2px 8px;
-  border-radius:10px;min-width:42px;text-align:center
-}
-.bg-range{
-  -webkit-appearance:none;appearance:none;
-  width:100%;height:5px;border-radius:3px;
-  background:var(--surface-3);outline:none;cursor:pointer;
-  transition:background .2s
-}
-.bg-range::-webkit-slider-thumb{
-  -webkit-appearance:none;appearance:none;
-  width:18px;height:18px;border-radius:50%;
-  background:var(--sakura);border:2px solid #fff;
-  box-shadow:0 1px 6px rgba(232,116,138,.5);
-  cursor:pointer;transition:transform .12s
-}
-.bg-range::-webkit-slider-thumb:hover{transform:scale(1.2)}
-.bg-range::-moz-range-thumb{
-  width:16px;height:16px;border-radius:50%;
-  background:var(--sakura);border:2px solid #fff;
-  cursor:pointer
 }
 
 #tab-bar{
@@ -3091,14 +2891,6 @@ input, select, textarea {
 /* add-form modal styles defined above */
 
 
-/* Theme chips dans le profil — feedback actif fort */
-.theme-chip{
-  padding:9px 14px;border-radius:10px;
-  font-size:13px;font-weight:500;
-  border:2px solid transparent;
-  background:var(--surface-2);color:var(--ink-muted);
-  cursor:pointer;transition:all .18s;text-align:center;
-}
 /* Header du modal Paramètres */
 .settings-modal-header{
   display:flex; align-items:center; justify-content:space-between;
@@ -3118,27 +2910,6 @@ input, select, textarea {
 }
 .settings-modal-close:hover{
   background:var(--sakura-light); border-color:var(--sakura); color:var(--sakura);
-}
-.theme-chip.active{
-  border-color:var(--sakura);
-  background:var(--sakura-light);
-  color:var(--sakura);
-  font-weight:600;
-  transform:scale(1.04);
-  box-shadow:0 2px 10px rgba(232,116,138,.2);
-}
-.theme-chip:active{transform:scale(.96)}
-
-/* Sliders range custom */
-.bg-range{
-  width:100%;height:4px;border-radius:2px;
-  accent-color:var(--sakura);
-  cursor:pointer;
-}
-.bg-slider-label{
-  display:flex;justify-content:space-between;
-  font-size:13px;color:var(--ink-muted);margin-bottom:6px;
-  margin-top:12px;
 }
 
 #splash-screen{
@@ -3216,7 +2987,7 @@ html, body,
 #voyage-sections,
 #tab-belt,
 .section,
-.settings-panel,
+.settings-modal-box,
 .country-suggestions,
 .ac-list,
 .modal,
@@ -3232,7 +3003,7 @@ body::-webkit-scrollbar,
 #voyage-sections::-webkit-scrollbar,
 #tab-belt::-webkit-scrollbar,
 .section::-webkit-scrollbar,
-.settings-panel::-webkit-scrollbar,
+.settings-modal-box::-webkit-scrollbar,
 .country-suggestions::-webkit-scrollbar,
 .ac-list::-webkit-scrollbar,
 .modal::-webkit-scrollbar,
@@ -3260,45 +3031,25 @@ body::-webkit-scrollbar,
 #page-futur { overflow-y: auto; overflow-x: hidden; }
 
 /* ── Trip Map Page ── */
-#tripmap-topbar{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:14px 16px 10px;
-  background:var(--surface);
-  border-bottom:1px solid var(--border);
-  flex-shrink:0;
-  padding-top:calc(14px + env(safe-area-inset-top,0px));
+/* Contrôles flottants GPS + Recentrer — overlay sur la carte (coin bas-droite),
+   même gabarit que le bouton plein écran (rayon/ombre/surface, icônes filaires).
+   Placés à gauche du bouton plein écran, au-dessus de l'attribution OSM. */
+#tripmap-map-controls{
+  position:absolute; z-index:600;
+  right:60px; bottom:26px;
+  display:flex; gap:8px;
 }
-#tripmap-title{
-  font-size:16px;font-weight:600;color:var(--ink);
-  font-family:'Noto Serif JP',serif;
+#tripmap-map-controls button{
+  width:38px; height:38px; border-radius:10px;
+  border:1px solid var(--border); background:var(--surface);
+  color:var(--ink-muted); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 2px 8px rgba(0,0,0,.16); transition:all .15s;
 }
-#tripmap-recenter-btn{
-  display:flex;align-items:center;gap:5px;
-  padding:7px 13px;border-radius:20px;
-  background:var(--sakura);color:white;border:none;
-  font-size:12px;font-weight:500;cursor:pointer;
-  font-family:'DM Sans',sans-serif;
-  box-shadow:0 2px 8px rgba(232,116,138,.35);
-  transition:background .15s,transform .1s;
-}
-#tripmap-recenter-btn:hover{background:var(--sakura-dark)}
-#tripmap-recenter-btn:active{transform:scale(.96)}
-
-#tripmap-geolocate-btn{
-  display:flex;align-items:center;justify-content:center;
-  width:36px;height:36px;border-radius:50%;
-  background:var(--surface);color:#4A90D9;
-  border:1.5px solid #4A90D9;
-  cursor:pointer;transition:background .15s,transform .1s;
-  box-shadow:0 2px 8px rgba(74,144,217,.25);
-  flex-shrink:0;
-}
-#tripmap-geolocate-btn:hover{background:#eaf2fc}
-#tripmap-geolocate-btn:active{transform:scale(.94)}
-#tripmap-geolocate-btn.loading{animation:geoSpin .9s linear infinite}
+#tripmap-map-controls button:hover{ border-color:var(--brand); color:var(--brand); }
+#tripmap-map-controls button:active{ transform:scale(.94); }
+#tripmap-geolocate-btn.loading{ animation:geoSpin .9s linear infinite; }
 @keyframes geoSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-
-#tripmap-topbar-btns{display:flex;align-items:center;gap:8px}
 
 /* Route legend dots */
 .tmap-filter[data-filter="itineraire"]::before{
@@ -3347,30 +3098,11 @@ body::-webkit-scrollbar,
   padding:0 6px;white-space:nowrap;align-self:center;flex-shrink:0;
 }
 
-/* Actions GPS / Recentrer sur la barre filtres — mobile uniquement.
-   En desktop, ces actions restent dans #tripmap-topbar (en haut à droite). */
-#tmap-legend-actions{ display:none; }
 @media (max-width:1023px){
-  #voyage-map-host #tripmap-topbar{ display:none; }   /* bandeau « Carte du voyage » supprimé */
   #tripmap-legend-bar{
     align-items:center; gap:6px;
-    padding:8px 12px; min-height:64px;                 /* un peu plus haute pour loger les actions */
+    padding:8px 12px;
   }
-  #tmap-legend-actions{
-    display:flex; flex-direction:column; gap:5px;
-    margin-left:auto; flex-shrink:0;
-  }
-  .tmap-act{
-    display:flex; align-items:center; gap:5px;
-    padding:5px 10px; border-radius:9px;
-    border:1.5px solid var(--border); background:var(--surface);
-    color:var(--ink-muted); font-family:'DM Sans',sans-serif;
-    font-size:11px; font-weight:500; cursor:pointer; white-space:nowrap;
-    -webkit-tap-highlight-color:transparent;
-  }
-  .tmap-act svg{ flex:0 0 auto; }
-  .tmap-act:active{ transform:scale(.96); }
-  .tmap-act-primary{ background:var(--sakura); color:#fff; border-color:var(--sakura); }
 }
 
 #tripmap-wrap{
@@ -3409,8 +3141,6 @@ body::-webkit-scrollbar,
   display:flex !important; flex-direction:column !important;
   grid-template-columns:none !important; grid-template-rows:none !important;
 }
-#voyage-content #voyage-map-host.is-fullscreen #tripmap-topbar,
-#voyage-map-host.is-fullscreen #tripmap-topbar{ display:none !important; }
 #voyage-content #voyage-map-host.is-fullscreen #tripmap-legend-bar,
 #voyage-map-host.is-fullscreen #tripmap-legend-bar{ display:flex !important; }
 #voyage-content #voyage-map-host.is-fullscreen #tripmap-list-wrap,
@@ -3512,7 +3242,6 @@ body::-webkit-scrollbar,
 
 @media(max-width:479px){
   #tripmap-wrap{height:45vh}
-  #tripmap-topbar{padding:10px 12px 8px;padding-top:calc(10px + env(safe-area-inset-top,0px))}
 }
 
 /* ── Icône map sur les adresses (hébergements & lieux) ── */
@@ -4349,20 +4078,17 @@ body::-webkit-scrollbar,
     border-right:1px solid var(--border);
     padding:14px 14px 24px;
   }
-  /* Colonne DROITE = carte : barre d'outils fine en haut, carte plein cadre. */
-  #voyage-content #voyage-map-host #tripmap-topbar{
-    grid-column:2; grid-row:1;
-  }
+  /* Colonne DROITE = carte plein cadre (le topbar a été retiré, la carte
+     reprend toute la hauteur de la colonne : lignes 1 → 2). */
   #voyage-content #voyage-map-host #tripmap-wrap{
-    grid-column:2; grid-row:2;
+    grid-column:2; grid-row:1 / span 2;
     height:auto; max-height:none; min-height:0;
   }
   /* Plein écran (desktop) : la carte occupe toute la largeur */
   #voyage-content #voyage-map-host.is-full{
     grid-template-columns:1fr;
   }
-  #voyage-content #voyage-map-host.is-full #tripmap-topbar{ grid-column:1; grid-row:1; }
-  #voyage-content #voyage-map-host.is-full #tripmap-wrap{ grid-column:1; grid-row:2; }
+  #voyage-content #voyage-map-host.is-full #tripmap-wrap{ grid-column:1; grid-row:1 / span 2; }
 
   /* ── H7. ACCUEIL — colonne structurée, footer plaqué en bas ────── */
   #home-topbar{ display:none !important; }  /* 2e barre vide supprimée (desktop) */
@@ -4500,7 +4226,7 @@ body::-webkit-scrollbar,
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   ACCUEIL — DASHBOARD (stats + cartes enrichies + inspiration)
+   ACCUEIL — DASHBOARD (stats + cartes enrichies)
    ══════════════════════════════════════════════════════════════════════ */
 
 /* ── Option 1 : bandeau de statistiques ── */
@@ -4521,71 +4247,8 @@ body::-webkit-scrollbar,
 .hsg-l{ font-size:10px; color:var(--ink-hint); margin-top:5px;
         text-transform:uppercase; letter-spacing:.05em; }
 
-/* ── Option 4 : carrousel d'inspiration façon SNCF (v2) ── */
-#home-inspiration{ margin-top:20px; }
-.ic-head{ margin-bottom:14px; }
-.hi-label{
-  font-size:11px; font-weight:600; color:var(--ink-hint);
-  text-transform:uppercase; letter-spacing:.07em;
-}
-/* Scène : flèches de part et d'autre, viewport au centre */
-.ic-stage{
-  display:flex; align-items:center; gap:14px;
-}
-.ic-viewport{ flex:1; overflow:hidden; }
-.ic-arrow{
-  flex:none;
-  width:42px; height:42px; border-radius:50%;
-  border:1px solid var(--border); background:var(--surface);
-  color:var(--ink); cursor:pointer;
-  display:flex; align-items:center; justify-content:center;
-  transition:all .15s;
-  box-shadow:var(--shadow-sm);
-}
-.ic-arrow:hover{ border-color:var(--sakura); color:var(--sakura); box-shadow:var(--shadow-md); }
-.ic-track{
-  display:grid;
-  grid-template-columns:repeat(3, 1fr);
-  gap:16px;
-  transition:transform .3s cubic-bezier(.4,0,.2,1), opacity .3s;
-}
-.ic-track.slide-left{ transform:translateX(-4%); opacity:.4; }
-.ic-track.slide-right{ transform:translateX(4%); opacity:.4; }
-.ic-track.slide-reset{ transition:none; opacity:.4; transform:none; }
-.ic-card{
-  position:relative; height:200px;
-  border-radius:16px; overflow:hidden; cursor:pointer;
-  border:1px solid var(--border);
-  background:var(--surface-3);
-}
-.ic-card img{
-  width:100%; height:100%; object-fit:cover; display:block;
-  transition:transform .5s ease, opacity .3s;
-}
-.ic-card:hover img{ transform:scale(1.05); }
-.ic-grad{
-  position:absolute; inset:0;
-  background:linear-gradient(to top, rgba(0,0,0,.55), transparent 50%);
-}
-.ic-name{
-  position:absolute; left:16px; bottom:16px; z-index:1;
-  color:#fff; font-size:19px; font-weight:600;
-  text-shadow:0 1px 8px rgba(0,0,0,.5);
-}
-.ic-dots{
-  position:absolute; right:14px; bottom:16px; z-index:1;
-  display:flex; gap:5px;
-}
-.ic-dots i{
-  width:6px; height:6px; border-radius:50%;
-  background:rgba(255,255,255,.5); display:block;
-  transition:background .2s;
-}
-.ic-dots i.on{ background:#fff; }
-
-/* Inspiration & footer : masqués en mobile (paradigme app épuré) */
+/* Footer & enrichissements : masqués en mobile (paradigme app épuré) */
 @media (max-width:1023.98px){
-  #home-inspiration{ display:none !important; }
   #home-stats-grid{ grid-template-columns:repeat(2,1fr); }
   .voy-thumb{ display:none; }
   .voy-counters{ display:none; }
@@ -4638,11 +4301,11 @@ body::-webkit-scrollbar,
 /* ── Micro-transitions (sobres) ── */
 .voy-card{ transition:transform .14s ease, box-shadow .18s ease; }
 .voy-card:not(.is-editing):active{ transform:scale(.985); }
-.voy-act-btn, .tmap-act, .vmn-sub, .vmn-sec, .vmn-part,
+.voy-act-btn, .vmn-sub, .vmn-sec, .vmn-part,
 .depl-seg, .lgs-btn, .tmap-filter, #btn-new-voyage{
   transition:transform .12s ease, background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
-.voy-act-btn:active, .tmap-act:active,
+.voy-act-btn:active,
 #btn-new-voyage:active, .vmn-sub:active{ transform:scale(.95); }
 @media (prefers-reduced-motion: reduce){
   *{ transition:none !important; animation:none !important; scroll-behavior:auto !important; }
@@ -4725,15 +4388,10 @@ body::-webkit-scrollbar,
 
 }
 
-/* Inspiration : masquée en mobile (paradigme app épuré) */
 @media (max-width:1023.98px){
-  #home-inspiration{ display:none !important; }
   /* Stats masquées en mobile : redondantes avec les compteurs
      voyages/pays affichés en haut à droite. */
   #home-stats-grid{ display:none !important; }
-  /* FAB Export PDF : masqué en mobile — déplacé dans Profil ▸ Paramètres
-     (manque de place à l'écran). L'export reste accessible via la modale. */
-  #pdf-export-fab{ display:none !important; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -4787,29 +4445,11 @@ body::-webkit-scrollbar,
   font-size:10px; color:#aaa; text-align:center;
 }
 
-/* Bouton flottant Export PDF (page voyage) */
-#pdf-export-fab{
-  position:fixed; right:24px; bottom:24px; z-index:300;
-  display:none; align-items:center; gap:7px;
-  padding:11px 17px;
-  background:var(--btn-primary-bg, var(--sakura)); color:var(--btn-primary-text, #fff);
-  border:none; border-radius:30px;
-  font-family:'DM Sans',sans-serif; font-size:13px; font-weight:600;
-  cursor:pointer;
-  box-shadow:0 6px 20px rgba(0,0,0,.16), 0 2px 6px rgba(0,0,0,.1);
-  transition:transform .15s, box-shadow .15s;
-}
-#pdf-export-fab svg{ opacity:.95; }
 /* Entrée « Dossier de voyage » dans la modale Paramètres : visible
    seulement quand un voyage est ouvert (sinon rien à exporter). */
 .psp-trip-only{ display:none; }
 body.trip-open .psp-trip-only{ display:flex; }
 body.trip-open .psp-label.psp-trip-only{ display:block; }
-#pdf-export-fab:hover{ transform:translateY(-2px); box-shadow:0 10px 28px rgba(0,0,0,.22), 0 3px 8px rgba(0,0,0,.12); }
-/* Visible uniquement quand un voyage est ouvert (classe posée en JS) */
-#page-voyage.active #pdf-export-fab{ display:none; }
-body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
-@media print{ #pdf-export-fab{ display:none !important; } }
 
 /* ── Boutons d'action sur les cartes de voyage (Modifier / Supprimer) ── */
 .voy-col-status{ position:relative; }
@@ -4998,54 +4638,16 @@ body.trip-open #page-voyage.active #pdf-export-fab{ display:inline-flex; }
   margin:0 auto;
   padding:34px clamp(16px,4vw,40px) 60px;
 }
-.explorer-searchbar{
-  display:flex; align-items:center; gap:10px;
-  background:var(--surface);
-  border:1px solid var(--border); border-radius:14px;
-  padding:14px 18px; margin-bottom:28px;
-  color:var(--ink-hint);
-  box-shadow:var(--shadow-sm);
+/* État vide de la page Explorer (placeholder « bientôt disponible ») */
+.explorer-empty{
+  text-align:center; padding:64px 20px;
+  color:var(--ink-muted);
 }
-.explorer-searchbar input{
-  flex:1; border:none; background:transparent; outline:none;
-  font-family:'DM Sans',sans-serif; font-size:15px; color:var(--ink);
+.explorer-empty-icon{ opacity:.45; margin-bottom:14px; }
+.explorer-empty-title{
+  font-size:16px; font-weight:600; color:var(--ink); margin-bottom:6px;
 }
-.explorer-searchbar input::placeholder{ color:var(--ink-hint); }
-
-/* Cadres pays empilés verticalement — grands (~moitié d'écran) */
-#explorer-inspiration{ margin-top:10px; }
-.expl-card{
-  position:relative; width:100%; height:min(52vh, 440px);
-  border-radius:18px; overflow:hidden; cursor:pointer;
-  border:1px solid var(--border); background:var(--surface-3);
-  margin-bottom:20px;
-}
-.expl-card img{
-  width:100%; height:100%; object-fit:cover; object-position:center 56%; display:block;
-  transition:transform .5s ease, opacity .3s;
-}
-.expl-card:hover img{ transform:scale(1.04); }
-.expl-grad{
-  position:absolute; inset:0;
-  background:linear-gradient(to top, rgba(0,0,0,.55), transparent 55%);
-}
-.expl-name{
-  position:absolute; left:18px; bottom:16px; z-index:1;
-  color:#fff; font-size:20px; font-weight:600;
-  text-shadow:0 1px 8px rgba(0,0,0,.5);
-}
-.expl-dots{
-  position:absolute; right:16px; bottom:18px; z-index:1;
-  display:flex; gap:5px;
-}
-.expl-dots i{
-  width:6px; height:6px; border-radius:50%;
-  background:rgba(255,255,255,.5); display:block; transition:background .2s;
-}
-.expl-dots i.on{ background:#fff; }
-.expl-empty{
-  text-align:center; color:var(--ink-hint); font-size:14px; padding:40px 0;
-}
+.explorer-empty-sub{ font-size:13px; color:var(--ink-hint); }
 
 
 /* Footer Explorer (clone) : hérite du style du footer principal */
