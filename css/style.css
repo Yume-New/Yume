@@ -2803,11 +2803,12 @@ input, select, textarea {
   .depl-seg{ padding:9px 6px; gap:6px; }
 }
 
-/* ── NAV MOBILE À 2 NIVEAUX ──────────────────────────────────────────
-   Rangée 1 : sections (Organiser / Suivi / Budget) — onglets soulignés.
-   Rangée 2 : sous-sections du bloc actif — segment crème, actif blanc
-   + texte rose (même langage visuel que .depl-switch). Desktop : masqué
-   (la barre verticale de gauche reste la navigation). */
+/* ── NAV MOBILE — BARRE UNIQUE À 4 ENTRÉES (fusion A1) ───────────────
+   Rangée 1 : Organiser · Planning · Carte · Budget — segment sur fond
+   teinté, entrée active en pastille sakura pleine (texte inversé),
+   icônes filaires sur Planning et Carte. Rangée 2 : sous-sections du
+   bloc actif (Organiser / Budget) — segment crème, actif blanc + texte
+   rose. Desktop : masqué (le rail vertical gauche reste la navigation). */
 #voyage-mobile-nav{ display:none; }
 @media (max-width:1023px){
   #voyage-subsection-nav{ display:none !important; }
@@ -2818,17 +2819,26 @@ input, select, textarea {
     padding:9px 12px 11px;
     flex-shrink:0;
   }
-  .vmn-sections{ display:flex; gap:2px; margin-bottom:9px; }
-  .vmn-sec{
-    flex:1 1 0; padding:6px 4px 7px;
-    border:none; background:transparent;
-    font-family:'DM Sans',sans-serif; font-size:14px; font-weight:500;
-    color:var(--ink-hint); border-bottom:2px solid transparent;
-    cursor:pointer; -webkit-tap-highlight-color:transparent;
-    transition:color .15s, border-color .15s;
+  .vmn-tabs{
+    display:flex; gap:4px;
+    background:var(--surface-2); border:1px solid var(--border);
+    border-radius:14px; padding:4px;
   }
-  .vmn-sec.active{ color:var(--brand); font-weight:600; border-bottom-color:var(--brand); }
+  .vmn-tab{
+    flex:1 1 0; display:flex; align-items:center; justify-content:center; gap:5px;
+    min-height:44px; padding:8px 2px;
+    border:none; background:transparent; border-radius:11px;
+    font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500;
+    color:var(--ink-muted); cursor:pointer; min-width:0;
+    -webkit-tap-highlight-color:transparent;
+    transition:background .15s, color .15s;
+  }
+  .vmn-tab svg{ width:16px; height:16px; flex:0 0 auto; display:block; }
+  .vmn-tab span{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .vmn-tab.active{ background:var(--brand); color:var(--on-brand); font-weight:600; box-shadow:var(--shadow-sm); }
+  .vmn-tab.active svg{ stroke-width:2; }
   .vmn-subs{
+    margin-top:9px;
     display:flex; gap:6px;
     background:var(--surface-2); border:1px solid var(--border);
     border-radius:13px; padding:5px;
@@ -3059,59 +3069,96 @@ body::-webkit-scrollbar,
   margin-right:5px;vertical-align:middle;
 }
 
-#tripmap-legend-bar{
-  display:flex;gap:7px;padding:10px 14px;
-  background:var(--surface);
-  border-bottom:1px solid var(--border);
-  overflow-x:auto;scrollbar-width:none;
-  flex-shrink:0;
+/* ── Filtres condensés en overlay sur la carte (chantier A2) ──────────
+   Deux contrôles NON scrollables sur une ligne : pastille « Filtres (n) »
+   ouvrant un panneau opaque + sélecteur de jour. Posés en haut de
+   #tripmap-wrap, décalés des contrôles de zoom Leaflet (gauche) ;
+   z-index 1100 > contrôles Leaflet (1000) pour que le panneau ouvert les
+   recouvre. Fond OPAQUE — jamais de backdrop-filter (piège perf §5.4). */
+#tmap-filter-overlay{
+  position:absolute; top:12px; left:66px; right:12px; z-index:1100;
+  display:flex; align-items:flex-start; gap:8px;
+  pointer-events:none;   /* la carte reste manipulable autour des pastilles */
 }
-#tripmap-legend-bar::-webkit-scrollbar{display:none}
-.tmap-filter{
-  padding:5px 13px;border-radius:20px;border:1.5px solid var(--border);
-  background:var(--surface-2);color:var(--ink-muted);
-  font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;
-  font-family:'DM Sans',sans-serif;transition:all .15s;flex-shrink:0;
+#tmap-filter-overlay > *{ pointer-events:auto; }
+/* Placeholder « Ouvre un voyage » visible → pas de filtres flottants */
+#tripmap-placeholder.visible ~ #tmap-filter-overlay{ display:none; }
+#tmap-filters-btn{
+  position:relative;
+  display:flex; align-items:center; gap:6px;
+  min-height:44px; padding:0 14px;
+  border:1px solid var(--border); border-radius:22px;
+  background:var(--surface); color:var(--ink-muted);
+  font-family:'DM Sans',sans-serif; font-size:12.5px; font-weight:600;
+  cursor:pointer; white-space:nowrap; flex-shrink:0;
+  box-shadow:0 2px 8px rgba(0,0,0,.16);
+  -webkit-tap-highlight-color:transparent;
+  transition:border-color .15s, color .15s;
 }
-.tmap-filter.active{background:var(--sakura);color:white;border-color:var(--sakura)}
-/* Sélecteur « par jour » — même gabarit que les chips filtres */
+#tmap-filters-btn:hover{ border-color:var(--brand); color:var(--brand); }
+#tmap-filters-btn[aria-expanded="true"]{ border-color:var(--brand); color:var(--brand); }
+#tmap-filter-count{
+  display:flex; align-items:center; justify-content:center;
+  min-width:18px; height:18px; padding:0 4px; border-radius:9px;
+  background:var(--brand); color:var(--on-brand);
+  font-size:10.5px; font-weight:700;
+}
+/* Sélecteur « par jour » — même gabarit pastille que « Filtres » */
 .tmap-day-filter{
-  padding:5px 30px 5px 13px;border-radius:20px;border:1.5px solid var(--border);
-  background:var(--surface-2);color:var(--ink-muted);
-  font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;
-  font-family:'DM Sans',sans-serif;transition:all .15s;
+  min-height:44px; padding:0 30px 0 14px;
+  border-radius:22px; border:1px solid var(--border);
+  background-color:var(--surface); color:var(--ink-muted);
+  font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap;
+  font-family:'DM Sans',sans-serif; transition:border-color .15s, color .15s;
+  flex:0 1 auto; min-width:0; text-overflow:ellipsis;
+  box-shadow:0 2px 8px rgba(0,0,0,.16);
   -webkit-appearance:none;appearance:none;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a8290' stroke-width='2.4'><polyline points='6 9 12 15 18 9'/></svg>");
   background-repeat:no-repeat;background-position:right 10px center;
 }
-.tmap-day-filter:hover{border-color:var(--sakura);color:var(--sakura)}
-.tmap-day-filter:focus{outline:none;border-color:var(--sakura)}
-.tmap-filter:hover:not(.active){border-color:var(--sakura);color:var(--sakura)}
-/* Couleurs distinctes par filtre actif */
-.tmap-filter[data-filter="hotels"].active{background:#e8748a;border-color:#e8748a}
-.tmap-filter[data-filter="lieux"].active{background:#5c6bc0;border-color:#5c6bc0}
-.tmap-filter[data-filter="itineraire"].active{background:#2d5e8c;border-color:#2d5e8c}
-.tmap-filter[data-filter="all"].active{background:var(--teal);border-color:var(--teal)}
-/* Compteur de filtres actifs */
-#tmap-active-count{
-  font-size:10px;font-weight:700;color:var(--ink-hint);
-  padding:0 6px;white-space:nowrap;align-self:center;flex-shrink:0;
+.tmap-day-filter:hover{border-color:var(--brand);color:var(--brand)}
+.tmap-day-filter:focus{outline:none;border-color:var(--brand)}
+/* Panneau des choix — ancré sous la pastille, liste verticale opaque */
+#tmap-filter-panel{
+  display:none;
+  position:absolute; top:calc(100% + 8px); left:0;
+  min-width:196px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; box-shadow:0 6px 24px rgba(0,0,0,.18);
+  padding:6px; flex-direction:column; gap:2px;
 }
-
-@media (max-width:1023px){
-  #tripmap-legend-bar{
-    align-items:center; gap:6px;
-    padding:8px 12px;
-  }
+#tmap-filter-panel.open{ display:flex; }
+.tmap-filter{
+  display:flex; align-items:center; gap:9px;
+  min-height:44px; padding:0 12px;
+  border:none; border-radius:10px; background:transparent;
+  color:var(--ink-muted); font-size:13px; font-weight:500; text-align:left;
+  font-family:'DM Sans',sans-serif; cursor:pointer; white-space:nowrap;
+  -webkit-tap-highlight-color:transparent;
+  transition:background .15s, color .15s;
 }
+.tmap-filter svg{ flex:0 0 auto; }
+.tmap-filter:hover:not(.active){ background:var(--surface-2); color:var(--ink); }
+.tmap-filter.active{ background:var(--brand); color:var(--on-brand); font-weight:600; }
 
 #tripmap-wrap{
   position:relative;
   height:55vh;min-height:260px;max-height:520px;
   flex-shrink:0;
   background:var(--surface-2);
+  /* Contexte d'empilement isolé : les z-index internes (Leaflet ~1000,
+     filtres 1100, carrousel 640) ne peuvent JAMAIS passer devant les
+     couches globales de la page (modale #editModal, toasts). */
+  isolation:isolate;
 }
 #tripmap-leaflet{width:100%;height:100%}
+/* Attribution OSM/CARTO : OBLIGATION LÉGALE (ODbL / conditions CARTO) —
+   ne jamais la supprimer ni la masquer. Rendue discrète mais lisible. */
+#tripmap-wrap .leaflet-control-attribution{
+  font-size:9.5px; line-height:1.6;
+  background:rgba(255,255,255,.72);
+  padding:1px 6px; border-radius:6px 0 0 0;
+}
 
 /* Bouton agrandir / réduire la carte (bas-droite, au-dessus de l'attribution) */
 #tripmap-fullscreen-btn{
@@ -3141,8 +3188,6 @@ body::-webkit-scrollbar,
   display:flex !important; flex-direction:column !important;
   grid-template-columns:none !important; grid-template-rows:none !important;
 }
-#voyage-content #voyage-map-host.is-fullscreen #tripmap-legend-bar,
-#voyage-map-host.is-fullscreen #tripmap-legend-bar{ display:flex !important; }
 #voyage-content #voyage-map-host.is-fullscreen #tripmap-list-wrap,
 #voyage-map-host.is-fullscreen #tripmap-list-wrap{ display:none !important; }
 #voyage-content #voyage-map-host.is-fullscreen #tripmap-wrap,
@@ -3151,14 +3196,10 @@ body::-webkit-scrollbar,
   grid-column:auto !important; grid-row:auto !important;
 }
 #voyage-map-host.is-fullscreen #tripmap-fullscreen-btn{ bottom:calc(18px + env(safe-area-inset-bottom,0px)); }
-/* État plein écran : on masque la liste + la légende, la carte prend tout */
+/* État plein écran : on masque la liste, la carte prend tout
+   (les filtres sont en overlay DANS #tripmap-wrap → suivent la carte). */
 #voyage-map-host.is-full #tripmap-list-wrap{ display:none !important; }
-#voyage-map-host.is-full #tripmap-legend-bar{ display:none !important; }
-/* Mobile : le grand format est le défaut. On GARDE la barre filtres
-   (Tout/Logements/… + Position/Recentrer) et on masque seulement la liste ;
-   la carte (flex:1) remplit tout l'espace restant. */
 @media (max-width:1023px){
-  #voyage-map-host.is-full #tripmap-legend-bar{ display:flex !important; }
   #voyage-map-host.is-full #tripmap-wrap{ height:auto !important; flex:1 1 auto; }
 }
 /* Mobile/tablette : en plein écran la carte prend toute la hauteur dispo
@@ -3211,6 +3252,8 @@ body::-webkit-scrollbar,
 .tmap-pin-status.geocoding{background:#fdf3df;color:#c9921a}
 .tmap-pin-status.located  {background:#e8f5ee;color:#2d8c6b}
 .tmap-pin-status.notfound {background:#fef0f0;color:#c0392b}
+/* Transport : pas de pin (tracé seulement) — badge neutre (A3) */
+.tmap-pin-status.route    {background:var(--surface-2);color:var(--ink-muted)}
 .tmap-pin-open-btn{
   padding:5px 10px;border-radius:8px;border:1px solid var(--border);
   background:transparent;color:var(--ink-muted);font-size:11px;
@@ -3593,6 +3636,16 @@ body::-webkit-scrollbar,
     border:1px solid rgba(255,255,255,.28); background:rgba(255,255,255,.13);
     color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer;
     -webkit-tap-highlight-color:transparent;
+    position:relative;   /* ancre du badge d'alertes */
+  }
+  /* Badge = nombre d'alertes de cohérence (dérivé, jamais stocké) */
+  #home-hero .hh-bell-badge{
+    position:absolute; top:-3px; right:-3px;
+    min-width:17px; height:17px; padding:0 4px; border-radius:9px;
+    background:var(--surface); color:var(--brand);
+    border:1.5px solid var(--brand);
+    font-size:10px; font-weight:700; line-height:1;
+    display:flex; align-items:center; justify-content:center;
   }
   #home-hero .hh-body{ margin-top:auto; }
   #home-hero .hh-pill{
@@ -4061,17 +4114,11 @@ body::-webkit-scrollbar,
   }
   /* Plein écran : pas de poignée */
   #voyage-content #voyage-map-host.is-full #tripmap-resizer{ display:none; }
-  /* Colonne GAUCHE = infos (légende en haut + liste des points dessous),
-     fond surface, séparée de la carte par un filet, pleine hauteur. */
-  #voyage-content #voyage-map-host #tripmap-legend-bar{
-    grid-column:1; grid-row:1;
-    flex-wrap:wrap; overflow-x:visible;
-    background:var(--surface);
-    border-right:1px solid var(--border);
-    border-bottom:1px solid var(--border);
-  }
+  /* Colonne GAUCHE = liste des points, pleine hauteur (lignes 1 → 2 :
+     l'ancienne barre de filtres occupait la ligne 1, désormais les
+     filtres sont en overlay sur la carte). */
   #voyage-content #voyage-map-host #tripmap-list-wrap{
-    grid-column:1; grid-row:2;
+    grid-column:1; grid-row:1 / span 2;
     min-height:0; max-height:none; height:auto;
     overflow-y:auto;
     background:var(--surface);
@@ -4301,7 +4348,7 @@ body::-webkit-scrollbar,
 /* ── Micro-transitions (sobres) ── */
 .voy-card{ transition:transform .14s ease, box-shadow .18s ease; }
 .voy-card:not(.is-editing):active{ transform:scale(.985); }
-.voy-act-btn, .vmn-sub, .vmn-sec, .vmn-part,
+.voy-act-btn, .vmn-sub, .vmn-tab, .vmn-part,
 .depl-seg, .lgs-btn, .tmap-filter, #btn-new-voyage{
   transition:transform .12s ease, background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
@@ -5000,9 +5047,164 @@ body.trip-open .psp-label.psp-trip-only{ display:block; }
     display:flex; flex-direction:column;
     flex:1 1 auto; min-height:0; height:auto; overflow:hidden;
   }
-  #voyage-map-host #tripmap-legend-bar{ flex:0 0 auto; }
   #voyage-map-host #tripmap-wrap{ height:48vh; min-height:240px; max-height:none; flex:0 0 auto; }
   #voyage-map-host #tripmap-list-wrap{ flex:1 1 auto; min-height:0; overflow-y:auto; display:block; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   CARROUSEL SYNCHRONISÉ (chantier A3) — mobile < 768 px UNIQUEMENT.
+   La carte occupe tout l'espace ; la liste verticale est remplacée par
+   une rangée horizontale de fiches scroll-snap en bas de la carte.
+   Fonds OPAQUES (jamais de backdrop-filter, §5.4), animations par
+   transform uniquement. Le carrousel est le SEUL axe de défilement
+   horizontal de l'écran (les filtres A2 ne scrollent pas).
+   ══════════════════════════════════════════════════════════════════ */
+#tmap-carousel{ display:none; }   /* n'existe qu'en mobile <768 */
+
+/* Marqueur sélectionné : scale sur le div INTERNE du divIcon — Leaflet
+   pose son transform de positionnement inline sur .leaflet-marker-icon,
+   ne JAMAIS le concurrencer. */
+#tripmap-leaflet .leaflet-marker-icon > div{ transition:transform .18s ease; }
+#tripmap-leaflet .leaflet-marker-icon.tmap-sel > div{ transform:scale(1.28); }
+
+/* Liste de saut (modale partagée #editModal, ouverte par le compteur) */
+.tmap-jump-title{ font-size:14px; font-weight:600; color:var(--ink); margin-bottom:10px; }
+.tmap-jump-list{
+  max-height:min(58vh, 460px); overflow-y:auto;
+  display:flex; flex-direction:column; gap:4px;
+}
+.tmap-jump-row{
+  display:flex; align-items:center; gap:10px; width:100%;
+  min-height:48px; padding:8px 10px;
+  border:none; border-radius:12px; background:transparent;
+  font-family:'DM Sans',sans-serif; cursor:pointer; text-align:left;
+  -webkit-tap-highlight-color:transparent;
+  transition:background .15s;
+}
+.tmap-jump-row:hover{ background:var(--surface-2); }
+.tmap-jump-row.active{ background:var(--brand-light, var(--sakura-light)); }
+.tjr-icon{ flex:0 0 auto; display:flex; }
+.tjr-body{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }
+.tjr-name{ font-size:13.5px; font-weight:600; color:var(--ink); }
+.tjr-sub{ font-size:11.5px; color:var(--ink-muted); margin-top:1px; }
+.tmap-jump-row .tmap-pin-status{ flex:0 0 auto; }
+
+@media(max-width:767.98px){
+  /* La carte remplit tout l'espace ; la liste verticale disparaît. */
+  #voyage-map-host #tripmap-list-wrap{ display:none !important; }
+  #voyage-map-host #tripmap-wrap{ height:auto; min-height:0; flex:1 1 auto; }
+
+  #tmap-carousel{
+    display:flex; flex-direction:column; gap:7px;
+    position:absolute; left:0; right:0; bottom:10px; z-index:640;
+    pointer-events:none;    /* la carte reste manipulable entre les fiches */
+  }
+  #tmap-carousel-track{
+    display:flex; align-items:stretch; gap:10px;
+    overflow-x:auto; overflow-y:hidden;
+    scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+    padding:4px 16px;
+    pointer-events:auto;
+  }
+  #tmap-carousel-track::-webkit-scrollbar{ display:none; }
+  .tmap-car-card{
+    flex:0 0 auto; width:min(76vw, 300px);
+    scroll-snap-align:center;
+    display:flex; flex-direction:column; gap:8px;
+    background:var(--surface); border:1.5px solid var(--border);
+    border-radius:16px; padding:11px 12px;
+    box-shadow:0 4px 14px rgba(0,0,0,.14);
+    cursor:pointer;
+  }
+  .tmap-car-card.active{ border-color:var(--brand); }
+  .tmap-car-top{ display:flex; align-items:flex-start; gap:10px; }
+  .tmap-car-body{ flex:1 1 auto; min-width:0; }
+  /* Titre JAMAIS tronqué : retour à la ligne libre, la fiche grandit. */
+  .tmap-car-name{
+    font-size:14px; font-weight:600; color:var(--ink);
+    line-height:1.3; white-space:normal; word-break:break-word;
+  }
+  .tmap-car-sub{ font-size:11.5px; color:var(--ink-muted); margin-top:2px; white-space:normal; }
+  .tmap-car-foot{ display:flex; align-items:center; gap:8px; margin-top:auto; }
+  .tmap-car-empty{
+    flex:0 0 auto; width:76vw; padding:16px;
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    text-align:center; font-size:12.5px; color:var(--ink-muted);
+  }
+  /* Compteur « n / total » — pastille discrète, zone de tap 44 px */
+  #tmap-carousel-count{
+    align-self:center; pointer-events:auto;
+    min-height:44px; padding:5px 4px;
+    border:none; background:transparent; cursor:pointer;
+    display:flex; align-items:center;
+    font-family:'DM Sans',sans-serif;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #tmap-carousel-count .tcc-pill{
+    display:flex; align-items:center; min-height:30px; padding:4px 14px;
+    background:var(--surface); border:1px solid var(--border); border-radius:15px;
+    color:var(--ink-muted); font-size:11.5px; font-weight:600;
+    box-shadow:0 2px 8px rgba(0,0,0,.14);
+  }
+  /* Boutons Localiser / Recentrer / Plein écran : intégrés au BAS du bloc
+     carrousel, sur la rangée du compteur (à droite) — ils ne flottent plus
+     sur la carte ni sur les fiches. z-index > carrousel (640) pour rester
+     cliquables dans sa bande. transition:none : la règle de base a
+     transition:all, qui ferait « voler » bottom. */
+  #tripmap-map-controls, #tripmap-fullscreen-btn,
+  #voyage-map-host.is-fullscreen #tripmap-fullscreen-btn{
+    bottom:14px;
+    z-index:650;
+    transition:none;
+  }
+  /* Le carrousel commence à 10px du bas + sa hauteur → l'attribution se
+     cale 4px au-dessus de son bord haut. */
+  #tripmap-wrap .leaflet-bottom{ bottom:calc(var(--tmap-car-h, 140px) + 14px); }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   PANNEAU CLOCHE (Accueil) — « Échéances & alertes ». Rendu dans la
+   modale partagée #editModal (fond opaque, pas de backdrop-filter).
+   ══════════════════════════════════════════════════════════════════ */
+.bell-group-title{
+  font-size:11px; font-weight:700; color:var(--ink-hint);
+  text-transform:uppercase; letter-spacing:.08em;
+  margin:14px 0 8px;
+}
+.bell-list{ display:flex; flex-direction:column; gap:6px; }
+.bell-row{
+  display:flex; align-items:center; gap:11px; width:100%;
+  min-height:52px; padding:9px 11px; text-align:left;
+  border:1px solid var(--border); border-radius:12px;
+  background:var(--surface-2); cursor:pointer;
+  font-family:'DM Sans',sans-serif;
+  -webkit-tap-highlight-color:transparent;
+  transition:background .15s, border-color .15s;
+}
+.bell-row:hover{ border-color:var(--brand); }
+.bell-ico{
+  flex:0 0 auto; width:32px; height:32px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--surface); color:var(--ink-muted);
+  border:1px solid var(--border);
+}
+.bell-row-alert .bell-ico{
+  background:var(--sakura-light); color:var(--brand); border-color:transparent;
+}
+.bell-body{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:1px; }
+.bell-title{ font-size:13.5px; font-weight:600; color:var(--ink); }
+.bell-sub{ font-size:11.5px; color:var(--ink-muted); }
+.bell-when{
+  flex:0 0 auto; font-size:11px; font-weight:700; color:var(--brand);
+  background:var(--sakura-light); padding:3px 9px; border-radius:11px;
+  white-space:nowrap;
+}
+.bell-empty{
+  padding:14px 12px; text-align:center;
+  font-size:12.5px; color:var(--ink-muted);
+  background:var(--surface-2); border-radius:12px;
 }
 
 /* ── Profil : neutraliser le surlignage autofill (case grise du prénom) ── */

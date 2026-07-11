@@ -975,6 +975,7 @@
         <option value="Parcs">
         <option value="Randonnées">
         <option value="Restaurants">
+        <option value="Bar">
         <option value="Musées">
         <option value="Shopping">
         <option value="Onsen">
@@ -1275,16 +1276,6 @@
 
     <!-- Section CARTE (groupe « Carte ») — déplacée ici depuis page-futur -->
     <div id="voyage-map-host" style="display:none">
-  <!-- Légende / filtres rapides -->
-  <div id="tripmap-legend-bar">
-    <button class="tmap-filter active" data-filter="all"        onclick="tripmapFilter('all')">Tout</button>
-    <button class="tmap-filter"        data-filter="hotels"     onclick="tripmapFilter('hotels')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><rect x="2" y="6" width="20" height="16" rx="2"/><path d="M2 12h20"/><rect x="7" y="16" width="3" height="6"/><rect x="14" y="16" width="3" height="6"/></svg> Logements</button>
-    <button class="tmap-filter"        data-filter="lieux"      onclick="tripmapFilter('lieux')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg> Activités</button>
-    <button class="tmap-filter"        data-filter="itineraire" onclick="tripmapFilter('itineraire')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M21 16l-3-8-3 3-5-5-3 3 2 3-4 2 1 2 5-1 1 3 3-1 1 3 3-3z"/></svg> Itinéraire</button>
-    <select id="tmap-day-filter" class="tmap-day-filter" onchange="tripmapSetDay(this.value)" aria-label="Filtrer par jour" style="display:none"><option value="">Tous les jours</option></select>
-    <span id="tmap-active-count" style="display:none"></span>
-  </div>
-
   <!-- Carte Leaflet dédiée -->
   <div id="tripmap-wrap">
     <div id="tripmap-leaflet"></div>
@@ -1308,9 +1299,35 @@
       <div style="font-size:15px;font-weight:500;color:var(--ink);margin-bottom:6px">Ouvre un voyage</div>
       <div style="font-size:12px;color:var(--ink-muted)">Les hébergements et lieux à visiter<br>apparaîtront ici automatiquement.</div>
     </div>
+    <!-- Filtres condensés en overlay (haut de carte) : pastille « Filtres (n) »
+         + sélecteur de jour. Placé APRÈS le placeholder (masqué par ~ CSS
+         quand celui-ci est visible). Panneau opaque, fermé au clic extérieur
+         et à Échap (listeners dans map-trip.js). -->
+    <div id="tmap-filter-overlay">
+      <button id="tmap-filters-btn" type="button" onclick="tripmapToggleFilterPanel()" aria-haspopup="true" aria-expanded="false" aria-controls="tmap-filter-panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16" stroke-linecap="round"><path d="M4 8h9M17.6 8H20M4 16h2.4M11 16h9"/><circle cx="15.3" cy="8" r="2.3"/><circle cx="8.7" cy="16" r="2.3"/></svg>
+        <span>Filtres</span>
+        <span id="tmap-filter-count" style="display:none"></span>
+      </button>
+      <select id="tmap-day-filter" class="tmap-day-filter" onchange="tripmapSetDay(this.value)" aria-label="Filtrer par jour" style="display:none"><option value="">Tous les jours</option></select>
+      <div id="tmap-filter-panel">
+        <button class="tmap-filter active" data-filter="all"        type="button" onclick="tripmapFilter('all')">Tout</button>
+        <button class="tmap-filter"        data-filter="hotels"     type="button" onclick="tripmapFilter('hotels')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><rect x="2" y="6" width="20" height="16" rx="2"/><path d="M2 12h20"/><rect x="7" y="16" width="3" height="6"/><rect x="14" y="16" width="3" height="6"/></svg> Logements</button>
+        <button class="tmap-filter"        data-filter="lieux"      type="button" onclick="tripmapFilter('lieux')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg> Activités</button>
+        <button class="tmap-filter"        data-filter="itineraire" type="button" onclick="tripmapFilter('itineraire')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M21 16l-3-8-3 3-5-5-3 3 2 3-4 2 1 2 5-1 1 3 3-1 1 3 3-3z"/></svg> Itinéraire</button>
+      </div>
+    </div>
+    <!-- Carrousel de fiches synchronisé (mobile < 768 px) — chantier A3.
+         Alimenté par _renderList (map-trip.js), scroll-snap natif, compteur
+         « n / total » tappable ouvrant la liste de saut (modale). -->
+    <div id="tmap-carousel">
+      <div id="tmap-carousel-track" aria-label="Fiches de la carte"></div>
+      <button id="tmap-carousel-count" type="button" onclick="tripmapOpenJumpList()" title="Voir la liste complète" aria-label="Voir la liste complète"><span class="tcc-pill"></span></button>
+    </div>
   </div>
 
-  <!-- Liste des points sous la carte -->
+  <!-- Liste des points sous la carte (desktop / tablette ≥ 768 px ;
+       remplacée par le carrousel #tmap-carousel en mobile) -->
   <div id="tripmap-list-wrap">
     <div id="tripmap-list-inner"></div>
   </div>
@@ -1658,7 +1675,10 @@
 
 
 <!-- ══ MODAL ÉDITION GLOBALE ══ -->
-<div id="editModal" class="modal-overlay" style="position:fixed;inset:0;z-index:500;background:rgba(26,26,46,.45);align-items:center;justify-content:center">
+<!-- z-index:2000 : la modale doit passer DEVANT tous les calques de la
+     carte (contrôles Leaflet ~1000, filtres A2 1100, host plein écran 1200).
+     Style inline → bat la classe .modal-overlay (piège §5.5), à garder ici. -->
+<div id="editModal" class="modal-overlay" style="position:fixed;inset:0;z-index:2000;background:rgba(26,26,46,.45);align-items:center;justify-content:center">
   <div id="editModalInner" class="modal" style="width:100%;max-width:min(560px,96vw);max-height:90vh;overflow-y:auto;padding:24px 26px;background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow-xl)"></div>
 </div>
 

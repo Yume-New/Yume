@@ -11,7 +11,7 @@
 // PÉREMPTION   : tuiles conservées 7 jours, shell indéfini
 // ══════════════════════════════════════════════════════════════════════
 
-var CACHE_SHELL   = 'yume-shell-v55';
+var CACHE_SHELL   = 'yume-shell-v122';
 var CACHE_TILES   = 'yume-tiles-v1';
 var CACHE_API     = 'yume-api-v1';
 
@@ -26,8 +26,10 @@ var SHELL_FILES = [
   './js/rail-router.js',
   './js/timeline.js',
   './js/smart-alerts.js',
+  './js/vendor/pdf-lib.min.js',
   './js/app.js',
   './data/geo-defaults.js',
+  './data/airports-gps.js',
   './data/transport-refs.js',
   './data/finance-data.js',
   'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap',

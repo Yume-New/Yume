@@ -1131,11 +1131,21 @@ function _buildSubNav(groupId){
   _buildMobileNav();
 }
 
-// ── NAV MOBILE À 2 NIVEAUX ────────────────────────────────────────────
-// Rangée 1 : 3 sections (Organiser / Suivi / Budget).
-// Rangée 2 : sous-sections du bloc actif, design crème (segment actif
-// blanc + texte rose), comme le sélecteur Pass/Transport/Location.
-var NAV_BLOCK_SHORT = ['Organiser', 'Suivi', 'Budget'];
+// ── NAV MOBILE — BARRE UNIQUE À 4 ENTRÉES (fusion A1) ─────────────────
+// Rangée 1 : Organiser · Planning · Carte · Budget — « Suivi » n'existe
+// plus, Planning et Carte sont des entrées de premier rang. L'ordre des
+// entrées = ordre visuel du swipe, aligné sur le belt physique
+// (…documents → timeline → [carte HORS belt] → budget → convertir) —
+// cf. piège « ordre des sections » (CLAUDE.md §5.7).
+// Rangée 2 : sous-sections crème, seulement si l'entrée en a plusieurs
+// (Organiser : Déplacements/Hébergements/Lieux/Documents ; Budget :
+// Budget/Convertir hors voyage France).
+var MOBILE_TABS = [
+  { id:'organiser', label:'Organiser', items:['deplacements','hotels','lieux','documents'] },
+  { id:'timeline',  label:'Planning' },
+  { id:'carte',     label:'Carte' },
+  { id:'budget',    label:'Budget', items:['budget','convertir'] }
+];
 var MOBILE_SUB_LABEL = { deplacements:'Déplacements' };
 
 function _navItems(block){
@@ -1146,39 +1156,46 @@ function _navItems(block){
 function _navCurrent(){
   return (_DEPL.indexOf(_currentSection) !== -1) ? 'deplacements' : _currentSection;
 }
-function _activeBlockIndex(){
+// Entrée active de la barre mobile (id dans MOBILE_TABS)
+function _mobileActiveTab(){
   var cur = _navCurrent();
-  for(var i = 0; i < NAV_BLOCKS.length; i++){
-    if(_navItems(NAV_BLOCKS[i]).indexOf(cur) !== -1) return i;
-  }
-  return 0;
+  if(cur === 'timeline') return 'timeline';
+  if(cur === 'carte') return 'carte';
+  if(cur === 'budget' || cur === 'convertir') return 'budget';
+  return 'organiser';
 }
 
 function _buildMobileNav(){
   var nav = document.getElementById('voyage-mobile-nav');
   if(!nav) return;
-  var bi  = _activeBlockIndex();
   var cur = _navCurrent();
+  var activeId = _mobileActiveTab();
+  var activeTab = null;
 
-  // Rangée 1 — sections
-  var r1 = '<div class="vmn-sections">';
-  NAV_BLOCKS.forEach(function(block, i){
-    if(!_navItems(block).length) return;
-    r1 += '<button type="button" class="vmn-sec' + (i === bi ? ' active' : '') + '" '
-        + 'onclick="mobileSelectBlock(' + i + ')">'
-        + (NAV_BLOCK_SHORT[i] || block.title) + '</button>';
+  // Rangée 1 — barre unique à 4 entrées (icônes filaires : Planning + Carte)
+  var r1 = '<div class="vmn-tabs">';
+  MOBILE_TABS.forEach(function(t){
+    if(t.id === activeId) activeTab = t;
+    var ico = (t.id === 'timeline' || t.id === 'carte') ? _subIcon(t.id) : '';
+    r1 += '<button type="button" class="vmn-tab' + (t.id === activeId ? ' active' : '') + '" '
+        + 'data-tab="' + t.id + '" onclick="mobileSelectTab(\'' + t.id + '\')">'
+        + ico + '<span>' + t.label + '</span></button>';
   });
   r1 += '</div>';
 
-  // Rangée 2 — sous-sections du bloc actif (crème)
-  var r2 = '<div class="vmn-subs">';
-  _navItems(NAV_BLOCKS[bi]).forEach(function(s){
-    var label = MOBILE_SUB_LABEL[s] || SUB_META[s] || s;
-    r2 += '<button type="button" class="vmn-sub' + (s === cur ? ' active' : '') + '" '
-        + 'data-tab="' + s + '" onclick="mobileGoSub(\'' + s + '\')">'
-        + _subIcon(s) + '<span>' + label + '</span></button>';
-  });
-  r2 += '</div>';
+  // Rangée 2 — sous-sections de l'entrée active (crème), si plusieurs
+  var r2 = '';
+  var subs = (activeTab && activeTab.items) ? _navItems(activeTab) : [];
+  if(subs.length > 1){
+    r2 = '<div class="vmn-subs">';
+    subs.forEach(function(s){
+      var label = MOBILE_SUB_LABEL[s] || SUB_META[s] || s;
+      r2 += '<button type="button" class="vmn-sub' + (s === cur ? ' active' : '') + '" '
+          + 'data-tab="' + s + '" onclick="mobileGoSub(\'' + s + '\')">'
+          + _subIcon(s) + '<span>' + label + '</span></button>';
+    });
+    r2 += '</div>';
+  }
 
   // Rangée 3 (optionnelle) — parties de « Déplacements » : Pass / Transport /
   // Location, soulignées selon la partie courante (swipe vertical).
@@ -1197,13 +1214,17 @@ function _buildMobileNav(){
   nav.innerHTML = r1 + r2 + r3;
 }
 
-// Tap sur une section (rangée 1) : bascule vers sa 1re sous-section
+// Tap sur une entrée de la barre (rangée 1) : Planning/Carte naviguent
+// directement ; Organiser/Budget basculent vers leur 1re sous-section
 // si on n'y est pas déjà.
-function mobileSelectBlock(i){
-  var items = _navItems(NAV_BLOCKS[i]);
+function mobileSelectTab(id){
+  if(id === 'timeline' || id === 'carte'){ goToSection(id, null); return; }
+  var tab = null;
+  MOBILE_TABS.forEach(function(t){ if(t.id === id) tab = t; });
+  var items = (tab && tab.items) ? _navItems(tab) : [];
   if(!items.length) return;
   if(items.indexOf(_navCurrent()) === -1){ goToSection(items[0]); }
-  _buildMobileNav();
+  else { _buildMobileNav(); }
 }
 // Tap sur une sous-section (rangée 2)
 function mobileGoSub(s){
@@ -1507,54 +1528,70 @@ function _adaptSectionsForTrip(tid){
   }
 })();
 
-// ── Swipe interne au bloc « Suivi » : Planning → Carte ────────────────
-// Planning (#tab-timeline) vit dans le belt à plat ; son voisin physique
-// de droite est « Budget ». Un swipe horizontal natif y fuyait donc vers
-// Budget (onglet du haut) au lieu de rester dans Suivi. On intercepte le
-// swipe horizontal SUR la section Planning : on bloque le scroll-snap du
-// belt (preventDefault) et on route vers la Carte, qui est une vue séparée
-// (#voyage-map-host) hors belt. Le retour Carte → Planning se fait au tap
-// sur le sous-toggle (goToSection('timeline')) : on n'intercepte pas le
-// tactile de la carte pour préserver le pan/déplacement Leaflet.
-(function initSuiviSwipe(){
-  function init(){
-    var pl = document.getElementById('tab-timeline');
-    if(!pl) return;
-    var x0 = 0, y0 = 0, horiz = false, tracking = false;
-    var TH_HORIZ = 8;   // seuil px pour reconnaître l'intention horizontale
-    var TH_GO    = 45;  // seuil px pour valider la navigation
+// ── Coutures de swipe autour de la Carte (fusion A1) ──────────────────
+// Ordre visuel de la nav : Organiser · Planning · Carte · Budget.
+// Le belt scroll-snap gère nativement toutes les transitions SAUF celles
+// qui touchent la Carte, qui vit HORS belt (#voyage-map-host) :
+//   · Planning —doigt vers la gauche (dx<0, révèle la droite)→ Carte
+//     (sinon fuite native vers Budget, voisin PHYSIQUE de droite) ;
+//   · Budget —doigt vers la droite (dx>0, révèle la gauche)→ Carte
+//     (sinon retour natif vers Planning, voisin PHYSIQUE de gauche) ;
+//   · Carte → Planning / Budget : intercepté sur la LISTE sous la carte
+//     uniquement (mobile < 1024 px) — le canvas Leaflet garde son pan
+//     (décision produit : ne pas intercepter le tactile de la carte).
+// Les autres directions ne sont PAS interceptées : le scroll-snap natif
+// fait le bon geste (Planning→Documents, Budget→Convertir).
+(function initCarteSeamSwipe(){
+  var TH_HORIZ = 8;   // seuil px pour reconnaître l'intention horizontale
+  var TH_GO    = 45;  // seuil px pour valider la navigation
 
-    pl.addEventListener('touchstart', function(e){
+  // dirLeft / dirRight : section cible pour un doigt allant vers la
+  // gauche (dx<0) / vers la droite (dx>0). null = geste natif du belt.
+  function attach(el, dirLeft, dirRight, mobileOnly){
+    var x0 = 0, y0 = 0, horiz = false, capture = false, tracking = false;
+
+    el.addEventListener('touchstart', function(e){
       if(e.touches.length !== 1){ tracking = false; return; }
-      tracking = true; horiz = false;
+      if(mobileOnly && window.innerWidth >= 1024){ tracking = false; return; }
+      tracking = true; horiz = false; capture = false;
       x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
     }, {passive:true});
 
-    pl.addEventListener('touchmove', function(e){
+    el.addEventListener('touchmove', function(e){
       if(!tracking) return;
       var dx = e.touches[0].clientX - x0;
       var dy = e.touches[0].clientY - y0;
-      // Intention horizontale nette → on prend la main sur le geste.
+      // Intention horizontale nette → décider une fois pour ce geste.
       if(!horiz && Math.abs(dx) > TH_HORIZ && Math.abs(dx) > Math.abs(dy) * 1.3){
         horiz = true;
+        // On ne capture que si cette direction est interceptée ; sinon
+        // le scroll-snap natif du belt reste maître du geste.
+        capture = (dx < 0) ? !!dirLeft : !!dirRight;
       }
-      // Bloque le scroll-snap natif du belt (sinon fuite vers Budget).
-      // Le scroll vertical du Planning reste libre (on ne bloque pas).
-      if(horiz && e.cancelable){ e.preventDefault(); }
+      // Bloque le scroll-snap natif uniquement sur un geste capturé.
+      // Le scroll vertical de la section reste libre (on ne bloque pas).
+      if(horiz && capture && e.cancelable){ e.preventDefault(); }
     }, {passive:false});
 
-    pl.addEventListener('touchend', function(e){
+    el.addEventListener('touchend', function(e){
       if(!tracking) return;
       tracking = false;
-      if(!horiz) return;
+      if(!horiz || !capture) return;
       var dx = e.changedTouches[0].clientX - x0;
-      // Depuis Planning, tout swipe horizontal franc reste dans Suivi et
-      // révèle la Carte (jamais Budget ni Organiser).
-      if(Math.abs(dx) >= TH_GO && typeof goToSection === 'function'){
-        goToSection('carte', null);
-        if(typeof _buildMobileNav === 'function') _buildMobileNav();
+      var target = (dx < 0) ? dirLeft : dirRight;
+      if(target && Math.abs(dx) >= TH_GO && typeof goToSection === 'function'){
+        goToSection(target, null);
       }
     }, {passive:true});
+  }
+
+  function init(){
+    var pl = document.getElementById('tab-timeline');
+    var bu = document.getElementById('tab-budget');
+    var ml = document.getElementById('tripmap-list-wrap');
+    if(pl) attach(pl, 'carte', null, false);
+    if(bu) attach(bu, null, 'carte', false);
+    if(ml) attach(ml, 'budget', 'timeline', true);
   }
   if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', init);
@@ -2218,7 +2255,16 @@ function renderHomeHero(){
     + '<div class="hh-top">'
       + '<div class="hh-greet"><span class="hh-hi">' + hello + '</span>'
       + '<span class="hh-kicker">' + kicker + '</span></div>'
-      + '<button class="hh-bell" onclick="event.stopPropagation();if(window.openSettingsModal)openSettingsModal()" aria-label="Paramètres">' + ICO_BELL + '</button>'
+      + (function(){
+          // Badge = nombre d'alertes de cohérence (groupe B), dérivé à la
+          // volée — jamais stocké. Pas d'alerte → pas de badge.
+          var bc = 0;
+          try {
+            if (window.SmartAlerts && SmartAlerts.bellReport) bc = SmartAlerts.bellReport(best).alertes.length;
+          } catch(e) {}
+          return '<button class="hh-bell" onclick="event.stopPropagation();openBellPanel(\'' + best + '\')" aria-label="Échéances et alertes du voyage">'
+            + ICO_BELL + (bc ? '<span class="hh-bell-badge">' + bc + '</span>' : '') + '</button>';
+        })()
     + '</div>'
     + '<div class="hh-body">'
       + (pill ? '<span class="hh-pill hh-pill-'+pillCls+'">' + ICO_CLOCK + ' ' + pill + '</span>' : '')
@@ -2235,6 +2281,78 @@ function renderHomeHero(){
   el.style.display = '';
   el.style.cursor = 'pointer';
   el.onclick = function(){ openTrip(best); };
+}
+
+// ── CLOCHE DE L'ACCUEIL : panneau « Échéances & alertes » ─────────────
+// Contenu 100 % dérivé (SmartAlerts.bellReport, recalculé à CHAQUE
+// ouverture, aucun stockage). Modale partagée openModal/closeModal
+// (fermeture : croix, clic sur le fond, Échap — déjà câblés).
+function openBellPanel(tid){
+  if(!window.SmartAlerts || !SmartAlerts.bellReport || typeof openModal !== 'function') return;
+  var r = SmartAlerts.bellReport(tid);
+  var esc = _tlEsc;
+
+  var ICO_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="16.6" r="0.5" fill="currentColor"/></svg>';
+  var MOB_LU = { vol:'plane', train:'train-front', bus:'bus', bateau:'ship', covoiturage:'car-front', metro:'metro', taxi:'taxi' };
+  function echIco(e){
+    if(e.kind === 'checkin')  return _lu('log-in', 16);
+    if(e.kind === 'checkout') return _lu('log-out', 16);
+    if(e.kind === 'transport') return _lu(MOB_LU[e.mobType] || 'map-pin', 16);
+    return _lu('map-pin', 16);
+  }
+  function daysLbl(n){
+    return n === 0 ? 'aujourd\'hui' : (n === 1 ? 'demain' : 'dans ' + n + ' jours');
+  }
+  // Ligne cliquable → _bellGo (ids TOUJOURS quotés, piège §5.1)
+  function row(cls, ico, title, sub, when, cat, id){
+    var sid = String(id).replace(/'/g, "\\'");
+    return '<button type="button" class="bell-row' + cls + '" onclick="_bellGo(\'' + tid + '\',\'' + cat + '\',\'' + sid + '\')">'
+      + '<span class="bell-ico">' + ico + '</span>'
+      + '<span class="bell-body"><span class="bell-title">' + esc(title) + '</span>'
+      + (sub ? '<span class="bell-sub">' + esc(sub) + '</span>' : '') + '</span>'
+      + (when ? '<span class="bell-when">' + esc(when) + '</span>' : '')
+      + '</button>';
+  }
+
+  var echHtml = r.echeances.map(function(e){
+    return row('', echIco(e), e.title, e.sub, daysLbl(e.days), e.cat, e.id);
+  }).join('');
+  if(!echHtml){
+    echHtml = '<div class="bell-empty">' + (r.past
+      ? 'Voyage terminé — aucune échéance à venir.'
+      : 'Aucune échéance à venir.') + '</div>';
+  }
+
+  var alHtml = r.alertes.map(function(a){
+    return a.section
+      ? row(' bell-row-alert', ICO_WARN, a.title, a.sub, '', 'section', a.section)
+      : row(' bell-row-alert', ICO_WARN, a.title, a.sub, '', a.cat, a.id);
+  }).join('');
+  if(!alHtml) alHtml = '<div class="bell-empty">Rien à signaler.</div>';
+
+  openModal(
+    '<div class="modal-header"><div class="modal-title">Échéances &amp; alertes</div>'
+    + '<button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
+    + '<div class="bell-group-title">À venir</div>'
+    + '<div class="bell-list">' + echHtml + '</div>'
+    + '<div class="bell-group-title">Alertes</div>'
+    + '<div class="bell-list">' + alHtml + '</div>'
+  );
+}
+
+// Navigation depuis une ligne du panneau : ouvre le voyage puis la fiche
+// détail de l'élément (openTimelineDetail) ou la section concernée.
+function _bellGo(tid, cat, id){
+  if(typeof closeModal === 'function') closeModal();
+  var after = function(){
+    if(cat === 'section'){ if(typeof goToSection === 'function') goToSection(id, null); return; }
+    var section = cat === 'hotel' ? 'hotels' : (cat === 'lieu' ? 'lieux' : 'mobilite');
+    if(typeof goToSection === 'function') goToSection(section, null);
+    setTimeout(function(){
+      if(typeof openTimelineDetail === 'function') openTimelineDetail(cat, id);
+    }, 140);
+  };
+  if(typeof openTrip === 'function'){ openTrip(tid); setTimeout(after, 380); }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -4178,6 +4296,11 @@ function closeModal(){
 (function(){
   var em = document.getElementById('editModal');
   if(em) em.addEventListener('click',function(e){ if(e.target===this) closeModal(); });
+  // Échap ferme la modale partagée (ajout chantier A3, bénéficie à toutes
+  // les fiches détail / formulaires ouverts via openModal).
+  document.addEventListener('keydown', function(e){
+    if((e.key === 'Escape' || e.keyCode === 27) && em && em.classList.contains('open')) closeModal();
+  });
 })();
 
 // ══════════════════════════════════════════════════════════════════
@@ -6854,8 +6977,16 @@ function renderHotels(){
 
 function editHotel(id){id=isNaN(+id)?id:+id;
   var h=hotels.find(function(x){return x.id==id;});if(!h)return;
-  var cij=parseJour(h.checkin),cim=parseMois(h.checkin);
-  var coj=parseJour(h.checkout),com=parseMois(h.checkout);
+  // Dates saisies via le calendrier partagé (JJ/MM/AAAA, mode plage —
+  // même composant que les vols). Les valeurs stockées legacy « JJ mois »
+  // sont converties à l'affichage via _hotelDateObj (année du voyage).
+  function _ehDateVal(str){
+    var d=_hotelDateObj(str);
+    if(!d) return '';
+    var dd=d.getDate(), mm=d.getMonth()+1;
+    return (dd<10?'0'+dd:dd)+'/'+(mm<10?'0'+mm:mm)+'/'+d.getFullYear();
+  }
+  var ciVal=_ehDateVal(h.checkin), coVal=_ehDateVal(h.checkout);
   openModal(
     '<div class="modal-header"><div class="modal-title">Modifier cet hébergement</div><button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
     +'<div class="modal-row">'
@@ -6863,8 +6994,8 @@ function editHotel(id){id=isNaN(+id)?id:+id;
       +modalField('Ville',mInput('eh-ville',h.ville,'Tokyo / Kyoto / …'))
     +'</div>'
     +'<div class="modal-row">'
-      +mDateRow('Check-in','eh-ci-jour','eh-ci-mois',cij,cim)
-      +mDateRow('Check-out','eh-co-jour','eh-co-mois',coj,com)
+      +modalField('Check-in','<input type="text" id="eh-ci" class="cal-trigger" value="'+ciVal+'" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar(\'eh-ci\')" style="width:100%;cursor:pointer"/>')
+      +modalField('Check-out','<input type="text" id="eh-co" class="cal-trigger" value="'+coVal+'" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar(\'eh-co\')" style="width:100%;cursor:pointer"/>')
       +'<div class="modal-field" style="flex:none"><label>Nuits <span style="font-weight:400;color:var(--ink-hint)">(auto)</span></label><input type="number" id="eh-nuits" class="nuits-auto" value="'+(_hotelNights(h)||'')+'" readonly tabindex="-1" aria-readonly="true" title="Calculé automatiquement depuis les dates" style="max-width:70px;min-width:60px;flex:none;padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);outline:none"/></div>'
     +'</div>'
     +'<div class="modal-row">'
@@ -6904,28 +7035,21 @@ function editHotel(id){id=isNaN(+id)?id:+id;
     +mPdfBlock('eh-pdf', h.pdfId||'')
     +modalFooter('saveHotel(\''+id+'\')','deleteHotel(\''+id+'\')',{type:"l'hébergement",libelle:h.nom||'',hasDoc:!!h.pdfId,fn:'deleteHotel',id:id})
   );
-  // Recalcul auto des nuits à chaque changement de date (selects JJ/mois).
+  // Le recalcul des nuits est déclenché par calSelectDay (calendrier
+  // partagé) à chaque sélection de date — plus de listeners de selects.
   setTimeout(function(){
-    ['eh-ci-jour','eh-ci-mois','eh-co-jour','eh-co-mois'].forEach(function(sid){
-      var el=document.getElementById(sid);
-      if(el) el.addEventListener('change', autoHotelEdit);
-    });
-    autoHotelEdit(); // normalise l'affichage initial
+    autoHotelEdit(); // normalise l'affichage initial des nuits
     _lienFillRows('eh', h.liens);
   }, 0);
 }
 // Recalcule le champ Nuits (lecture seule) de la modale d'édition depuis
-// les selects check-in/check-out (format « JJ mois »). Dates incomplètes
-// → champ vidé (jamais NaN). Source unique : _calcNights.
+// les champs calendrier check-in/check-out (JJ/MM/AAAA). Dates
+// incomplètes → champ vidé (jamais NaN). Source unique : _calcNights.
 function autoHotelEdit(){
   var nEl=document.getElementById('eh-nuits');
   if(!nEl) return;
-  var cij=(document.getElementById('eh-ci-jour')||{}).value||'';
-  var cim=(document.getElementById('eh-ci-mois')||{}).value||'';
-  var coj=(document.getElementById('eh-co-jour')||{}).value||'';
-  var com=(document.getElementById('eh-co-mois')||{}).value||'';
-  var ciStr=(cij&&cim)?(cij+' '+cim):'';
-  var coStr=(coj&&com)?(coj+' '+com):'';
+  var ciStr=(document.getElementById('eh-ci')||{value:''}).value||'';
+  var coStr=(document.getElementById('eh-co')||{value:''}).value||'';
   var nights=_calcNights(ciStr, coStr);
   nEl.value=nights>0?nights:'';
 }
@@ -6933,10 +7057,13 @@ function saveHotel(id){id=isNaN(+id)?id:+id;
   var h=hotels.find(function(x){return x.id==id;});if(!h)return;
   h.nom=document.getElementById('eh-nom').value||h.nom;
   h.ville=document.getElementById('eh-ville').value||h.ville;
-  var cij=document.getElementById('eh-ci-jour').value,cim=document.getElementById('eh-ci-mois').value;
-  var coj=document.getElementById('eh-co-jour').value,com=document.getElementById('eh-co-mois').value;
-  if(cij&&cim) h.checkin=cij+' '+cim;
-  if(coj&&com) h.checkout=coj+' '+com;
+  // Dates du calendrier partagé — stockées en JJ/MM/AAAA, comme le
+  // formulaire d'ajout (addHotel). Les parseurs (_hotelDateObj, timeline,
+  // smart-alerts) gèrent aussi l'ancien « JJ mois » (piège §5.10).
+  var _eci=((document.getElementById('eh-ci')||{value:''}).value||'').trim();
+  var _eco=((document.getElementById('eh-co')||{value:''}).value||'').trim();
+  if(_eci) h.checkin=_eci;
+  if(_eco) h.checkout=_eco;
   // Nuits TOUJOURS recalculées depuis les dates (jamais la saisie).
   var _cn=_calcNights(h.checkin, h.checkout);
   h.nuits=_cn>0?_cn:h.nuits;
@@ -7283,9 +7410,9 @@ function editLieu(id){id=isNaN(+id)?id:+id;
 +modalField('Catégorie','<input type="text" id="el-categorie" value="'+(l.categorie||'')+
 '" placeholder="Temples, Restaurants…" list="el-cat-dl" autocomplete="off"/>'
 +'<datalist id="el-cat-dl"><option value="Temples"><option value="Parcs">'
-+'<option value="Randonnées"><option value="Restaurants"><option value="Musées">'
-+'<option value="Shopping"><option value="Onsen"><option value="Châteaux">'
-+'<option value="Plages"><option value="Points de vue"></datalist>')
++'<option value="Randonnées"><option value="Restaurants"><option value="Bar">'
++'<option value="Musées"><option value="Shopping"><option value="Onsen">'
++'<option value="Châteaux"><option value="Plages"><option value="Points de vue"></datalist>')
 +'</div>'
 +modalField('Note',mInput('el-note',l.note||'','Conseil, prix…'))
     +modalField('Date de visite (optionnel)','<input type="text" id="el-jour" class="cal-trigger" value="'+(l.dateVisite||'')+'" placeholder="JJ/MM/AAAA" style="width:100%;cursor:pointer" readonly onclick="openCalendar(\'el-jour\')"/>')
@@ -8703,6 +8830,21 @@ var calRangeStart = null; // Date object
 var calRangeEnd   = null; // Date object
 var CAL_RANGE_START_ID = 'new-trip-date-dep';
 var CAL_RANGE_END_ID   = 'new-trip-date-ret';
+// Paires « plage » du calendrier : sélectionner la 1re date enchaîne
+// automatiquement sur la 2e, avec surlignage de l'intervalle (comportement
+// historique de la création de voyage, généralisé aux hébergements —
+// ajout ht-* et modale d'édition eh-*).
+var CAL_RANGE_PAIRS = [
+  [CAL_RANGE_START_ID, CAL_RANGE_END_ID],
+  ['ht-ci', 'ht-co'],
+  ['eh-ci', 'eh-co']
+];
+function _calRangePair(targetId){
+  for(var i=0;i<CAL_RANGE_PAIRS.length;i++){
+    if(CAL_RANGE_PAIRS[i].indexOf(targetId)!==-1) return CAL_RANGE_PAIRS[i];
+  }
+  return null;
+}
 
 function openCalendar(targetId){
   calTargetId  = targetId;
@@ -8717,9 +8859,11 @@ function openCalendar(targetId){
   var EXCLUDE_TRIP = ['new-trip-date-dep','new-trip-date-ret'];
   var isExcluded   = EXCLUDE_TRIP.indexOf(targetId) !== -1;
 
-  // ── Range de création de voyage (highlight + enchaînement) ──
-  var depEl = document.getElementById(CAL_RANGE_START_ID);
-  var retEl = document.getElementById(CAL_RANGE_END_ID);
+  // ── Plage (highlight + enchaînement) : paire du champ courant ──
+  // null pour un champ hors paire → aucun surlignage parasite.
+  var pair  = _calRangePair(targetId);
+  var depEl = pair ? document.getElementById(pair[0]) : null;
+  var retEl = pair ? document.getElementById(pair[1]) : null;
   calRangeStart = depEl && depEl.value ? parseDDMMYYYY(depEl.value) : null;
   calRangeEnd   = retEl && retEl.value ? parseDDMMYYYY(retEl.value) : null;
 
@@ -8736,6 +8880,12 @@ function openCalendar(targetId){
         calMaxDate.setDate(calMaxDate.getDate() + 3);
       }
     }
+  }
+
+  // ── Plage hôtel : le check-out ne peut pas précéder le check-in ──
+  // (les paires de création de voyage restent libres : isExcluded)
+  if(pair && !isExcluded && targetId === pair[1] && calRangeStart && !calMinDate){
+    calMinDate = calRangeStart;
   }
 
   // ── Appliquer les contraintes de période voyage ──
@@ -8757,8 +8907,8 @@ function openCalendar(targetId){
       calMonth = parsed.getMonth();
       calYear  = parsed.getFullYear();
     }
-  } else if(targetId === CAL_RANGE_END_ID && calRangeStart){
-    // 2. Date retour voyage → même mois que date départ
+  } else if(pair && targetId === pair[1] && calRangeStart){
+    // 2. 2e date d'une paire (retour voyage, check-out) → mois de la 1re
     calMonth = calRangeStart.getMonth();
     calYear  = calRangeStart.getFullYear();
   } else if(targetId === 'vol-arr-date' && calMinDate){
@@ -8925,21 +9075,27 @@ function calSelectDay(d){
     el.dispatchEvent(new Event('change',{bubbles:true}));
     if(calTargetId==='ht-ci') autoHotel('ci');
     if(calTargetId==='ht-co') autoHotel('co');
+    if(calTargetId==='eh-ci' || calTargetId==='eh-co') autoHotelEdit();
   }
-  // Mise à jour du range
-  var depEl = document.getElementById(CAL_RANGE_START_ID);
-  var retEl = document.getElementById(CAL_RANGE_END_ID);
+  // Mise à jour du range (paire « plage » du champ courant, s'il en a une)
+  var pair  = _calRangePair(calTargetId);
+  var depEl = pair ? document.getElementById(pair[0]) : null;
+  var retEl = pair ? document.getElementById(pair[1]) : null;
   calRangeStart = depEl && depEl.value ? parseDDMMYYYY(depEl.value) : null;
   calRangeEnd   = retEl && retEl.value ? parseDDMMYYYY(retEl.value) : null;
 
-  // Après sélection de la date départ → enchaîner automatiquement sur la date retour
-  if(calTargetId === CAL_RANGE_START_ID){
+  // Après sélection de la 1re date d'une paire → enchaîner automatiquement
+  // sur la 2e (création voyage, check-in→check-out hôtel). Une 2e date
+  // devenue incohérente (≤ 1re) est vidée avant l'enchaînement.
+  if(pair && calTargetId === pair[0]){
     var retVal = retEl ? retEl.value : '';
     var selectedDate = new Date(calYear, calMonth, d);
     if(!retVal || (calRangeEnd && calRangeEnd <= selectedDate)){
       if(retEl) retEl.value = '';
+      if(calTargetId==='ht-ci') autoHotel('ci');
+      if(calTargetId==='eh-ci') autoHotelEdit();
       closeCalendar();
-      setTimeout(function(){ openCalendar(CAL_RANGE_END_ID); }, 120);
+      setTimeout(function(){ openCalendar(pair[1]); }, 120);
       return;
     }
   }
@@ -10880,6 +11036,7 @@ var LU = {
   'binoculars':'<path d="M10 10h4"/><path d="M9 7V4a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v3"/><path d="M19 7V4a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v3"/><path d="M9.5 7h5v8.5a2.5 2.5 0 0 1-5 0Z"/><path d="M9.5 11h-3A2.5 2.5 0 0 0 4 13.5v2a2.5 2.5 0 0 0 5 0"/><path d="M14.5 11h3a2.5 2.5 0 0 1 2.5 2.5v2a2.5 2.5 0 0 1-5 0"/>',
   'store':'<path d="m3 7 3-4h12l3 4"/><path d="M4 7v13a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/><path d="M3 7h18"/><path d="M9 21v-6h6v6"/>',
   'image':'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+  'martini':'<path d="M8 22h8"/><path d="M12 11v11"/><path d="m19 3-7 8-7-8Z"/><path d="M7.5 6.5h9"/>',
 
   // ── Documents ──
   'book-user':'<path d="M15 13a3 3 0 1 0-6 0"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><circle cx="12" cy="8" r="2"/>',
@@ -10954,7 +11111,11 @@ function _lieuCatMeta(cat){
     'Plages':{c:'#169c93',i:'umbrella'},
     'Points de vue':{c:'#2a7fd4',i:'binoculars'},
     'March\u00e9s':{c:'#2e9c54',i:'store'},
-    'Galeries':{c:'#8a52c4',i:'image'}
+    'Galeries':{c:'#8a52c4',i:'image'},
+    // Bar : or de la famille boire/manger (Restaurants/Ch\u00e2teaux).
+    // Alias pluriel : la cat\u00e9gorie est du texte libre, on tol\u00e8re les deux.
+    'Bar':{c:'#c79a2e',i:'martini'},
+    'Bars':{c:'#c79a2e',i:'martini'}
   };
   var m=M[cat]||{c:'#8a93a3',i:'map-pin'};
   return { color:m.c, tint:m.c+'1e', svg:_lu(m.i, 19) };

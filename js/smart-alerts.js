@@ -210,10 +210,14 @@ function _parseDate(str) {
 }
 
 function _saTripYear() {
+  // Rapport « cloche » en cours : l'année des dates « JJ mois » est celle
+  // du voyage CIBLE du rapport, pas du voyage actif.
+  if (_bellYear) return _bellYear;
   var meta = (typeof currentTripId !== 'undefined' && allTrips[currentTripId] && allTrips[currentTripId].meta) || {};
   var m = (meta.dateDep || meta.dateRet || '').match(/\/(\d{4})$/);
   return m ? +m[1] : (new Date()).getFullYear();
 }
+var _bellYear = null;
 
 
 // ── §7 D3 — ALERTES PLANNING ──────────────────────────────────────────
@@ -566,10 +570,149 @@ YumeState.on('map:refresh', function () {
 });
 
 
+// ── §11bis CLOCHE DE L'ACCUEIL — rapport dérivé pour UN voyage donné ──
+// Entièrement calculé à la volée depuis allTrips[tid] (AUCUN stockage,
+// aucune nouvelle clé). Deux groupes :
+//   echeances : le PROCHAIN check-in, check-out, transport et lieu daté
+//               (date >= aujourd'hui), triés par date croissante ;
+//   alertes   : cohérence — plages de nuits sans hébergement (étiquetées
+//               « rupture » si bornées par deux séjours), transport non
+//               confirmé à <= 7 jours, hôtel/lieu sans coordonnées.
+// Chaque entrée porte de quoi naviguer : {cat,id} ou {section}.
+function bellReport(tid) {
+  var t = (typeof allTrips !== 'undefined' && allTrips[tid]) || null;
+  if (!t) return { echeances: [], alertes: [], past: false };
+  var meta = t.meta || {};
+  var ym = (meta.dateDep || meta.dateRet || '').match(/\/(\d{4})$/);
+  _bellYear = ym ? +ym[1] : null;
+
+  // Voyage actif → globals hydratées (non snapshotées) ; sinon snapshot.
+  var act  = (typeof currentTripId !== 'undefined' && tid === currentTripId);
+  var hots = (act && typeof hotels    !== 'undefined') ? hotels    : (t.hotels    || []);
+  var mobs = (act && typeof mobilites !== 'undefined') ? mobilites : (t.mobilites || []);
+  var lx   = (act && typeof lieux     !== 'undefined') ? lieux     : (t.lieux     || []);
+
+  var DAY = 86400000;
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  function mid(d)  { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function days(d) { return Math.round((d - today) / DAY); }
+  function dstr(d) {
+    return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/'
+         + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1);
+  }
+
+  // ── A. Échéances : le PROCHAIN élément de chaque type ──
+  var ech = [];
+  function nextOf(items, getDate, build) {
+    var best = null, bestD = null;
+    items.forEach(function (it) {
+      var d = getDate(it);
+      if (!d) return;
+      var dd = mid(d);
+      if (dd < today) return;
+      if (!bestD || dd < bestD) { bestD = dd; best = it; }
+    });
+    if (best) ech.push(build(best, bestD));
+  }
+  nextOf(hots, function (h) { return _parseDate(h.checkin); }, function (h, d) {
+    return { kind: 'checkin', title: 'Check-in · ' + (h.nom || 'Hébergement'),
+      sub: (h.ville ? h.ville + ' · ' : '') + dstr(d) + (h.heureArr ? ' · ' + h.heureArr : ''),
+      ts: d.getTime(), days: days(d), cat: 'hotel', id: String(h.id) };
+  });
+  nextOf(hots, function (h) { return _parseDate(h.checkout); }, function (h, d) {
+    return { kind: 'checkout', title: 'Check-out · ' + (h.nom || 'Hébergement'),
+      sub: (h.ville ? h.ville + ' · ' : '') + dstr(d) + (h.heureDep ? ' · avant ' + h.heureDep : ''),
+      ts: d.getTime(), days: days(d), cat: 'hotel', id: String(h.id) };
+  });
+  nextOf(mobs, function (m) { return _parseDate(m.date); }, function (m, d) {
+    var lbl = { vol: 'Vol', train: 'Train', bus: 'Bus', bateau: 'Ferry',
+                covoiturage: 'Covoiturage', metro: 'Métro', taxi: 'Taxi' }[m.type] || 'Transport';
+    return { kind: 'transport', mobType: m.type,
+      title: lbl + ' · ' + (m.dep || '?') + ' → ' + (m.arr || '?'),
+      sub: dstr(d) + (m.heureDep ? ' · départ ' + m.heureDep : ''),
+      ts: d.getTime(), days: days(d), cat: 'transport', id: String(m.id) };
+  });
+  nextOf(lx, function (l) { return _parseDate(l.dateVisite); }, function (l, d) {
+    return { kind: 'lieu', title: 'Activité · ' + (l.nom || 'Lieu'),
+      sub: (l.ville ? l.ville + ' · ' : '') + dstr(d) + (l.ouverture ? ' · ' + l.ouverture : ''),
+      ts: d.getTime(), days: days(d), cat: 'lieu', id: String(l.id) };
+  });
+  ech.sort(function (a, b) { return a.ts - b.ts; });
+
+  // ── B. Alertes de cohérence ──
+  var al = [];
+
+  // B1 + B4 — nuits non couvertes, par plages contiguës. Une plage
+  // bordée par un check-out (à gauche) ET un check-in (à droite) est une
+  // « rupture de chaîne » ; sinon simple trou de couverture.
+  var d1 = _parseDate(meta.dateDep), d2 = _parseDate(meta.dateRet);
+  if (d1 && d2 && hots.length) {
+    var covered = {}, coEnds = {}, ciStarts = {};
+    hots.forEach(function (h) {
+      var ci = _parseDate(h.checkin), co = _parseDate(h.checkout);
+      if (!ci || !co) return;
+      ciStarts[mid(ci).getTime()] = 1;
+      coEnds[mid(co).getTime()]   = 1;
+      for (var d = mid(ci); d < co; d.setDate(d.getDate() + 1)) covered[d.getTime()] = 1;
+    });
+    var pushRun = function (r) {
+      var n = Math.round((r.end - r.start) / DAY) + 1;
+      var after = new Date(r.end); after.setDate(after.getDate() + 1);
+      var rupture = coEnds[r.start.getTime()] && ciStarts[after.getTime()];
+      al.push({ kind: rupture ? 'rupture' : 'trou',
+        title: (rupture ? 'Rupture d\'hébergement — ' : '')
+          + n + ' nuit' + (n > 1 ? 's' : '') + ' sans hébergement',
+        sub: 'Nuit' + (n > 1 ? 's du ' : ' du ') + dstr(r.start) + (n > 1 ? ' au ' + dstr(r.end) : ''),
+        section: 'hotels' });
+    };
+    var run = null;
+    for (var d = mid(d1); d < d2; d.setDate(d.getDate() + 1)) {
+      if (!covered[d.getTime()]) {
+        if (!run) run = { start: new Date(d) };
+        run.end = new Date(d);
+      } else if (run) { pushRun(run); run = null; }
+    }
+    if (run) pushRun(run);
+  }
+
+  // B2 — transport « à confirmer » dont la date approche (0 à 7 jours).
+  mobs.forEach(function (m) {
+    if (!m.statut || m.statut === 'Confirmé') return;
+    var d = _parseDate(m.date);
+    if (!d) return;
+    var dd = days(mid(d));
+    if (dd < 0 || dd > 7) return;
+    al.push({ kind: 'confirmer',
+      title: 'À confirmer · ' + (m.dep || '?') + ' → ' + (m.arr || '?'),
+      sub: 'Départ le ' + dstr(d) + (dd === 0 ? ' (aujourd\'hui)' : dd === 1 ? ' (demain)' : ' (dans ' + dd + ' jours)'),
+      cat: 'transport', id: String(m.id) });
+  });
+
+  // B3 — hébergement / lieu sans coordonnées (« Non situé » sur la carte).
+  hots.forEach(function (h) {
+    if (h.geoOff || (h.lat == null && h.lng == null)) {
+      al.push({ kind: 'nonsitue', title: 'Non situé · ' + (h.nom || 'Hébergement'),
+        sub: 'Aucune adresse géolocalisée', cat: 'hotel', id: String(h.id) });
+    }
+  });
+  lx.forEach(function (l) {
+    if (l.geoOff || (l.lat == null && l.lng == null)) {
+      al.push({ kind: 'nonsitue', title: 'Non situé · ' + (l.nom || 'Lieu'),
+        sub: 'Aucune adresse géolocalisée', cat: 'lieu', id: String(l.id) });
+    }
+  });
+
+  var ret = _parseDate(meta.dateRet);
+  var past = !!(ret && mid(ret) < today);
+  _bellYear = null;
+  return { echeances: ech, alertes: al, past: past };
+}
+
 // ── §12 API PUBLIQUE ──────────────────────────────────────────────────
 window.SmartAlerts = {
   init:    init,
   refresh: refresh,
+  bellReport: bellReport,
   get alerts() { return _alerts.slice(); },
 };
 

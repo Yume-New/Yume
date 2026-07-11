@@ -277,6 +277,19 @@ function _placeMarker(pin) {
     icon: _makeIcon(pin.type, pin.emoji, pin)
   }).bindPopup(_popupHTML(pin), { maxWidth: 240 });
 
+  // Synchro pin → fiche (chantier A3) : tap sur le marqueur → le carrousel
+  // défile jusqu'à la fiche correspondante (couple type/id). Mobile <768
+  // uniquement (_carActive) ; le popup natif s'ouvre comme avant.
+  marker.on('click', function () {
+    if (typeof _carGoTo !== 'function' || !_carActive()) return;
+    for (var i = 0; i < _carItems.length; i++) {
+      if (_carItems[i].kind === 'pin' && _carItems[i].type === pin.type && _carItems[i].id === pin.id) {
+        _carGoTo(i);
+        break;
+      }
+    }
+  });
+
   // Visibilité selon filtres actifs
   if (_showHotels() && pin.type === 'hotel') marker.addTo(_map);
   if (_showLieux()  && pin.type === 'lieu')  marker.addTo(_map);
@@ -739,13 +752,49 @@ function _updateFilterButtons() {
     var f = b.getAttribute('data-filter');
     b.classList.toggle('active', f === 'all' ? allActive : !!_activeFilters[f]);
   });
-  var countEl = document.getElementById('tmap-active-count');
-  if (countEl) {
+  // Badge de la pastille « Filtres » : nombre de filtres actifs.
+  // État « Tout » (aucun filtre) → pas de badge.
+  var badge = document.getElementById('tmap-filter-count');
+  if (badge) {
     var n = Object.keys(_activeFilters).filter(function (k) { return _activeFilters[k]; }).length;
-    countEl.style.display = (n > 0 && n < 3) ? '' : 'none';
-    if (n > 0 && n < 3) countEl.textContent = n + ' filtre' + (n > 1 ? 's' : '') + ' actif' + (n > 1 ? 's' : '');
+    badge.style.display = n > 0 ? '' : 'none';
+    badge.textContent = n > 0 ? String(n) : '';
   }
 }
+
+// ── Panneau des filtres (pastille « Filtres (n) » en overlay carte) ──
+function _closeFilterPanel() {
+  var p = document.getElementById('tmap-filter-panel');
+  if (p) p.classList.remove('open');
+  var b = document.getElementById('tmap-filters-btn');
+  if (b) b.setAttribute('aria-expanded', 'false');
+}
+
+window.tripmapToggleFilterPanel = function () {
+  var p = document.getElementById('tmap-filter-panel');
+  if (!p) return;
+  var open = p.classList.toggle('open');
+  var b = document.getElementById('tmap-filters-btn');
+  if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+};
+
+// Fermeture au clic extérieur — phase CAPTURE : Leaflet coupe la
+// propagation des clics sur la carte, un listener bubble ne verrait rien.
+document.addEventListener('click', function (e) {
+  var p = document.getElementById('tmap-filter-panel');
+  if (!p || !p.classList.contains('open')) return;
+  var t = e.target;
+  while (t) {
+    if (t === p || (t.id && t.id === 'tmap-filters-btn')) return; // clic interne
+    t = t.parentNode;
+  }
+  _closeFilterPanel();
+}, true);
+
+// Fermeture à Échap.
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' || e.keyCode === 27) _closeFilterPanel();
+});
 
 window.tripmapFilter = function (filter) {
   if (filter === 'all') {
@@ -832,7 +881,7 @@ function _renderList() {
       var w = _tmapWhen('transport', r.id);
       if (w.dayKey) days[w.dayKey] = w.dayLabel;
       if (_activeDay && w.dayKey !== _activeDay) return;
-      entries.push({ sortKey: w.sortKey, html: _routeCardHtml(r) });
+      entries.push({ sortKey: w.sortKey, html: _routeCardHtml(r), kind: 'route', ref: r });
     });
   }
 
@@ -841,7 +890,7 @@ function _renderList() {
     var w = _tmapWhen(_tmapCatOf(p.type), p.id);
     if (w.dayKey) days[w.dayKey] = w.dayLabel;
     if (_activeDay && w.dayKey !== _activeDay) return;
-    entries.push({ sortKey: w.sortKey, html: _pinCardHtml(p) });
+    entries.push({ sortKey: w.sortKey, html: _pinCardHtml(p), kind: 'pin', ref: p });
   });
 
   entries.sort(function (a, b) { return a.sortKey - b.sortKey; });
@@ -849,6 +898,9 @@ function _renderList() {
   var html = entries.map(function (e) { return e.html; }).join('');
   el.innerHTML = html || '<div style="text-align:center;padding:20px;color:var(--ink-muted);font-size:13px">'
     + 'Aucun élément dans cette sélection</div>';
+
+  // Carrousel mobile (<768px) : mêmes entrées, même ordre chronologique.
+  _renderCarousel(entries);
 
   _tmapBuildDayFilter(days);
 }
@@ -889,6 +941,277 @@ function _infoBtn(cat, id) {
     + '</button>';
 }
 
+// ── §9bis CARROUSEL MOBILE (<768px) — chantier A3 ─────────────────────
+// Rangée horizontale de fiches scroll-snap en bas de la carte, alimentée
+// par _renderList (mêmes entrées, même ordre chronologique, mêmes filtres).
+// Synchro bidirectionnelle par couple (type, id) :
+//   fiche centrée → pan animé, pin dans la moitié SUPÉRIEURE visible
+//   (au-dessus du carrousel), marqueur agrandi (transform) + popup ;
+//   tap sur un pin → le carrousel défile jusqu'à la fiche.
+// Option A (arbitrage Kylian) : une fiche TRANSPORT cadre son TRACÉ
+// (arc/pointillé, paddé au-dessus du carrousel) ; une fiche sans aucune
+// géométrie (« Introuvable », geoOff) laisse la carte immobile.
+var _carItems   = [];    // [{kind:'pin'|'route', type, id, name, sub, icon, status, statusClass}]
+var _carIdx     = -1;    // index de la fiche actuellement centrée
+var _carSquelch = false; // vrai pendant un rebuild → ignore le scroll induit
+var _selMarker  = null;  // marqueur en état « sélectionné »
+
+// Le carrousel n'existe visuellement qu'en mobile <768px (CSS).
+function _carActive() {
+  var el = document.getElementById('tmap-carousel');
+  return !!(el && el.offsetParent !== null);
+}
+function _carHeight() {
+  var el = document.getElementById('tmap-carousel');
+  return (el && el.offsetParent !== null) ? el.offsetHeight : 0;
+}
+// Publie la hauteur réelle du carrousel (variable CSS) : les contrôles
+// flottants et l'attribution Leaflet se placent AU-DESSUS via ce décalage.
+// Posée sur le wrap ET l'hôte (ceinture-bretelles : tous les lecteurs
+// de la variable sont couverts quel que soit leur point d'ancrage).
+function _carMeasure() {
+  var h = _carHeight() + 'px';
+  var wrap = document.getElementById('tripmap-wrap');
+  var host = document.getElementById('voyage-map-host');
+  if (wrap && wrap.style && wrap.style.setProperty) wrap.style.setProperty('--tmap-car-h', h);
+  if (host && host.style && host.style.setProperty) host.style.setProperty('--tmap-car-h', h);
+}
+
+function _carPinIconHtml(p) {
+  var ic = (typeof _pinIcon === 'function') ? _pinIcon(p) : { svg: (p.emoji || ''), bg: '#5C6BC0' };
+  return '<div class="tmap-pin-icon ' + p.type + '" style="background:' + ic.bg + '1e;color:' + ic.bg + '">' + ic.svg + '</div>';
+}
+
+function _carPinCard(p, i) {
+  var statusClass = p.geocoding ? 'geocoding' : (p.lat ? 'located' : 'notfound');
+  var statusLabel = p.geocoding ? 'Géocodage…' : (p.lat ? 'Localisé' : 'Introuvable');
+  var mapsUrl = p.lat
+    ? (_isIOS ? 'maps://?ll=' + p.lat + ',' + p.lng + '&q=' + encodeURIComponent(p.name)
+              : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.label))
+    : null;
+  return '<div class="tmap-car-card" data-idx="' + i + '" onclick="tripmapCarTap(' + i + ')">'
+    + '<div class="tmap-car-top">'
+    +   _carPinIconHtml(p)
+    +   '<div class="tmap-car-body">'
+    +     '<div class="tmap-car-name">' + p.name + '</div>'
+    +     '<div class="tmap-car-sub">' + p.sub + '</div>'
+    +   '</div>'
+    +   _infoBtn(p.type === 'hotel' ? 'hotel' : 'lieu', p.id)
+    + '</div>'
+    + '<div class="tmap-car-foot">'
+    +   '<span class="tmap-pin-status ' + statusClass + '">' + statusLabel + '</span>'
+    +   (mapsUrl ? '<a class="tmap-pin-open-btn" href="' + mapsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + (_isIOS ? 'Plans' : 'Maps') + '</a>' : '')
+    + '</div></div>';
+}
+
+function _carRouteCard(r, i) {
+  var rid = (r.id != null) ? String(r.id).replace(/'/g, "\\'") : '';
+  return '<div class="tmap-car-card" data-idx="' + i + '" onclick="tripmapCarTap(' + i + ')">'
+    + '<div class="tmap-car-top">'
+    +   '<div class="tmap-pin-icon" style="background:var(--surface-2)">' + _routeIcon(r.type) + '</div>'
+    +   '<div class="tmap-car-body">'
+    +     '<div class="tmap-car-name">' + r.label + '</div>'
+    +     '<div class="tmap-car-sub">' + (r.type === 'vol' ? 'Arc géodésique' : 'Tracé pointillé') + '</div>'
+    +   '</div>'
+    +   (rid ? _infoBtn('transport', rid) : '')
+    + '</div>'
+    + '<div class="tmap-car-foot">'
+    +   '<span class="tmap-pin-status route">Non situé</span>'
+    + '</div></div>';
+}
+
+// (Re)construit le carrousel à partir des entrées TRIÉES de _renderList.
+function _renderCarousel(entries) {
+  var track = document.getElementById('tmap-carousel-track');
+  if (!track) return;
+  _carItems = [];
+  var html = '';
+  entries.forEach(function (e, i) {
+    if (e.kind === 'route') {
+      var r = e.ref;
+      _carItems.push({ kind: 'route', type: 'transport', id: String(r.id), name: r.label,
+                       sub: (r.type === 'vol' ? 'Arc géodésique' : 'Tracé pointillé'),
+                       icon: _routeIcon(r.type), status: 'Non situé', statusClass: 'route' });
+      html += _carRouteCard(r, i);
+    } else {
+      var p = e.ref;
+      _carItems.push({ kind: 'pin', type: p.type, id: p.id, name: p.name, sub: p.sub,
+                       icon: _carPinIconHtml(p),
+                       status: p.geocoding ? 'Géocodage…' : (p.lat ? 'Localisé' : 'Introuvable'),
+                       statusClass: p.geocoding ? 'geocoding' : (p.lat ? 'located' : 'notfound') });
+      html += _carPinCard(p, i);
+    }
+  });
+  _carSquelch = true;                 // le reset de scroll ne doit pas déclencher de pan
+  track.innerHTML = html || '<div class="tmap-car-empty">Aucun élément dans cette sélection</div>';
+  track.scrollLeft = 0;
+  _carIdx = _carItems.length ? 0 : -1;
+  _carHighlight(_carIdx);             // compteur + surbrillance, SANS bouger la carte
+  _carMeasure();
+  setTimeout(function () { _carSquelch = false; }, 260);
+}
+
+// Désélectionne le marqueur courant (échelle normale, popup fermé).
+function _carDeselect() {
+  if (!_selMarker) return;
+  if (_selMarker._icon && _selMarker._icon.classList) _selMarker._icon.classList.remove('tmap-sel');
+  if (_selMarker.setZIndexOffset) _selMarker.setZIndexOffset(0);
+  if (_selMarker.closePopup) { try { _selMarker.closePopup(); } catch (e) {} }
+  _selMarker = null;
+}
+
+// Surbrillance fiche + compteur « n / total » (aucun mouvement de carte).
+function _carHighlight(idx) {
+  _carDeselect();
+  var track = document.getElementById('tmap-carousel-track');
+  if (track) {
+    var cards = track.querySelectorAll('.tmap-car-card');
+    for (var i = 0; i < cards.length; i++) {
+      cards[i].classList.toggle('active', i === idx);
+    }
+  }
+  var cnt = document.getElementById('tmap-carousel-count');
+  if (cnt) {
+    var pill = cnt.querySelector('.tcc-pill');
+    if (pill) pill.textContent = _carItems.length ? ((idx >= 0 ? idx + 1 : 1) + ' / ' + _carItems.length) : '';
+    cnt.style.display = _carItems.length ? '' : 'none';
+  }
+}
+
+// Applique la sélection : surbrillance + synchro carte (Option A).
+function _carApply(idx, moveMap) {
+  _carHighlight(idx);
+  if (!moveMap || idx < 0 || !_map) return;
+  var it = _carItems[idx];
+  if (!it) return;
+  var ch = _carHeight();
+
+  if (it.kind === 'route') {
+    // Option A : cadrer le TRACÉ du transport, paddé au-dessus du carrousel.
+    var route = _routes.filter(function (r) { return String(r.id) === it.id; })[0];
+    if (!route || !route.layers || !route.layers.length) return;
+    var bounds = null;
+    route.layers.forEach(function (ly) {
+      if (ly && ly.getBounds) { bounds = bounds ? bounds.extend(ly.getBounds()) : ly.getBounds(); }
+    });
+    if (bounds && bounds.isValid()) {
+      _map.fitBounds(bounds, { paddingTopLeft: [40, 70], paddingBottomRight: [40, ch + 30], maxZoom: 7, animate: true });
+    }
+    return;
+  }
+
+  var pin = _pins.filter(function (p) { return p.id === it.id && p.type === it.type; })[0];
+  // Fiche sans géométrie (« Introuvable », geoOff) : la carte reste en place.
+  if (!pin || !pin.marker || pin.lat == null) return;
+
+  // Zoom RAPPROCHÉ animé (flyTo : pan+zoom doux, jamais de saut) au
+  // niveau quartier (15, comme le focus historique tripmapFocusPin) —
+  // sans redescendre si l'utilisateur est déjà plus zoomé. Le pin est
+  // décalé dans la moitié supérieure visible (centre - ch/2, projeté au
+  // zoom CIBLE, pas au zoom courant).
+  var z  = Math.max(_map.getZoom(), 15);
+  var pt = _map.project([pin.lat, pin.lng], z).add([0, ch / 2]);
+  _map.flyTo(_map.unproject(pt, z), z, { duration: 0.9 });
+
+  // État sélectionné : agrandi (transform sur le div INTERNE du divIcon —
+  // Leaflet pose son propre transform inline sur _icon, ne pas y toucher).
+  _selMarker = pin.marker;
+  if (_selMarker._icon && _selMarker._icon.classList) _selMarker._icon.classList.add('tmap-sel');
+  if (_selMarker.setZIndexOffset) _selMarker.setZIndexOffset(1000);
+  // Popup ouvert APRÈS le flyTo (~0.9s — sinon son autoPan combat le vol) ;
+  // padding bas = hauteur carrousel pour qu'il ne glisse pas dessous.
+  var pop = pin.marker.getPopup ? pin.marker.getPopup() : null;
+  if (pop) {
+    pop.options.autoPanPaddingTopLeft    = L.point(12, 64);
+    pop.options.autoPanPaddingBottomLeft = L.point(12, ch + 14);
+  }
+  setTimeout(function () {
+    if (_selMarker === pin.marker && _map && _map.hasLayer(pin.marker)) {
+      try { pin.marker.openPopup(); } catch (e) {}
+    }
+  }, 980);
+}
+
+// Fiche la plus proche du centre du viewport du carrousel.
+function _carNearest(track) {
+  var cards = track.querySelectorAll('.tmap-car-card');
+  if (!cards.length) return -1;
+  var center = track.scrollLeft + track.clientWidth / 2;
+  var best = -1, bestDist = Infinity;
+  for (var i = 0; i < cards.length; i++) {
+    var c = cards[i];
+    var d = Math.abs((c.offsetLeft + c.offsetWidth / 2) - center);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  return best;
+}
+
+// Fait défiler le carrousel jusqu'à la fiche i (le listener scroll fera
+// la synchro carte au settle) ; re-tap sur la fiche centrée → re-synchro.
+function _carGoTo(i) {
+  var track = document.getElementById('tmap-carousel-track');
+  if (!track) return;
+  var card = track.querySelector('.tmap-car-card[data-idx="' + i + '"]');
+  if (!card) return;
+  if (i === _carIdx) { _carApply(i, true); return; }
+  var left = card.offsetLeft - (track.clientWidth - card.offsetWidth) / 2;
+  if (track.scrollTo) track.scrollTo({ left: left, behavior: 'smooth' });
+  else track.scrollLeft = left;
+}
+
+// Tap direct sur une fiche du carrousel.
+window.tripmapCarTap = function (i) { _carGoTo(i); };
+
+// Saut depuis la liste verticale (modale) — index numérique, pas d'id
+// interpolé (piège §5.1 sans objet ici).
+window.tripmapJumpTo = function (i) {
+  if (typeof closeModal === 'function') closeModal();
+  _carGoTo(i);
+};
+
+// Compteur « n / total » tappé → liste verticale complète (modale partagée
+// openModal/closeModal d'app.js) pour sauter sans enchaîner les swipes.
+window.tripmapOpenJumpList = function () {
+  if (typeof openModal !== 'function' || !_carItems.length) return;
+  var esc = (typeof _tlEsc === 'function') ? _tlEsc : function (s) { return String(s == null ? '' : s); };
+  var rows = _carItems.map(function (it, i) {
+    return '<button type="button" class="tmap-jump-row' + (i === _carIdx ? ' active' : '') + '" onclick="tripmapJumpTo(' + i + ')">'
+      + '<span class="tjr-icon">' + it.icon + '</span>'
+      + '<span class="tjr-body">'
+      +   '<span class="tjr-name">' + esc(it.name) + '</span>'
+      +   (it.sub ? '<span class="tjr-sub">' + esc(it.sub) + '</span>' : '')
+      + '</span>'
+      + '<span class="tmap-pin-status ' + it.statusClass + '">' + it.status + '</span>'
+      + '</button>';
+  }).join('');
+  openModal('<div class="tmap-jump">'
+    + '<div class="tmap-jump-title">Éléments de la carte (' + _carItems.length + ')</div>'
+    + '<div class="tmap-jump-list">' + rows + '</div>'
+    + '</div>');
+};
+
+// Scroll-snap settle → synchro carte. Debounce 150 ms après le dernier
+// événement scroll (pas de scrollend : support trop récent).
+(function _initCarouselSync() {
+  function init() {
+    var track = document.getElementById('tmap-carousel-track');
+    if (!track) return;
+    var timer = null;
+    track.addEventListener('scroll', function () {
+      if (_carSquelch) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        if (_carSquelch || !_carActive()) return;
+        var idx = _carNearest(track);
+        if (idx !== -1 && idx !== _carIdx) { _carIdx = idx; _carApply(idx, true); }
+      }, 150);
+    }, { passive: true });
+    window.addEventListener('resize', _carMeasure);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+
 // Recentre la carte sur une route (ajuste aux limites de ses tracés)
 window.tripmapFocusRoute = function (id) {
   if (!_map) return;
@@ -912,6 +1235,7 @@ window.tripmapToggleFull = function () {
   host.classList.toggle('is-fullscreen');
   setTimeout(function () {
     if (_map && _map.invalidateSize) _map.invalidateSize();
+    if (typeof _applyMinZoom === 'function') _applyMinZoom();   // le conteneur a changé de taille
     if (typeof tripmapRecenter === 'function') { try { tripmapRecenter(); } catch(e){} }
   }, 240);
 };
@@ -922,6 +1246,17 @@ window.tripmapToggleFull = function () {
 window.tripmapFocusPin = function (id, type) {
   var pin = _pins.find(function (p) { return p.id === id && p.type === type; });
   if (!pin || !pin.marker || !pin.lat) return;
+  // Mobile <768 : converger vers le flux carrousel (défilement jusqu'à la
+  // fiche → pan décalé + marqueur sélectionné), pour que pin et fiche
+  // restent toujours synchrones quel que soit le point d'entrée.
+  if (_carActive()) {
+    for (var i = 0; i < _carItems.length; i++) {
+      if (_carItems[i].kind === 'pin' && _carItems[i].type === type && _carItems[i].id === id) {
+        _carGoTo(i);
+        return;
+      }
+    }
+  }
   _map.setView([pin.lat, pin.lng], 15, { animate: true });
   pin.marker.openPopup();
 };
@@ -1053,10 +1388,14 @@ window.initTripMap = function (options) {
     _map = L.map('tripmap-leaflet', {
       center: [20, 10],
       zoom: 2,
-      minZoom: 1,
+      minZoom: 1,          // relevé dynamiquement par _applyMinZoom (taille conteneur)
       maxZoom: 19,
       zoomControl: true,
       attributionControl: true,
+      // Bornes du monde : plus de pan hors zone cartographiée ni de bande
+      // grise au-delà de ±85° (viscosity 1 = butée franche, pas d'élastique).
+      maxBounds: [[-85, -180], [85, 180]],
+      maxBoundsViscosity: 1.0,
       // worldCopyJump:false — le globe peut défiler librement.
       // L'antimeridian est géré par _splitAntimeridian() sur les polylines.
       worldCopyJump: false
@@ -1072,10 +1411,12 @@ window.initTripMap = function (options) {
     // Exposer l'instance pour rail-router.js
     window._tripmapInstance = _map;
     _initDone = true;
+    window.addEventListener('resize', _applyMinZoom);
   }
 
   setTimeout(function () {
     _map.invalidateSize();
+    _applyMinZoom();
     _loadTripPoints();
     // Recentrage à CHAQUE montage (chaque arrivée sur la carte), pas seulement
     // au 1er chargement : _loadTripPoints ne recentre que s'il y a du géocodage
@@ -1083,6 +1424,23 @@ window.initTripMap = function (options) {
     setTimeout(function () { if (typeof tripmapRecenter === 'function') { try { tripmapRecenter(); } catch (e) {} } }, 260);
   }, 120);
 };
+
+// Zoom minimum tel que le monde COUVRE toujours le conteneur (jamais de
+// bande grise, quelle que soit la taille d'écran) : le monde fait
+// 256·2^z px de côté → z ≥ log2(taille/256). Recalculé à chaque
+// invalidateSize (montage, plein écran) et au resize. Les fitBounds
+// (tripmapRecenter, arcs) sont automatiquement CLAMPÉS à ce minimum par
+// Leaflet — le cadrage hôtels/lieux (§5.9) continue de fonctionner.
+function _applyMinZoom() {
+  if (!_map) return;
+  var sz;
+  try { sz = _map.getSize(); } catch (e) { return; }
+  if (!sz || !sz.x || !sz.y) return;
+  var need = Math.max(sz.x, sz.y);
+  var mz = Math.max(1, Math.ceil(Math.log(need / 256) / Math.LN2));
+  _map.setMinZoom(mz);
+  if (_map.getZoom() < mz) _map.setZoom(mz);
+}
 
 
 // ── §13 ABONNEMENTS YUMESTATE ─────────────────────────────────────────
