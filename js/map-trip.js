@@ -1091,6 +1091,16 @@ function _carWhenHtml(cat, id) {
   var w = _carWhen(cat, id);
   return w ? '<div class="tmap-car-when">' + w + '</div>' : '';
 }
+// Composition du sous-titre — SOURCE UNIQUE partagée par les fiches du
+// carrousel ET les lignes de la liste de saut, pour qu'un même élément
+// n'affiche jamais deux libellés différents selon l'entrée.
+// Pin : la VILLE seule (les dates vont sur la ligne _carWhen).
+function _carSubOfPin(p) {
+  return (p.ville != null ? p.ville : p.sub) + (p.visited ? '  ·  Visité' : '');
+}
+function _carSubOfRoute(r) {
+  return (r.type === 'vol') ? 'Arc géodésique' : 'Tracé pointillé';
+}
 
 function _carPinCard(p, i) {
   var statusClass = p.geocoding ? 'geocoding' : (p.lat ? 'located' : 'notfound');
@@ -1099,7 +1109,7 @@ function _carPinCard(p, i) {
   // pin.sub concaténait en brut (« Kyoto · 22/07/2026 → 24/07/2026 »),
   // passent sur la ligne _carWhen au format de l'app. pin.sub reste intact
   // pour la fiche desktop, qui n'a pas cette ligne.
-  var carSub = (p.ville != null ? p.ville : p.sub) + (p.visited ? '  ·  Visité' : '');
+  var carSub = _carSubOfPin(p);
   var mapsUrl = p.lat
     ? (_isIOS ? 'maps://?ll=' + p.lat + ',' + p.lng + '&q=' + encodeURIComponent(p.name)
               : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.label))
@@ -1127,7 +1137,7 @@ function _carRouteCard(r, i) {
     +   '<div class="tmap-pin-icon" style="background:var(--surface-2)">' + _routeIcon(r.type) + '</div>'
     +   '<div class="tmap-car-body">'
     +     '<div class="tmap-car-name">' + r.label + '</div>'
-    +     '<div class="tmap-car-sub">' + (r.type === 'vol' ? 'Arc géodésique' : 'Tracé pointillé') + '</div>'
+    +     '<div class="tmap-car-sub">' + _carSubOfRoute(r) + '</div>'
     +     (rid ? _carWhenHtml('transport', r.id) : '')
     +   '</div>'
     +   (rid ? _infoBtn('transport', rid) : '')
@@ -1147,12 +1157,13 @@ function _renderCarousel(entries) {
     if (e.kind === 'route') {
       var r = e.ref;
       _carItems.push({ kind: 'route', type: 'transport', id: String(r.id), name: r.label,
-                       sub: (r.type === 'vol' ? 'Arc géodésique' : 'Tracé pointillé'),
+                       sub: _carSubOfRoute(r), when: _carWhen('transport', r.id),
                        icon: _routeIcon(r.type), status: 'Non situé', statusClass: 'route' });
       html += _carRouteCard(r, i);
     } else {
       var p = e.ref;
-      _carItems.push({ kind: 'pin', type: p.type, id: p.id, name: p.name, sub: p.sub,
+      _carItems.push({ kind: 'pin', type: p.type, id: p.id, name: p.name,
+                       sub: _carSubOfPin(p), when: _carWhen(_tmapCatOf(p.type), p.id),
                        icon: _carPinIconHtml(p),
                        status: p.geocoding ? 'Géocodage…' : (p.lat ? 'Localisé' : 'Introuvable'),
                        statusClass: p.geocoding ? 'geocoding' : (p.lat ? 'located' : 'notfound') });
@@ -1296,7 +1307,8 @@ window.tripmapOpenJumpList = function () {
       + '<span class="tjr-icon">' + it.icon + '</span>'
       + '<span class="tjr-body">'
       +   '<span class="tjr-name">' + esc(it.name) + '</span>'
-      +   (it.sub ? '<span class="tjr-sub">' + esc(it.sub) + '</span>' : '')
+      +   (it.sub  ? '<span class="tjr-sub">'  + esc(it.sub)  + '</span>' : '')
+      +   (it.when ? '<span class="tjr-when">' + esc(it.when) + '</span>' : '')
       + '</span>'
       + '<span class="tmap-pin-status ' + it.statusClass + '">' + it.status + '</span>'
       + '</button>';

@@ -11102,15 +11102,153 @@ function _allDocs(){
   return arr;
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// PIÈCES JOINTES RATTACHÉES — vue d'ensemble, LECTURE SEULE
+// Agrège les pdfId DÉJÀ référencés par les items du voyage actif pour les
+// montrer dans l'onglet Documents. N'écrit RIEN : aucun blob dupliqué,
+// aucune entrée créée dans pdfStore, aucun pointeur déplacé. _pdfIdInUse /
+// _purgePdfIfUnused et le ramasse-miettes manuel sont donc strictement
+// inchangés — ce code ne fait que LIRE ce qui existe déjà (chantier 14).
+// documents[] est volontairement EXCLU : ce sont les documents « propres »
+// de cet onglet, déjà rendus par _renderDocList / _renderDocCats.
+// ══════════════════════════════════════════════════════════════════════
+var _ATTACH_MOB_LABEL = { vol:'Vol', train:'Train', bus:'Bus', bateau:'Ferry',
+                          voiture:'Voiture', metro:'Métro', taxi:'Taxi',
+                          covoiturage:'Covoiturage' };
+// detailCat : catégorie comprise par openTimelineDetail (via data-detail-*).
+// act : repli quand le type n'a pas de fiche détail (transactions).
+var _ATTACH_SRC = [
+  { key:'mobilites',    label:'Transport',    detailCat:'transport' },
+  { key:'hotels',       label:'Hébergement',  detailCat:'hotel'     },
+  { key:'lieux',        label:'Lieu',         detailCat:'lieu'      },
+  { key:'passes',       label:'Pass',         detailCat:'pass'      },
+  { key:'locations',    label:'Location',     detailCat:'location'  },
+  { key:'transactions', label:'Dépense',      act:'editTransaction' },
+  { key:'vols',         label:'Vol (ancien)', act:'editVol'         },
+  { key:'trains',       label:'Train (ancien)', act:'editTrain'     }
+];
+function _attachArr(key){
+  switch(key){
+    case 'mobilites':    return (typeof mobilites   !=='undefined') ? mobilites    : null;
+    case 'hotels':       return (typeof hotels      !=='undefined') ? hotels       : null;
+    case 'lieux':        return (typeof lieux       !=='undefined') ? lieux        : null;
+    case 'passes':       return (typeof passes      !=='undefined') ? passes       : null;
+    case 'locations':    return (typeof locations   !=='undefined') ? locations    : null;
+    case 'transactions': return (typeof transactions!=='undefined') ? transactions : null;
+    case 'vols':         return (typeof vols        !=='undefined') ? vols         : null;
+    case 'trains':       return (typeof trains      !=='undefined') ? trains       : null;
+  }
+  return null;
+}
+// Libellé de l'élément porteur. PIÈGE : sur le train LEGACY, .dep/.arr sont
+// des HEURES (pas des villes) — on n'affiche donc jamais dep→arr pour lui.
+function _attachItemLabel(src, it){
+  switch(src.key){
+    case 'mobilites':
+    case 'vols':
+      var d=it.dep||it.codeDep||'', a=it.arr||it.codeArr||'';
+      return (d||a) ? (d+' → '+a) : (it.numero||src.label);
+    case 'trains':       return it.nom || it.numero || src.label;
+    case 'locations':    return it.modele || it.loueur || src.label;
+    case 'transactions': return it.desc || it.raw || src.label;
+    default:             return it.nom || src.label;
+  }
+}
+// Type précis pour un transport (Vol / Train / Ferry…), générique sinon.
+function _attachTypeLabel(src, it){
+  if(src.key==='mobilites') return _ATTACH_MOB_LABEL[it.type] || src.label;
+  return src.label;
+}
+function _attachColor(src, it){
+  try{
+    if(src.detailCat && src.detailCat!=='transaction' && typeof _itemColor==='function'){
+      var c=_itemColor(src.detailCat, it);
+      if(c) return c;
+    }
+  }catch(e){}
+  return 'var(--brand)';
+}
+// Nom du fichier tel que stocké à l'attache. '' si le blob a disparu alors
+// que le pointeur subsiste (on affiche quand même la ligne, sans bouton).
+function _attachFileName(pid){
+  var e = (window.pdfStore && window.pdfStore[pid])
+       || (window.globalPdfStore && window.globalPdfStore[pid]);
+  return e ? (e.name || 'Document') : '';
+}
+function _collectAttachments(){
+  var out=[];
+  _ATTACH_SRC.forEach(function(src){
+    var arr=_attachArr(src.key);
+    if(!arr || !arr.length) return;
+    for(var i=0;i<arr.length;i++){
+      var it=arr[i];
+      if(!it) continue;
+      var pid = it.pdfId || '';        // .file = legacy documents only (exclus)
+      if(!pid) continue;
+      out.push({
+        pdfId:     pid,
+        fileName:  _attachFileName(pid),
+        typeLabel: _attachTypeLabel(src, it),
+        itemLabel: _attachItemLabel(src, it),
+        color:     _attachColor(src, it),
+        detailCat: src.detailCat || '',
+        act:       src.act || '',
+        id:        it.id
+      });
+    }
+  });
+  return out;
+}
+var _ATTACH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="17" height="17">'
+  + '<path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7-7l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg>';
+var _ATTACH_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14">'
+  + '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+function _attachRow(a){
+  // Clic sur la ligne → ouvre l'ÉLÉMENT D'ORIGINE (fiche détail partagée via
+  // data-detail-*, déjà géré par _initItemDelegation ; repli data-act pour les
+  // types sans fiche). Ids passés en attribut → jamais d'interpolation dans un
+  // onclick (piège §5.1).
+  var openSrc = a.detailCat
+    ? ' data-detail-cat="'+a.detailCat+'" data-detail-id="'+_docEsc(String(a.id))+'"'
+    : (a.act ? ' data-act="'+a.act+'" data-id="'+_docEsc(String(a.id))+'"' : '');
+  var missing = !a.fileName;
+  return '<div class="doc-row doc-row-attach"'+openSrc+' title="Ouvrir l\'élément d\'origine">'
+    + '<span class="doc-row-ico" style="background:'+a.color+'1e;color:'+a.color+'">'+_ATTACH_ICON+'</span>'
+    + '<div class="doc-row-body">'
+    +   '<div class="doc-row-name">'+(missing ? 'Pièce jointe introuvable' : _docEsc(a.fileName))+'</div>'
+    +   '<div class="doc-row-sub">'+_docEsc(a.typeLabel)+' · '+_docEsc(a.itemLabel)+'</div>'
+    + '</div>'
+    + (missing ? '' : '<button type="button" class="doc-row-pdf" data-act="openPdf" data-id="'+_docEsc(a.pdfId)+'" title="Voir la pièce jointe">'+_ATTACH_EYE+'</button>')
+    + '<span class="doc-attach-badge">Rattaché</span>'
+    + '</div>';
+}
+// Section complète (vide si aucun élément du voyage ne porte de pièce jointe).
+function _renderAttachSection(){
+  var list=_collectAttachments();
+  if(!list.length) return '';
+  var html = '<div class="doc-group-title">PIÈCES JOINTES RATTACHÉES · '+list.length+'</div>';
+  html += '<div class="doc-attach-note">'+_ATTACH_ICON
+    + '<span>Ces documents appartiennent à un élément du voyage : ils se modifient '
+    + 'et se suppriment depuis cet élément. Touchez une ligne pour l\'ouvrir.</span></div>';
+  html += '<div class="doc-section">';
+  list.forEach(function(a){ html += _attachRow(a); });
+  html += '</div>';
+  return html;
+}
+
 function _renderDocList(){
   var html = _docSecure(false);
   html += '<button class="doc-add-big" onclick="openDocAdd()">'
     + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="18" height="18"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>'
     + ' Ajouter un document</button>';
   var all=_allDocs();
+  var attach=_renderAttachSection();
   if(!all.length){
-    html += '<div class="doc-empty">Aucun document pour l\'instant.</div>';
-    return html;
+    html += attach
+      ? '<div class="doc-empty">Aucun document ajouté ici. Les pièces jointes de vos éléments sont listées ci-dessous.</div>'
+      : '<div class="doc-empty">Aucun document pour l\'instant.</div>';
+    return html + attach;
   }
   var groups={}, present=[];
   all.forEach(function(d){ var k=_docGroupKey(d); if(!groups[k]){groups[k]=[];present.push(k);} groups[k].push(d); });
@@ -11122,6 +11260,8 @@ function _renderDocList(){
     arr.forEach(function(d){ html += _docRow(d); });
     html += '</div>';
   });
+  // Agrégat en LECTURE SEULE, après les documents propres à cet onglet.
+  html += attach;
   return html;
 }
 

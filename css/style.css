@@ -5110,6 +5110,9 @@ body.trip-open .psp-label.psp-trip-only{ display:block; }
 .tjr-body{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }
 .tjr-name{ font-size:13.5px; font-weight:600; color:var(--ink); }
 .tjr-sub{ font-size:11.5px; color:var(--ink-muted); margin-top:1px; }
+/* Ligne temporelle — même style que .tmap-car-when du carrousel, dont elle
+   est le miroir : un élément doit se lire à l'identique dans les deux vues. */
+.tjr-when{ font-size:11.5px; font-weight:600; color:var(--brand); margin-top:1px; }
 .tmap-jump-row .tmap-pin-status{ flex:0 0 auto; }
 
 @media(max-width:767.98px){
