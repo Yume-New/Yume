@@ -719,6 +719,11 @@ window.SmartAlerts = {
 // Auto-init après DOMContentLoaded
 document.addEventListener('DOMContentLoaded', function () {
   setTimeout(init, 800); // laisser l'app charger ses données d'abord
+  // Le héros de l'Accueil se rend AVANT le chargement de ce module
+  // (dernier script) → poser le badge de la cloche une fois prêt.
+  setTimeout(function () {
+    if (typeof _refreshBellBadge === 'function') _refreshBellBadge();
+  }, 300);
 });
 
 })(); // fin IIFE smart-alerts

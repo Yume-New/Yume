@@ -72,16 +72,26 @@ function _tmapWhen(cat, id){
 }
 function _tmapCatOf(pinType){ return pinType==='hotel' ? 'hotel' : (pinType==='transport' ? 'transport' : 'lieu'); }
 
-// Couleurs par type de transport
-var _COLORS = {
-  vol:         '#e8748a',
-  train:       '#2d5e8c',
+// Couleurs par type de transport — SOURCE UNIQUE : MOB_COLORS (app.js),
+// celle-là même qui colore l'ICÔNE du type. Cette table locale en
+// divergeait (vol, train, métro et covoiturage étaient même permutés) :
+// dans une fiche de trajet, le trait de légende n'avait donc pas la
+// couleur de l'icône qu'il accompagne, et l'arc tracé sur la carte non
+// plus. Conservée uniquement en REPLI défensif : map-trip.js se charge
+// AVANT app.js, seul l'appel au runtime garantit MOB_COLORS disponible.
+var _COLORS_FALLBACK = {
+  vol:         '#c2607f',
+  train:       '#4264d0',
   bus:         '#2d8c6b',
   bateau:      '#2d8c8c',
-  covoiturage: '#c9921a',
-  metro:       '#7c5cbf',
+  covoiturage: '#7c5cbf',
+  metro:       '#4f5bd5',
   taxi:        '#c9921a'
 };
+function _typeColor(type){
+  if(typeof MOB_COLORS !== 'undefined' && MOB_COLORS[type]) return MOB_COLORS[type];
+  return _COLORS_FALLBACK[type] || '#888';
+}
 
 // Détection iOS pour les liens Maps
 var _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -396,7 +406,7 @@ function _drawSingleRoute(lat1, lng1, lat2, lng2, type, label, id) {
   if (!_map) return;
   var isVol    = (type === 'vol');
   var isBoat   = (type === 'bateau');
-  var color    = _COLORS[type] || '#e8748a';
+  var color    = _typeColor(type);
   var opts     = isVol
     ? { color: color, weight: 2.4, opacity: 0.80, smoothFactor: 1 }
     : { color: color, weight: 2.2, opacity: 0.70, dashArray: '10 7', smoothFactor: 1 };
@@ -471,7 +481,7 @@ function _osrmRoute(lat1, lng1, lat2, lng2, type, label, id) {
 
 function _drawOsrmPolyline(pts, type, label, id) {
   if (!_map || !pts.length) return;
-  var color = _COLORS[type] || '#c9921a';
+  var color = _typeColor(type);
   var poly  = L.polyline(pts, {
     color: color, weight: 2.5, opacity: 0.75, dashArray: '8 5', smoothFactor: 2
   });
@@ -613,7 +623,7 @@ function _loadTripPoints() {
     // Localisation explicitement retirée → présent dans la liste mais NON
     // localisé (« Introuvable »), jamais géocodé, aucun marqueur sur la carte.
     if (h.geoOff) {
-      _pins.push({ id:String(h.id), type:'hotel', name:h.nom, sub:'', emoji:'H',
+      _pins.push({ id:String(h.id), type:'hotel', name:h.nom, sub:'', ville:(h.ville||''), emoji:'H',
                    label:'', lat:null, lng:null, geocoding:false, _idxRef:String(i) });
       return;
     }
@@ -624,6 +634,9 @@ function _loadTripPoints() {
       type:     'hotel',
       name:     h.nom,
       sub:      (h.ville || '') + (h.checkin ? ' · ' + h.checkin + (h.checkout ? ' → ' + h.checkout : '') : ''),
+      // Ville isolée : le carrousel mobile l'affiche seule et met les dates
+      // sur sa propre ligne (_carWhen). sub reste tel quel pour le desktop.
+      ville:    (h.ville || ''),
       emoji:    'H',
       label:    query,
       lat:      h.lat  || null,
@@ -646,6 +659,7 @@ function _loadTripPoints() {
     // localisé (« Introuvable »), jamais géocodé, aucun marqueur sur la carte.
     if (l.geoOff) {
       _pins.push({ id:String(l.id), type:'lieu', cat:l.categorie||'', name:l.nom, sub:'',
+                   ville:(l.ville||''), visited:!!l.visited,
                    emoji:l.emoji||'', label:'', lat:null, lng:null, geocoding:false, _idxRef:String(i) });
       return;
     }
@@ -658,6 +672,8 @@ function _loadTripPoints() {
       cat:      l.categorie || '',
       name:     l.nom,
       sub:      (l.ville || '') + (l.visited ? ' · Visité' : ''),
+      ville:    (l.ville || ''),
+      visited:  !!l.visited,
       emoji:    l.emoji || '',
       label:    query,
       lat:      l.lat  || null,   // FIX : respecte les coords existantes
@@ -825,10 +841,10 @@ function _routeCardHtml(r){
   var isVol  = r.type === 'vol';
   var sw     = 'height:2px;width:28px;border-radius:2px;';
   var swatch = isVol
-    ? 'background:' + (_COLORS[r.type] || '#888') + ';' + sw
+    ? 'background:' + _typeColor(r.type) + ';' + sw
     : 'background:repeating-linear-gradient(90deg,'
-      + (_COLORS[r.type] || '#888') + ' 0,'
-      + (_COLORS[r.type] || '#888') + ' 8px,transparent 8px,transparent 14px);' + sw;
+      + _typeColor(r.type) + ' 0,'
+      + _typeColor(r.type) + ' 8px,transparent 8px,transparent 14px);' + sw;
   var rid = (r.id != null) ? String(r.id).replace(/'/g, "\\'") : '';
   return '<div class="tmap-pin-card"'
     + (rid ? ' onclick="if(window.tripmapFocusRoute)tripmapFocusRoute(\'' + rid + '\')" style="cursor:pointer"' : ' style="cursor:default"')
@@ -843,24 +859,46 @@ function _routeCardHtml(r){
     + (rid ? _infoBtn('transport', rid) : '')
     + '</div>';
 }
+// Fiche COMPACTE de la liste (tablette/desktop, ≥768px) — chantier 20 :
+// « Localisé » et « Maps » ne sont plus affichés en permanence, ils sont
+// servis par le bouton « i » (voir _pinGeoInfo / tripmapInfoDetail). La
+// fiche du CARROUSEL MOBILE (_carCardHtml) les conserve, elle est distincte.
 function _pinCardHtml(p){
-  var statusClass = p.geocoding ? 'geocoding' : (p.lat ? 'located' : 'notfound');
-  var statusLabel = p.geocoding ? 'Géocodage…' : (p.lat ? 'Localisé' : 'Introuvable');
-  var mapsUrl = p.lat
-    ? (_isIOS ? 'maps://?ll=' + p.lat + ',' + p.lng + '&q=' + encodeURIComponent(p.name)
-              : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.label))
-    : null;
   return '<div class="tmap-pin-card" onclick="tripmapFocusPin(\'' + p.id + '\',\'' + p.type + '\')">'
     + (function(){ var _ic=(typeof _pinIcon==="function")?_pinIcon(p):{svg:(p.emoji||""),bg:"#5C6BC0"}; return '<div class="tmap-pin-icon ' + p.type + '" style="background:'+_ic.bg+'1e;color:'+_ic.bg+'">' + _ic.svg + '</div>'; })()
     + '<div class="tmap-pin-body">'
       + '<div class="tmap-pin-name">' + p.name + '</div>'
       + '<div class="tmap-pin-sub">'  + p.sub  + '</div>'
     + '</div>'
-    + '<span class="tmap-pin-status ' + statusClass + '">' + statusLabel + '</span>'
-    + (mapsUrl ? '<a class="tmap-pin-open-btn" href="' + mapsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + (_isIOS ? 'Plans' : 'Maps') + '</a>' : '')
-    + _infoBtn(p.type === 'hotel' ? 'hotel' : 'lieu', p.id)
+    + _infoBtn(p.type === 'hotel' ? 'hotel' : 'lieu', p.id, true)
     + '</div>';
 }
+
+// État de localisation + lien Maps d'un point, pour la fenêtre info.
+function _pinGeoInfo(p){
+  return {
+    statusClass: p.geocoding ? 'geocoding' : (p.lat ? 'located' : 'notfound'),
+    statusLabel: p.geocoding ? 'Géocodage…' : (p.lat ? 'Localisé' : 'Introuvable'),
+    mapsUrl: p.lat
+      ? (_isIOS ? 'maps://?ll=' + p.lat + ',' + p.lng + '&q=' + encodeURIComponent(p.name)
+                : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.label))
+      : null,
+    mapsLabel: _isIOS ? 'Ouvrir dans Plans' : 'Ouvrir dans Google Maps'
+  };
+}
+
+// Ouvre la fiche détail (modale partagée) en y injectant l'état de
+// localisation et le lien Maps retirés de la fiche compacte.
+window.tripmapInfoDetail = function(cat, id){
+  if (typeof openTimelineDetail !== 'function') return;
+  var geo = null;
+  for (var i = 0; i < _pins.length; i++){
+    var p = _pins[i];
+    var pcat = (p.type === 'hotel') ? 'hotel' : 'lieu';
+    if (pcat === cat && String(p.id) === String(id)) { geo = _pinGeoInfo(p); break; }
+  }
+  openTimelineDetail(cat, id, geo);
+};
 
 // Liste unifiée triée CHRONOLOGIQUEMENT (le plus tôt en haut), filtrée par
 // type (Logements/Activités/Itinéraire) et par jour (_activeDay). Les jours
@@ -931,10 +969,15 @@ window.tripmapSetDay = function (val) {
 // Petit bouton « info » : ouvre la fiche détail de l'activité (modale),
 // même comportement que le planning. stopPropagation pour ne pas
 // déclencher le recentrage de la carte.
-function _infoBtn(cat, id) {
+// withGeo=true (liste desktop) → passe par tripmapInfoDetail, qui ajoute
+// l'état « Localisé » et le lien Maps dans la fenêtre.
+function _infoBtn(cat, id, withGeo) {
   var sid = String(id).replace(/'/g, "\\'");
+  var call = withGeo
+    ? 'if(window.tripmapInfoDetail)tripmapInfoDetail(\'' + cat + '\',\'' + sid + '\')'
+    : 'if(window.openTimelineDetail)openTimelineDetail(\'' + cat + '\',\'' + sid + '\')';
   return '<button class="tmap-info-btn" title="Voir les informations" '
-    + 'onclick="event.stopPropagation();if(window.openTimelineDetail)openTimelineDetail(\'' + cat + '\',\'' + sid + '\')">'
+    + 'onclick="event.stopPropagation();' + call + '">'
     + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="15" height="15">'
     + '<circle cx="12" cy="12" r="9"/><line x1="11.5" y1="11" x2="12.5" y2="11"/>'
     + '<line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.8" r="0.5" fill="currentColor"/></svg>'
@@ -982,9 +1025,81 @@ function _carPinIconHtml(p) {
   return '<div class="tmap-pin-icon ' + p.type + '" style="background:' + ic.bg + '1e;color:' + ic.bg + '">' + ic.svg + '</div>';
 }
 
+// ── Libellé temporel des fiches du CARROUSEL (mobile <768px) ─────────
+// Ces helpers ne servent QU'au carrousel : la fiche desktop (_pinCardHtml /
+// _routeCardHtml) n'est pas touchée, et pin.sub — qu'elle affiche — reste
+// tel quel.
+// Le PARSING est délégué aux helpers existants : _hotelDateObj (le seul qui
+// gère le legacy « JJ mois », piège §5.10) pour les hôtels, parseDDMMYYYY
+// pour le reste. Le formatage réutilise _TMAP_JOURS/_TMAP_MOIS, déjà employés
+// par le filtre « par jour » — mêmes libellés que MOIS_SHORT.
+function _carDayObj(cat, raw) {
+  if (!raw) return null;
+  var d = (cat === 'hotel' && typeof _hotelDateObj === 'function') ? _hotelDateObj(raw)
+        : (typeof parseDDMMYYYY === 'function') ? parseDDMMYYYY(raw)
+        : null;
+  return (d && !isNaN(d.getTime())) ? d : null;
+}
+function _carFmtDay(d, withWeekday) {
+  if (!d) return '';
+  return (withWeekday ? _TMAP_JOURS[d.getDay()] + ' ' : '') + d.getDate() + ' ' + _TMAP_MOIS[d.getMonth()];
+}
+// « 9:00 » / « 09h00 » → « 09:00 ». Format HH:MM, aligné sur le Planning.
+function _carFmtHeure(h) {
+  var s = String(h == null ? '' : h);
+  var m = s.match(/^(\d{1,2})\s*[:hH]\s*(\d{2})/);
+  if (m) return _tmapPad2(+m[1]) + ':' + m[2];
+  var m2 = s.match(/^(\d{1,2})\s*[hH]\s*$/);
+  if (m2) return _tmapPad2(+m2[1]) + ':00';
+  return '';
+}
+// cat: 'transport' | 'hotel' | 'lieu'. '' si aucune date → aucune ligne rendue
+// (jamais de ligne vide). Indépendant de la géoloc : un élément « Non situé »
+// affiche son horaire comme les autres.
+function _carWhen(cat, id) {
+  var arr = cat === 'transport' ? ((typeof mobilites !== 'undefined') ? mobilites : [])
+          : cat === 'hotel'     ? ((typeof hotels    !== 'undefined') ? hotels    : [])
+          :                       ((typeof lieux     !== 'undefined') ? lieux     : []);
+  var it = null, i;
+  for (i = 0; i < arr.length; i++) { if (String(arr[i].id) === String(id)) { it = arr[i]; break; } }
+  if (!it) return '';
+
+  if (cat === 'transport') {
+    var dt = _carDayObj('transport', it.date), ht = _carFmtHeure(it.heureDep);
+    if (!dt) return ht;                       // heure seule si la date manque
+    return _carFmtDay(dt, true) + (ht ? '  ·  ' + ht : '');
+  }
+  if (cat === 'hotel') {
+    // Séjour = une PLAGE, pas un horaire : « 22 → 24 juil. » quand les deux
+    // bornes sont dans le même mois, « 30 juil. → 2 août » sinon.
+    var ci = _carDayObj('hotel', it.checkin), co = _carDayObj('hotel', it.checkout);
+    if (!ci && !co) return '';
+    if (ci && co) {
+      return (ci.getMonth() === co.getMonth() && ci.getFullYear() === co.getFullYear())
+        ? ci.getDate() + ' → ' + _carFmtDay(co, false)
+        : _carFmtDay(ci, false) + ' → ' + _carFmtDay(co, false);
+    }
+    return _carFmtDay(ci || co, false);
+  }
+  // Lieu : date de visite seulement si renseignée, + heure d'ouverture si dispo.
+  var dl = _carDayObj('lieu', it.dateVisite);
+  if (!dl) return '';
+  var hl = _carFmtHeure(it.ouverture);
+  return _carFmtDay(dl, true) + (hl ? '  ·  ' + hl : '');
+}
+function _carWhenHtml(cat, id) {
+  var w = _carWhen(cat, id);
+  return w ? '<div class="tmap-car-when">' + w + '</div>' : '';
+}
+
 function _carPinCard(p, i) {
   var statusClass = p.geocoding ? 'geocoding' : (p.lat ? 'located' : 'notfound');
   var statusLabel = p.geocoding ? 'Géocodage…' : (p.lat ? 'Localisé' : 'Introuvable');
+  // Sous-titre du carrousel : la VILLE seule. Les dates du séjour, que
+  // pin.sub concaténait en brut (« Kyoto · 22/07/2026 → 24/07/2026 »),
+  // passent sur la ligne _carWhen au format de l'app. pin.sub reste intact
+  // pour la fiche desktop, qui n'a pas cette ligne.
+  var carSub = (p.ville != null ? p.ville : p.sub) + (p.visited ? '  ·  Visité' : '');
   var mapsUrl = p.lat
     ? (_isIOS ? 'maps://?ll=' + p.lat + ',' + p.lng + '&q=' + encodeURIComponent(p.name)
               : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.label))
@@ -994,7 +1109,8 @@ function _carPinCard(p, i) {
     +   _carPinIconHtml(p)
     +   '<div class="tmap-car-body">'
     +     '<div class="tmap-car-name">' + p.name + '</div>'
-    +     '<div class="tmap-car-sub">' + p.sub + '</div>'
+    +     (carSub ? '<div class="tmap-car-sub">' + carSub + '</div>' : '')
+    +     _carWhenHtml(_tmapCatOf(p.type), p.id)
     +   '</div>'
     +   _infoBtn(p.type === 'hotel' ? 'hotel' : 'lieu', p.id)
     + '</div>'
@@ -1012,6 +1128,7 @@ function _carRouteCard(r, i) {
     +   '<div class="tmap-car-body">'
     +     '<div class="tmap-car-name">' + r.label + '</div>'
     +     '<div class="tmap-car-sub">' + (r.type === 'vol' ? 'Arc géodésique' : 'Tracé pointillé') + '</div>'
+    +     (rid ? _carWhenHtml('transport', r.id) : '')
     +   '</div>'
     +   (rid ? _infoBtn('transport', rid) : '')
     + '</div>'

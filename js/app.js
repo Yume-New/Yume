@@ -386,7 +386,7 @@ function _nominatimCascade(queries,onSuccess,onFail,idx){
 // ── Reset formulaire ──
 function _resetFormFields(ctx){
   var ids={hotel:['ht-nom','ht-ville','ht-ville-addr','ht-ci','ht-co','ht-nuits','ht-type','ht-resa','ht-rue','ht-cp','ht-pays','ht-adresse-lat','ht-adresse-lng','hotel-pdf','ht-magic-input'],
-    lieu:['lieu-nom','lieu-emoji','lieu-ville','lieu-ville-addr','lieu-categorie','lieu-ouverture','lieu-fermeture','lieu-rue','lieu-cp','lieu-pays','lieu-note','lieu-pdf','lieu-adresse-lat','lieu-adresse-lng','lieu-magic-input']}[ctx];
+    lieu:['lieu-nom','lieu-ville','lieu-ville-addr','lieu-categorie','lieu-ouverture','lieu-fermeture','lieu-rue','lieu-cp','lieu-pays','lieu-note','lieu-pdf','lieu-adresse-lat','lieu-adresse-lng','lieu-magic-input']}[ctx];
   if(!ids)return;
   // Reset natif du formulaire (vide selects, radios, checkboxes, hidden)
   var formId=ctx==='hotel'?'form-hotel':'form-lieu';
@@ -934,6 +934,10 @@ function showHomeScreen(){
 // SPA — Navigation entre pages
 // ══════════════════════════════════════════
 function showPage(pageId, btn){
+  // Repli sur l'Accueil si la page demandée n'existe pas (ex. « explorer »,
+  // retiré de la nav) : sans ce garde, aucune .spa-page n'était activée et
+  // l'écran restait VIDE. Couvre un état sauvegardé ou un appel hérité.
+  if(!document.getElementById('page-' + pageId)){ pageId = 'home'; btn = null; }
   // Hamburger (repli rail/panneau) : visible seulement sur la page voyage
   // AVEC un voyage ouvert — sinon rien à replier.
   document.body.classList.toggle('view-voyage', pageId === 'voyage' && !!currentTripId);
@@ -1071,10 +1075,15 @@ function _visibleSubs(groupId){
   });
 }
 
+// Libellés AFFICHÉS des sections. `carte` manquait : _buildSubNav retombe
+// sur `SUB_META[s] || s`, donc le rail desktop affichait l'identifiant
+// technique brut (« carte » en minuscule) au lieu d'un libellé. Les ids
+// restent en minuscule partout (data-tab, goToSection, comparaisons) —
+// seul le TEXTE change.
 var SUB_META = {
   pass:'Pass', mobilite:'Transports', locations:'Locations', hotels:'Hébergements',
   lieux:'Lieux', documents:'Documents', timeline:'Planning', alertes:'Alertes',
-  budget:'Budget', convertir:'Convertir',
+  budget:'Budget', convertir:'Convertir', carte:'Carte',
   deplacements:'Déplacements'
 };
 
@@ -2194,12 +2203,11 @@ var _origCreateTrip = null;
 // Carte mise en avant : voyage EN COURS en priorité, sinon le prochain
 // départ, sinon le dernier voyage terminé. Compte à rebours, progression,
 // budget restant — toutes les données existent déjà dans allTrips.
-function renderHomeHero(){
-  var el = document.getElementById('home-hero');
-  if(!el) return;
+// Voyage « à la une » : en cours d'abord, sinon le prochain, sinon le plus
+// récemment terminé. Extrait de renderHomeHero pour être réutilisable —
+// la cloche desktop s'en sert comme repli quand aucun voyage n'est ouvert.
+function _featuredTrip(){
   var ids = Object.keys(allTrips || {});
-  if(!ids.length){ el.style.display='none'; el.innerHTML=''; return; }
-
   var now = new Date(); now.setHours(0,0,0,0);
   var best=null, bestScore=Infinity, bestState='nodate';
   ids.forEach(function(id){
@@ -2213,6 +2221,26 @@ function renderHomeHero(){
     else                                      { state='nodate';   score=2e15; }
     if(score < bestScore){ bestScore=score; best=id; bestState=state; }
   });
+  return { id: best, state: bestState };
+}
+
+// Voyage ciblé par une cloche : le voyage ACTIF s'il y en a un (en desktop
+// on travaille dans un voyage précis), sinon celui à la une — pour que la
+// cloche reste utile sur l'Accueil ou le Profil, où rien n'est ouvert.
+function _bellTargetTrip(){
+  if(typeof currentTripId !== 'undefined' && currentTripId && allTrips[currentTripId]) return currentTripId;
+  return _featuredTrip().id;
+}
+
+function renderHomeHero(){
+  var el = document.getElementById('home-hero');
+  if(!el) return;
+  var ids = Object.keys(allTrips || {});
+  if(!ids.length){ el.style.display='none'; el.innerHTML=''; return; }
+
+  var now = new Date(); now.setHours(0,0,0,0);
+  var _feat = _featuredTrip();
+  var best = _feat.id, bestState = _feat.state;
   if(best === null){ el.style.display='none'; return; }
 
   var trip = allTrips[best], m = trip.meta || {};
@@ -2255,16 +2283,8 @@ function renderHomeHero(){
     + '<div class="hh-top">'
       + '<div class="hh-greet"><span class="hh-hi">' + hello + '</span>'
       + '<span class="hh-kicker">' + kicker + '</span></div>'
-      + (function(){
-          // Badge = nombre d'alertes de cohérence (groupe B), dérivé à la
-          // volée — jamais stocké. Pas d'alerte → pas de badge.
-          var bc = 0;
-          try {
-            if (window.SmartAlerts && SmartAlerts.bellReport) bc = SmartAlerts.bellReport(best).alertes.length;
-          } catch(e) {}
-          return '<button class="hh-bell" onclick="event.stopPropagation();openBellPanel(\'' + best + '\')" aria-label="Échéances et alertes du voyage">'
-            + ICO_BELL + (bc ? '<span class="hh-bell-badge">' + bc + '</span>' : '') + '</button>';
-        })()
+      + '<button class="hh-bell" data-trip="' + best + '" onclick="event.stopPropagation();openBellPanel(\'' + best + '\')" aria-label="Échéances et alertes du voyage">'
+        + ICO_BELL + '</button>'
     + '</div>'
     + '<div class="hh-body">'
       + (pill ? '<span class="hh-pill hh-pill-'+pillCls+'">' + ICO_CLOCK + ' ' + pill + '</span>' : '')
@@ -2281,6 +2301,48 @@ function renderHomeHero(){
   el.style.display = '';
   el.style.cursor = 'pointer';
   el.onclick = function(){ openTrip(best); };
+  _refreshBellBadge();
+}
+
+// Badge de la cloche = nombre d'alertes de cohérence (groupe B du rapport
+// bellReport), dérivé à la volée — jamais stocké. Pas d'alerte → pas de
+// badge. Appelé au rendu du héros ET par smart-alerts.js après son init :
+// le PREMIER rendu de l'Accueil précède le chargement du module (dernier
+// script de la page), le badge serait sinon absent au premier affichage.
+// Rafraîchit le badge de TOUTES les cloches présentes : celle du héros
+// d'accueil (.hh-bell, mobile) et celle de l'en-tête desktop (#tb-bell).
+// Chacune porte son propre data-trip ; la desktop suit le voyage ACTIF et
+// est donc réévaluée à chaque ouverture de voyage.
+function _refreshBellBadge(){
+  if(!window.SmartAlerts || !SmartAlerts.bellReport) return;
+
+  // Cloche desktop : cible recalculée (voyage actif, sinon à la une)
+  var deskBell = document.getElementById('tb-bell');
+  if(deskBell){
+    var dtid = _bellTargetTrip();
+    if(dtid){
+      deskBell.setAttribute('data-trip', dtid);
+      deskBell.style.display = '';
+    } else {
+      deskBell.removeAttribute('data-trip');
+      deskBell.style.display = 'none';   // aucun voyage → rien à signaler
+    }
+  }
+
+  document.querySelectorAll('.hh-bell, #tb-bell').forEach(function(bell){
+    var tid = bell.getAttribute('data-trip');
+    var old = bell.querySelector('.hh-bell-badge');
+    if(old) old.remove();
+    if(!tid) return;
+    var bc = 0;
+    try { bc = SmartAlerts.bellReport(tid).alertes.length; } catch(e) {}
+    if(bc){
+      var b = document.createElement('span');
+      b.className = 'hh-bell-badge';
+      b.textContent = bc;
+      bell.appendChild(b);
+    }
+  });
 }
 
 // ── CLOCHE DE L'ACCUEIL : panneau « Échéances & alertes » ─────────────
@@ -2827,6 +2889,9 @@ function openTrip(tid){
   if(typeof updateVoyageProgressBar==='function') updateVoyageProgressBar();
   // Adapter les sections selon France vs International
   _adaptSectionsForTrip(tid);
+  // La cloche desktop suit le voyage ACTIF → recibler + recompter à chaque
+  // ouverture (le badge du héros mobile est recalculé au même passage).
+  if(typeof _refreshBellBadge==='function') _refreshBellBadge();
   if(typeof applyRateForCurrentTrip==='function') applyRateForCurrentTrip();
   if(typeof updateRateDisplay==='function') updateRateDisplay();
   if(typeof updateTripProgressBar==='function') updateTripProgressBar();
@@ -3952,8 +4017,41 @@ var _beltTransitioning = false;
 // [migrated to module — see header]
 
 
+// ══════════════════════════════════════════════════════════════════════
+// IDENTIFIANTS UNIQUES
+// BUG CORRIGÉ : `_uid` était un simple compteur (`return ++_uid`) remis à
+// ZÉRO à chaque chargement de page et jamais réinitialisé depuis les
+// données existantes. Le 1er élément créé après un rechargement reprenait
+// donc l'id 1, déjà porté par un élément d'une session précédente → deux
+// items du même tableau avec le même id, et `find(x.id==id)` renvoyant
+// toujours le premier : éditer ou supprimer le second frappait le premier
+// (corruption silencieuse).
+//
+// Le suffixe combine TROIS sources pour être incollisionnable :
+//   · horodatage base 36        → unique entre deux millisecondes
+//   · compteur de session       → départage deux créations dans la MÊME ms
+//   · 4 caractères aléatoires   → départage deux sessions/onglets simultanés
+// Aucune valeur n'est dérivée d'une longueur de tableau : un id supprimé
+// n'est JAMAIS réattribué.
+//
+// FORMAT : chaîne préfixée d'une LETTRE, donc jamais numérique. Les 21
+// sites de lecture normalisent via `isNaN(+id) ? id : +id` : une chaîne
+// non numérique passe telle quelle, un ancien id numérique est converti
+// comme avant → les données déjà enregistrées restent valides.
+// ══════════════════════════════════════════════════════════════════════
 var _uid=0;
-function uid(){return ++_uid;}
+function _uidSuffix(){
+  _uid++;
+  var r = Math.floor(Math.random()*1679616).toString(36);
+  while(r.length < 4) r = '0' + r;
+  return Date.now().toString(36) + '_' + _uid.toString(36) + '_' + r;
+}
+function uid(){ return 'y' + _uidSuffix(); }
+// Ids de pièces jointes — les PRÉFIXES sont significatifs et doivent être
+// conservés : le nettoyage du stockage route par `gpdf_` pour cloisonner
+// les deux espaces de référence, et openPdf cherche dans les deux stores.
+function _pdfUid(){  return 'pdf_'  + _uidSuffix(); }
+function _gpdfUid(){ return 'gpdf_' + _uidSuffix(); }
 function showTab(id,btn){
   var newIdx = TAB_ORDER.indexOf(id);
   var belt   = document.getElementById('tab-belt');
@@ -4328,7 +4426,12 @@ function _tlPdfBtn(pdfId){
     + '<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg> '
     + name + '</button>';
 }
-function openTimelineDetail(cat, id){
+// geo (optionnel, passé UNIQUEMENT par la liste de la carte desktop —
+// tripmapInfoDetail) : { statusClass, statusLabel, mapsUrl, mapsLabel }.
+// Ces deux informations ont quitté la fiche compacte de la liste (chantier 20)
+// et sont servies ici. Tous les autres appelants passent undefined → aucun
+// changement (planning, carrousel mobile, cloche, cartes d'items).
+function openTimelineDetail(cat, id, geo){
   id = isNaN(+id) ? id : +id;
   var byId = function(arr){ return (arr||[]).filter(function(o){ return o.id == id; })[0]; };
   var obj, kind, color, typeLabel, title, rows='', editFn, pdfId='';
@@ -4337,7 +4440,7 @@ function openTimelineDetail(cat, id){
     obj = byId(typeof mobilites!=='undefined'?mobilites:[]); if(!obj) return _tlFallback('mobilite');
     kind='transport'; editFn='editMobilite';
     var T={vol:'Vol',train:'Train',bus:'Bus',bateau:'Ferry',voiture:'Voiture'};
-    typeLabel = T[obj.type]||'Transport'; color='#c0392b';
+    typeLabel = T[obj.type]||'Transport'; color=_itemColor('transport',obj);
     var dep=(obj.codeDep||obj.dep||'—'), arr=(obj.codeArr||obj.arr||'—');
     title = dep+' → '+arr;
     rows += _tlRow('Trajet', (obj.dep||'—')+'  →  '+(obj.arr||'—'));
@@ -4374,7 +4477,7 @@ function openTimelineDetail(cat, id){
 
   } else if(cat === 'hotel'){
     obj = byId(typeof hotels!=='undefined'?hotels:[]); if(!obj) return _tlFallback('hotels');
-    kind='hotel'; editFn='editHotel'; typeLabel='Hébergement'; color='#8e44ad';
+    kind='hotel'; editFn='editHotel'; typeLabel='Hébergement'; color=_itemColor('hotel',obj);
     title = obj.nom || '—';
     var hAddr = obj.rue ? (obj.rue+(obj.cp?' '+obj.cp:'')+', '+(obj.ville||'')+(obj.pays?', '+obj.pays:''))
                         : (obj.fullAddress||obj.ville||'');
@@ -4392,7 +4495,7 @@ function openTimelineDetail(cat, id){
 
   } else if(cat === 'lieu'){
     obj = byId(typeof lieux!=='undefined'?lieux:[]); if(!obj) return _tlFallback('lieux');
-    kind='lieu'; editFn='editLieu'; typeLabel='Lieu à visiter'; color='#16a085';
+    kind='lieu'; editFn='editLieu'; typeLabel='Lieu à visiter'; color=_itemColor('lieu',obj);
     title = obj.nom || '—';
     var lAddr = obj.rue ? (obj.rue+(obj.cp?' '+obj.cp:'')+', '+(obj.ville||'')+(obj.pays?', '+obj.pays:''))
                         : (obj.fullAddress||obj.adresse||'');
@@ -4407,7 +4510,7 @@ function openTimelineDetail(cat, id){
 
   } else if(cat === 'pass'){
     obj = byId(typeof passes!=='undefined'?passes:[]); if(!obj) return _tlFallback('mobilite');
-    kind='pass'; editFn='editPass'; typeLabel='Pass / Abonnement'; color='#d68910';
+    kind='pass'; editFn='editPass'; typeLabel='Pass / Abonnement'; color=_itemColor('pass',obj);
     title = obj.nom || '—';
     rows += _tlRow('N°', obj.numero);
     rows += _tlRow('Validité', (obj.debut||'')+(obj.fin?'  →  '+obj.fin:''));
@@ -4419,7 +4522,7 @@ function openTimelineDetail(cat, id){
 
   } else if(cat === 'location'){
     obj = byId(typeof locations!=='undefined'?locations:[]); if(!obj) return _tlFallback('locations');
-    kind='location'; editFn='editLocation'; typeLabel='Location'; color='#2980b9';
+    kind='location'; editFn='editLocation'; typeLabel='Location'; color=_itemColor('location',obj);
     var LL={voiture:'Voiture',scooter:'Scooter',moto:'Moto',velo:'Vélo',van:'Van'};
     var locLbl=(typeof LOC_LABELS!=='undefined'&&LOC_LABELS[obj.type])||LL[obj.type]||obj.type;
     title = obj.modele || locLbl || 'Location';
@@ -4438,6 +4541,18 @@ function openTimelineDetail(cat, id){
   } else { return; }
 
   var pdfHtml = _tlPdfBtn(pdfId);
+  var geoHtml = '';
+  if(geo && (geo.statusLabel || geo.mapsUrl)){
+    geoHtml = '<div class="tld-geo">'
+      + (geo.statusLabel
+          ? '<span class="tmap-pin-status '+(geo.statusClass||'')+'">'+_tlEsc(geo.statusLabel)+'</span>'
+          : '')
+      + (geo.mapsUrl
+          ? '<a class="tmap-pin-open-btn" href="'+_tlEsc(geo.mapsUrl)+'" target="_blank" rel="noopener noreferrer">'
+            + _tlEsc(geo.mapsLabel || 'Maps') + '</a>'
+          : '')
+      + '</div>';
+  }
   var html =
     '<div class="tld">'
     + '<div class="tld-head">'
@@ -4449,6 +4564,7 @@ function openTimelineDetail(cat, id){
     + '</div>'
     + (rows ? '<div class="tld-rows">'+rows+'</div>'
             : '<div class="tld-empty">Aucune information complémentaire.</div>')
+    + geoHtml
     + (pdfHtml ? '<div class="tld-pdf-wrap">'+pdfHtml+'</div>' : '')
     + '<div class="modal-footer">'
       + '<button class="btn-ghost" onclick="closeModal()">Fermer</button>'
@@ -4555,6 +4671,18 @@ function modalField(label,inputHtml){
 }
 function mInput(id,val,placeholder,style){
   return '<input type="text" id="'+id+'" value="'+(val||'')+'" placeholder="'+(placeholder||'')+'" style="'+(style||'')+'" />';
+}
+// Zone de texte multi-lignes pour les modales d'édition (champs Note) :
+// Entrée / Maj+Entrée insèrent un saut de ligne nativement. Expose .value
+// comme un <input> → aucun code de lecture/sauvegarde à adapter.
+// Le contenu va ENTRE les balises (pas dans un attribut value) et doit
+// donc être échappé via _tlEsc.
+function mTextarea(id,val,placeholder,rows){
+  return '<textarea id="'+id+'" rows="'+(rows||2)+'" placeholder="'+_tlEsc(placeholder||'')+'"'
+    + ' style="width:100%;resize:vertical;padding:9px 10px;font-size:13px;'
+    + 'font-family:DM Sans,sans-serif;border:1px solid var(--border);'
+    + 'border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none">'
+    + _tlEsc(val||'') + '</textarea>';
 }
 function mSelect(id,options,val){
   var s='<select id="'+id+'" style="flex:1;min-width:0;padding:9px 12px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none">';
@@ -4667,7 +4795,7 @@ function _modalPdfAttach(hiddenId, fileInput){
   if(file.size > 15*1024*1024){ alert('Fichier trop lourd (max 15 Mo)'); return; }
   var reader = new FileReader();
   reader.onload = function(e){
-    var pdfId = 'pdf_'+Date.now();
+    var pdfId = _pdfUid();
     window.pdfStore[pdfId] = {name: file.name, data: e.target.result};
     savePdfStore();
     var hid = document.getElementById(hiddenId);
@@ -5272,7 +5400,7 @@ function editVolAttachPdf(volId, fileInput){
   if(file.size>15*1024*1024){ alert('PDF trop lourd (max 15 Mo)'); return; }
   var reader=new FileReader();
   reader.onload=function(e){
-    var pdfId='pdf_'+Date.now();
+    var pdfId=_pdfUid();
     window.pdfStore[pdfId]={name:file.name,data:e.target.result};
     var v=vols.find(function(x){return x.id==volId;});
     if(v){
@@ -5429,7 +5557,7 @@ function renderPasses(){
       +(p.numero&&!validite?'<div class="pass-info">N° <span class="copyable" data-copy="'+(p.numero+'').replace(/"/g,'&quot;')+'">'+p.numero+'</span>'+(p.prix?' · '+p.prix+' €':'')+'</div>':'')
       +(!validite&&!p.numero&&p.prix?'<div class="pass-info">'+p.prix+' €</div>':'')
       +(p.zone?'<div class="pass-info" style="color:var(--teal)">'+p.zone+'</div>':'')
-      +(p.note?'<div class="pass-note">'+p.note+'</div>':'')
+      +(p.note?'<div class="pass-note">'+_tlEsc(p.note)+'</div>':'')
       +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">'+avt+'</div>'
       +pdfHtml
       +'<button class="edit-item-btn" data-act="editPass" data-id="'+p.id+'"></button>'
@@ -5486,7 +5614,9 @@ function savePass(id){id=isNaN(+id)?id:+id;
   p.zone   =(document.getElementById('ep-zone')||{}).value||'';
   p.note   =(document.getElementById('ep-note')||{}).value||'';
   var epPdf=document.getElementById('ep-pdf');
+  var _prevPid=p.pdfId;                       // ré-attache : purge l'orphelin
   if(epPdf) p.pdfId=epPdf.value;
+  if(_prevPid && _prevPid!==p.pdfId) _purgePdfIfUnused(_prevPid);
   p.validite=p.debut&&p.fin?p.debut+' → '+p.fin:(p.debut?p.debut+' →':'');
   closeModal();renderPasses();_updatePassesPinTop();snapshotCurrentTrip();
 }
@@ -5576,7 +5706,9 @@ function saveTrain(id){id=isNaN(+id)?id:+id;
   // Recalcul durée
   if(t.dep&&t.arr){var dm=parseHM(t.dep),am=parseHM(t.arr);if(dm!==null&&am!==null){var df=am-dm;if(df<=0)df+=1440;t.duree=formatMinutes(df);}}
   // PDF — accepte nouveau fichier OU conserve l'ancien
+  var _prevPid=t.pdfId;                       // ré-attache : purge l'orphelin
   var etPdf=document.getElementById('et-pdf'); if(etPdf) t.pdfId=etPdf.value;
+  if(_prevPid && _prevPid!==t.pdfId) _purgePdfIfUnused(_prevPid);
   // Reconstruction date canonique JJ/MM/AAAA pour le tri chronologique
   if(t.jour&&t.mois){
     var MOIS_NUM={'jan':1,'fev':2,'fév':2,'mar':3,'avr':4,'mai':5,'juin':6,
@@ -6259,20 +6391,23 @@ function renderMobilite(){
       bodyHtml='<div class="mob-segments">'+segHtml+'</div>'
         +'<div class="mob-meta" style="margin-top:5px">'
           +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+(statutOk?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ':'')+m.statut+'</span>'
-          +(m.note?'<span class="mob-tag">'+m.note+'</span>':'')
           +passCoverHtml
           +_liensIconHtml('transport', m.id, m.liens)
-        +'</div>';
+        +'</div>'
+        // La note sort du badge .mob-tag (pensé pour un libellé court) :
+        // bloc de texte dédié qui respecte les sauts de ligne (pre-wrap).
+        +(m.note?'<div class="mob-note-text">'+_tlEsc(m.note)+'</div>':'');
     } else {
       // Vol direct ou autre transport
       bodyHtml='<div class="mob-route">'+routeLabel+'</div>'
         +(details.length?'<div class="mob-detail">'+details.join(' · ')+'</div>':'')
         +'<div class="mob-meta">'
           +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+(statutOk?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ':'')+m.statut+'</span>'
-          +(m.note?'<span class="mob-tag">'+m.note+'</span>':'')
           +passCoverHtml
           +_liensIconHtml('transport', m.id, m.liens)
-        +'</div>';
+        +'</div>'
+        // Note hors badge (voir branche escales ci-dessus).
+        +(m.note?'<div class="mob-note-text">'+_tlEsc(m.note)+'</div>':'');
     }
 
     return '<div class="mob-item item-wrap emobilite'+(escVol?' has-seg2':'')+'" data-detail-cat="transport" data-detail-id="'+m.id+'">'
@@ -6490,7 +6625,9 @@ function _saveMobiliteVolFromForm(id){
   m.siege=_v('mob-siege'); m.terminal=_v('mob-terminal'); m.porte=_v('mob-porte');
   m.resa=_v('mob-resa-vol'); m.bagages=_v('mob-bagages');
   m.liens=_lienReadRows('mob');
+  var _prevPid=m.pdfId;                       // ré-attache : purge l'orphelin
   m.pdfId=(document.getElementById('mob-pdf')||{}).value||'';
+  if(_prevPid && _prevPid!==m.pdfId) _purgePdfIfUnused(_prevPid);
   _readVolEscalesInto(m); // escales[] + écrase infos racine par SEG.1 si escale
   _freezeVolRootGps(m);   // gel coords origine/destination depuis codes IATA
   _mobCancelEdit();
@@ -6568,7 +6705,7 @@ function editMobilite(id){id=isNaN(+id)?id:+id;
     +specificFields
     +'<div class="modal-row">'
       +mSelect('em-statut',['Confirmé','À confirmer','Réservé','À réserver'],m.statut)
-      +modalField('Note',mInput('em-note',m.note||'',''))
+      +modalField('Note',mTextarea('em-note',m.note||'','Note (Entrée pour un saut de ligne)'))
     +'</div>'
     +_liensBlockHtml('em')
     +mPdfBlock('em-pdf', m.pdfId||'')
@@ -6628,14 +6765,20 @@ function saveMobilite(id){id=isNaN(+id)?id:+id;
   if(emDuree) m.duree=emDuree.value;
   // PDF — accepte nouveau fichier OU conserve l'ancien
   var emPdf=document.getElementById('em-pdf');
+  var _prevPid=m.pdfId;                       // ré-attache : purge l'orphelin
   if(emPdf) m.pdfId=emPdf.value;
+  if(_prevPid && _prevPid!==m.pdfId) _purgePdfIfUnused(_prevPid);
   // Remplacement atomique dans le tableau — aucun lien de référence subsistant
   mobilites[idx]=m;
   closeModal();renderMobilite();snapshotCurrentTrip();
 }
 
 function deleteMobilite(id){id=isNaN(+id)?id:+id;
+  // Vol à escales : le pdfId vit à la RACINE du vol (escales[] n'en porte
+  // pas) → un seul blob à purger, chaîne complète comprise.
+  var _delPid=(mobilites.filter(function(m){return m.id==id;})[0]||{}).pdfId;
   mobilites=mobilites.filter(function(m){return m.id!=id;});
+  _purgePdfIfUnused(_delPid);   // APRÈS retrait : le blob n'est plus référencé
   closeModal();renderMobilite();snapshotCurrentTrip();
 }
 
@@ -6710,7 +6853,7 @@ function renderLocations(){
         +(l.lieuRet?'<div class="loc-cell"><div class="lbl">Lieu restitution</div><div class="val">'+l.lieuRet+'</div></div>':'')
       +'</div>'
       +(l.caution?'<div class="loc-caution">Caution : '+l.caution+'</div>':'')
-      +(l.note?'<div style="font-size:11px;color:var(--ink-muted);margin-top:6px">'+l.note+'</div>':'')
+      +(l.note?'<div class="loc-note-text">'+_tlEsc(l.note)+'</div>':'')
       +'<button class="edit-item-btn" data-act="editLocation" data-id="'+l.id+'"></button>'
     +'</div>';
   }).join('');
@@ -6771,7 +6914,7 @@ function editLocation(id){id=isNaN(+id)?id:+id;
     +'</div>'
     +'<div class="modal-row">'
       +modalField('Caution',mInput('el2-caution',l.caution,'ex: 800 €'))
-      +modalField('Note',mInput('el2-note',l.note||'','assurance, plein…'))
+      +modalField('Note',mTextarea('el2-note',l.note||'','assurance, plein…'))
     +'</div>'
     +mPdfBlock('el2-pdf', l.pdfId||'')
     +modalFooter('saveLocation(\''+id+'\')','deleteLocation(\''+id+'\')',{type:'la location',libelle:l.nom||(typeof LOC_LABELS!=='undefined'&&LOC_LABELS[l.type])||l.type||'',hasDoc:!!l.pdfId,fn:'deleteLocation',id:id})
@@ -6791,11 +6934,15 @@ function saveLocation(id){id=isNaN(+id)?id:+id;
   l.caution=document.getElementById('el2-caution').value;
   l.note=document.getElementById('el2-note').value;
   var el2Pdf=document.getElementById('el2-pdf');
+  var _prevPid=l.pdfId;                       // ré-attache : purge l'orphelin
   if(el2Pdf) l.pdfId=el2Pdf.value;
+  if(_prevPid && _prevPid!==l.pdfId) _purgePdfIfUnused(_prevPid);
   closeModal();renderLocations();snapshotCurrentTrip();
 }
 function deleteLocation(id){id=isNaN(+id)?id:+id;
+  var _delPid=(locations.filter(function(l){return l.id==id;})[0]||{}).pdfId;
   locations=locations.filter(function(l){return l.id!=id;});
+  _purgePdfIfUnused(_delPid);   // APRÈS retrait : le blob n'est plus référencé
   closeModal();renderLocations();snapshotCurrentTrip();
 }
 
@@ -6966,7 +7113,7 @@ function renderHotels(){
         +(_rem?'<div class="hotel-reminder'+(_rem.urgent?' urgent':'')+'">'+_luOut+'<span>'+_rem.text+'</span></div>':'')
         +(_bits.length?'<div class="hotel-info">'+_bits.join(' · ')+'</div>':'')
         +(_times.length?'<div class="hotel-times">'+_times.join(' · ')+'</div>':'')
-        +(h.note?'<div class="hotel-note">'+(h.note+'').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>':'')
+        +(h.note?'<div class="hotel-note">'+_tlEsc(h.note)+'</div>':'')
         +(h.resa?'<div class="hotel-ref" style="color:'+c+'">Résa · <span class="copyable" data-copy="'+(h.resa+'').replace(/"/g,'&quot;')+'">'+h.resa+'</span></div>':'')
       +'</div>'
       +'<button class="edit-item-btn" data-act="editHotel" data-id="'+h.id+'"></button>'
@@ -7075,11 +7222,17 @@ function saveHotel(id){id=isNaN(+id)?id:+id;
   h.liens=_lienReadRows('eh');
   // PDF
   var ehPdf=document.getElementById('eh-pdf');
+  var _prevPid=h.pdfId;                       // ré-attache : purge l'orphelin
   if(ehPdf) h.pdfId=ehPdf.value;
+  if(_prevPid && _prevPid!==h.pdfId) _purgePdfIfUnused(_prevPid);
   // Adresse structurée / localisation. Drapeau : '1'=retrait, '0'=réactivation.
   var newRue =(document.getElementById('eh-rue')||{value:''}).value.trim();
   var newCp  =(document.getElementById('eh-cp')||{value:''}).value.trim();
   var newPays=(document.getElementById('eh-pays')||{value:''}).value.trim();
+  // Casse canonique AVANT le bloc géo (même position relative que dans
+  // saveLieu) : la branche de retrait ci-dessous vide h.ville, elle doit
+  // donc rester la dernière à décider.
+  if(h.ville) h.ville=_normalizeLieuVille(h.ville);
   var _rm=(document.getElementById('eh-geo-remove')||{}).value;
   if(_rm==='1'){
     // Retrait explicite → état géographiquement VIERGE : TOUS les champs géo
@@ -7120,6 +7273,12 @@ function addHotel(){
   // Ville vient du bloc adresse (ht-ville-addr visible) — on sync dans ht-ville hidden
   var villeAddr = (document.getElementById('ht-ville-addr')||{}).value||'';
   var v   = villeAddr.trim() || (document.getElementById('ht-ville')||{}).value.trim();
+  // Casse canonique, comme pour les lieux : sans ça un hôtel saisi
+  // « tokyo » ne se regroupait JAMAIS avec les lieux « Tokyo » (les
+  // rapprochements par ville comparent en égalité stricte) — cela touchait
+  // renderNightsSummary, la barre de répartition et la ville dormie du
+  // Planning. Même table CITY_DATA, même repli conservateur si absente.
+  if(v) v = _normalizeLieuVille(v);
   if(!n){ showToast('Nom de l\hébergement requis', 'error'); return; }
   if(!v){ showToast('Ville requise dans le bloc Adresse', 'error'); return; }
   var ciRaw = document.getElementById('ht-ci').value.trim();
@@ -7163,7 +7322,9 @@ function addHotel(){
   showToast('Hébergement ajouté', 'success');
 }
 function deleteHotel(id){id=isNaN(+id)?id:+id;
+  var _delPid=(hotels.filter(function(h){return h.id==id;})[0]||{}).pdfId;
   hotels=hotels.filter(function(h){return h.id!=id;});
+  _purgePdfIfUnused(_delPid);   // APRÈS retrait : le blob n'est plus référencé
   closeModal(); _syncTotalNuits(); renderHotels();snapshotCurrentTrip();
 }
 
@@ -7218,7 +7379,7 @@ function _renderLieuCard(l){
         + '<div class="place-head"><span class="place-name">' + l.nom + '</span>' + visBadge + '</div>'
         + '<div class="place-sub"><span class="place-city">' + locLine + mapBtn + _liensIconHtml('lieu', l.id, l.liens) + '</span>' + catBadge + '</div>'
         + horaires + adresseDetail
-        + (l.note ? '<div class="place-note">' + l.note + '</div>' : '')
+        + (l.note ? '<div class="place-note">' + _tlEsc(l.note) + '</div>' : '')
         + pdfHtml
       + '</div>'
     + '</div>'
@@ -7375,7 +7536,6 @@ function editLieu(id){id=isNaN(+id)?id:+id;
   openModal(
     '<div class="modal-header"><div class="modal-title">Modifier ce lieu</div><button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
     +'<div class="modal-row">'
-      +modalField('Emoji',mInput('el-emoji',l.emoji,'⛩','max-width:80px'))
       +modalField('Nom',mInput('el-nom',l.nom,'Nom du lieu'))
     +'</div>'
     +'<div class="modal-row">'
@@ -7414,7 +7574,7 @@ function editLieu(id){id=isNaN(+id)?id:+id;
 +'<option value="Musées"><option value="Shopping"><option value="Onsen">'
 +'<option value="Châteaux"><option value="Plages"><option value="Points de vue"></datalist>')
 +'</div>'
-+modalField('Note',mInput('el-note',l.note||'','Conseil, prix…'))
++modalField('Note',mTextarea('el-note',l.note||'','Conseil, prix…'))
     +modalField('Date de visite (optionnel)','<input type="text" id="el-jour" class="cal-trigger" value="'+(l.dateVisite||'')+'" placeholder="JJ/MM/AAAA" style="width:100%;cursor:pointer" readonly onclick="openCalendar(\'el-jour\')"/>')
     +_liensBlockHtml('el')
     +mPdfBlock('el-pdf', l.pdfId||'')
@@ -7431,7 +7591,6 @@ function editLieu(id){id=isNaN(+id)?id:+id;
 }
 function saveLieu(id){id=isNaN(+id)?id:+id;
   var l=lieux.find(function(x){return x.id==id;});if(!l)return;
-  var emoji=document.getElementById('el-emoji'); if(emoji) l.emoji=emoji.value||l.emoji;
   var nom  =document.getElementById('el-nom');   if(nom)   l.nom  =nom.value||l.nom;
   var ville=document.getElementById('el-ville'); if(ville) l.ville=ville.value||l.ville;
   var ouv  =document.getElementById('el-ouv');   if(ouv)   l.ouverture=ouv.value;
@@ -7444,7 +7603,9 @@ function saveLieu(id){id=isNaN(+id)?id:+id;
   var cat  =document.getElementById('el-categorie'); if(cat) l.categorie=cat.value.trim();
   // PDF
   var elPdf=document.getElementById('el-pdf');
+  var _prevPid=l.pdfId;                       // ré-attache : purge l'orphelin
   if(elPdf) l.pdfId=elPdf.value;
+  if(_prevPid && _prevPid!==l.pdfId) _purgePdfIfUnused(_prevPid);
   if(l.ville) l.ville=_normalizeLieuVille(l.ville);
   // Liens web
   l.liens = _lienReadRows('el');
@@ -7496,18 +7657,34 @@ function addLieu(){
   // Ville vient du bloc adresse (lieu-ville-addr) OU du champ legacy lieu-ville
   var villeAddr = (document.getElementById('lieu-ville-addr')||{}).value||'';
   var ville = villeAddr.trim() || (document.getElementById('lieu-ville')||{}).value.trim();
-  var emoji = document.getElementById('lieu-emoji').value.trim()||'📍';
+  // Casse canonique dès la CRÉATION, comme saveLieu le fait à l'édition.
+  // Sans ça, un lieu saisi « tokyo » restait brut et formait un groupe /
+  // filtre séparé de « Tokyo » (les rapprochements par ville comparent en
+  // égalité STRICTE). Placé avant buildFullAddress pour que l'adresse
+  // construite et la requête de géocodage profitent aussi de la casse.
+  if(ville) ville = _normalizeLieuVille(ville);
   if(!nom){ showToast('Nom du lieu requis', 'error'); return; }
   if(!ville){ showToast('Ville requise dans le bloc Adresse', 'error'); return; }
   var ouv   = (document.getElementById('lieu-ouverture')||{}).value||'';
   var fer   = (document.getElementById('lieu-fermeture')||{}).value||'';
+  // Catégorie : lue à la CRÉATION comme saveLieu le fait à l'édition
+  // (même champ, même .trim()). Elle était perdue ici, si bien qu'un lieu
+  // tout juste créé n'avait pas de catégorie et retombait sur le gris
+  // neutre partout (liste, Planning, carte) jusqu'à une ré-édition.
+  // Sans choix → '' : _lieuCatMeta('') renvoie le repli neutre propre.
+  var cat   = (document.getElementById('lieu-categorie')||{}).value||'';
   var note  = (document.getElementById('lieu-note')||{}).value||'';
   var dateVisite = (document.getElementById('lieu-date')||{}).value||'';
   var pdfId = (document.getElementById('lieu-pdf')||{}).value||'';
   var addr  = _collectAddrFields('lieu');
   addr.ville = ville;
   var fullAddress = buildFullAddress(addr.rue, addr.cp, addr.ville, addr.pays);
-  lieux.push({id:uid(), emoji:emoji, nom:nom, ville:ville, visited:false,
+  // Plus de champ `emoji` : l'icône d'un lieu vient de sa CATÉGORIE
+  // (_lieuCatMeta), conformément à la charte zéro-emoji. Les lieux
+  // existants conservent leur valeur stockée — elle est simplement
+  // ignorée, aucun rendu ne la lit.
+  lieux.push({id:uid(), nom:nom, ville:ville, visited:false,
+    categorie:cat.trim(),
     rue:addr.rue, cp:addr.cp, pays:addr.pays,
     fullAddress:fullAddress, adresse:fullAddress,
     ouverture:ouv, fermeture:fer, note:note, dateVisite:dateVisite, pdfId:pdfId,
@@ -7517,7 +7694,7 @@ function addLieu(){
     lng:parseFloat((document.getElementById('lieu-adresse-lng')||{}).value)||null
   });
   _lienFillRows('lieu', []);
-  ['lieu-nom','lieu-emoji','lieu-ville','lieu-ville-addr','lieu-categorie','lieu-ouverture','lieu-fermeture',
+  ['lieu-nom','lieu-ville','lieu-ville-addr','lieu-categorie','lieu-ouverture','lieu-fermeture',
    'lieu-rue','lieu-cp','lieu-pays','lieu-note','lieu-date','lieu-pdf',
    'lieu-adresse-lat','lieu-adresse-lng','lieu-magic-input']
     .forEach(function(fid){var el=document.getElementById(fid);if(el)el.value='';});
@@ -7530,7 +7707,9 @@ function addLieu(){
   showToast('Lieu ajouté', 'success');
 }
 function deleteLieu(id){id=isNaN(+id)?id:+id;
+  var _delPid=(lieux.filter(function(l){return l.id==id;})[0]||{}).pdfId;
   lieux=lieux.filter(function(l){return l.id!=id;});
+  _purgePdfIfUnused(_delPid);   // APRÈS retrait : le blob n'est plus référencé
   closeModal();renderLieux();snapshotCurrentTrip();
 }
 
@@ -8010,7 +8189,9 @@ function addTransaction(){
 }
 
 function deleteTransaction(id){
+  var _delPid=(transactions.filter(function(t){return t.id==id;})[0]||{}).pdfId;
   transactions=transactions.filter(function(t){return t.id!=id;});
+  _purgePdfIfUnused(_delPid);   // APRÈS retrait : le blob n'est plus référencé
   closeModal();updateBudget();snapshotCurrentTrip();
 }
 
@@ -8063,7 +8244,9 @@ function saveTransaction(id){
   t.date   = (document.getElementById('etx-date')||{}).value||t.date;
   t.amount = (t.devise==='EUR') ? raw : localToEur(raw, t.devise);
   var etxPdf=document.getElementById('etx-pdf');
+  var _prevPid=t.pdfId;                       // ré-attache : purge l'orphelin
   if(etxPdf) t.pdfId=etxPdf.value;
+  if(_prevPid && _prevPid!==t.pdfId) _purgePdfIfUnused(_prevPid);
   closeModal();updateBudget();snapshotCurrentTrip();
   showToast('Transaction mise à jour','success');
 }
@@ -9151,7 +9334,7 @@ function attachPdfToForm(hiddenId, fileInput){
   var reader = new FileReader();
   reader.onload = function(e){
     var b64   = e.target.result;
-    var pdfId = 'pdf_'+Date.now();
+    var pdfId = _pdfUid();
     window.pdfStore[pdfId] = { name: file.name, data: b64 };
     savePdfStore();
     var hid = document.getElementById(hiddenId);
@@ -10602,6 +10785,251 @@ function _purgePdfBlob(pdfId){
   }
 }
 
+// ── Garde anti-purge accidentelle ────────────────────────────────────
+// Vrai si `pdfId` est ENCORE référencé par au moins un item, dans TOUS
+// les voyages (pas seulement l'actif) + les docs perso. Un même blob
+// pourrait théoriquement être partagé par deux items : on ne supprime
+// jamais sans avoir vérifié que plus personne ne le pointe.
+// PIÈGE D'ORDRE : pour le voyage ACTIF on lit les GLOBALS hydratés —
+// allTrips[currentTripId] est périmé tant que snapshotCurrentTrip()
+// n'a pas tourné, et s'y fier ferait voir l'ancien pointeur comme
+// « encore utilisé » (donc plus aucune purge). Pour les autres
+// voyages, le snapshot fait foi.
+var _PDF_REF_ARRAYS = ['vols','passes','trains','mobilites','locations',
+                       'hotels','lieux','documents','transactions'];
+function _pdfIdInUse(pdfId){
+  if(!pdfId) return true;              // pas d'id → ne rien purger
+  var used = false;
+  function scan(arr){
+    if(used || !arr || !arr.length) return;
+    for(var i=0;i<arr.length;i++){
+      var it = arr[i];
+      if(!it) continue;
+      // .file = pointeur legacy des documents (voir migration file→pdfId)
+      if(it.pdfId === pdfId || it.file === pdfId){ used = true; return; }
+    }
+  }
+  var active = (typeof currentTripId !== 'undefined') ? currentTripId : null;
+  // Voyage actif → globals hydratés (source de vérité en cours d'édition)
+  if(active){
+    scan(typeof vols        !== 'undefined' ? vols        : null);
+    scan(typeof passes      !== 'undefined' ? passes      : null);
+    scan(typeof trains      !== 'undefined' ? trains      : null);
+    scan(typeof mobilites   !== 'undefined' ? mobilites   : null);
+    scan(typeof locations   !== 'undefined' ? locations   : null);
+    scan(typeof hotels      !== 'undefined' ? hotels      : null);
+    scan(typeof lieux       !== 'undefined' ? lieux       : null);
+    scan(typeof documents   !== 'undefined' ? documents   : null);
+    scan(typeof transactions!== 'undefined' ? transactions: null);
+  }
+  // Tous les AUTRES voyages → leur snapshot
+  var all = (typeof allTrips !== 'undefined') ? allTrips : {};
+  Object.keys(all).forEach(function(tid){
+    if(active && tid === active) return;   // déjà couvert par les globals
+    var t = all[tid] || {};
+    _PDF_REF_ARRAYS.forEach(function(k){ scan(t[k]); });
+  });
+  // Documents personnels (store séparé, mais garde défensive)
+  if(!used){
+    try{
+      scan(JSON.parse(localStorage.getItem('yume_global_docs')||'[]'));
+    }catch(e){}
+  }
+  return used;
+}
+
+// Purge un blob UNIQUEMENT s'il n'est plus référencé nulle part.
+// Point d'entrée unique des fuites A (ré-attache) et B (suppression).
+function _purgePdfIfUnused(pdfId){
+  if(!pdfId) return;
+  if(_pdfIdInUse(pdfId)) return;
+  _purgePdfBlob(pdfId);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// NETTOYAGE DU STOCKAGE — récupération des orphelins ACCUMULÉS
+// Déclenchement MANUEL uniquement (Paramètres ▸ « Nettoyer le stockage »).
+// Jamais au démarrage, jamais silencieux : compte à blanc obligatoire,
+// suppression seulement après clic explicite.
+//
+// DEUX ESPACES DE RÉFÉRENCE CLOISONNÉS — ne jamais les fusionner :
+//   pdfStore        ← pièces jointes de voyage   (ids « pdf_… »)
+//   globalPdfStore  ← documents personnels       (ids « gpdf_… »)
+// Un blob de l'un ne doit JAMAIS être jugé orphelin faute d'être
+// référencé dans l'autre.
+// ══════════════════════════════════════════════════════════════════════
+var _GC_ARRAYS = ['vols','passes','trains','mobilites','locations',
+                  'hotels','lieux','documents','transactions'];
+
+// Collecte TOUS les pdfId vivants. Sur-approximer est sans danger (un
+// orphelin survit à la passe) ; sous-approximer détruirait une pièce
+// valide — en cas de doute on garde.
+function _gcCollectRefs(){
+  var refT = {}, refG = {};
+  function take(v, into){ if(v) into[v] = 1; }
+  function scanArr(arr, into){
+    if(!arr || !arr.length) return;
+    for(var i=0;i<arr.length;i++){
+      var it = arr[i];
+      if(!it) continue;
+      take(it.pdfId, into);
+      take(it.file, into);   // pointeur legacy des documents (file→pdfId)
+    }
+  }
+  var active = (typeof currentTripId !== 'undefined') ? currentTripId : null;
+
+  // (1) Voyage ACTIF → globals hydratés : allTrips[currentTripId] est
+  // périmé tant que snapshotCurrentTrip() n'a pas tourné.
+  if(active){
+    scanArr(typeof vols        !== 'undefined' ? vols        : null, refT);
+    scanArr(typeof passes      !== 'undefined' ? passes      : null, refT);
+    scanArr(typeof trains      !== 'undefined' ? trains      : null, refT);
+    scanArr(typeof mobilites   !== 'undefined' ? mobilites   : null, refT);
+    scanArr(typeof locations   !== 'undefined' ? locations   : null, refT);
+    scanArr(typeof hotels      !== 'undefined' ? hotels      : null, refT);
+    scanArr(typeof lieux       !== 'undefined' ? lieux       : null, refT);
+    scanArr(typeof documents   !== 'undefined' ? documents   : null, refT);
+    scanArr(typeof transactions!== 'undefined' ? transactions: null, refT);
+  }
+
+  // (2) TOUS les voyages via leur snapshot — y compris l'actif : l'union
+  // avec ses globals est une sécurité (si les globals n'étaient pas
+  // hydratés, le snapshot rattrape ; l'inverse est déjà couvert).
+  var all = (typeof allTrips !== 'undefined') ? allTrips : {};
+  Object.keys(all).forEach(function(tid){
+    var t = all[tid] || {};
+    for(var k=0;k<_GC_ARRAYS.length;k++) scanArr(t[_GC_ARRAYS[k]], refT);
+  });
+
+  // (3) Documents personnels transverses → espace globalPdfStore
+  try{
+    scanArr(JSON.parse(localStorage.getItem('yume_global_docs')||'[]'), refG);
+  }catch(e){}
+
+  // (4) Champs cachés présents dans le DOM : une pièce peut être attachée
+  // (blob déjà écrit) sans être encore validée. Routage par préfixe pour
+  // respecter le cloisonnement des deux espaces.
+  var hid = document.querySelectorAll('input[type="hidden"]');
+  for(var h=0;h<hid.length;h++){
+    var el = hid[h], hid_id = el.id || '';
+    if(!/(-pdf|-pdfid)$/.test(hid_id)) continue;
+    var v = (el.value || '').trim();
+    if(!v) continue;
+    if(v.indexOf('gpdf_') === 0) refG[v] = 1; else refT[v] = 1;
+  }
+  return { trip: refT, global: refG };
+}
+
+// Garde grossière : une saisie en cours interdit le nettoyage.
+function _gcFormOuvert(){
+  if(typeof _currentOpenForm !== 'undefined' && _currentOpenForm) return true;
+  if(document.querySelector('.add-form.open')) return true;
+  var fmo = document.getElementById('form-modal-overlay');
+  if(fmo && fmo.classList.contains('open')) return true;
+  var em = document.getElementById('editModal');
+  if(em && em.classList.contains('open')) return true;
+  return false;
+}
+
+function _gcFmtSize(b){
+  if(b < 1024) return b + ' o';
+  if(b < 1024*1024) return Math.round(b/1024) + ' Ko';
+  return (Math.round(b/1024/1024*10)/10) + ' Mo';
+}
+
+// Compte à blanc : ce qui PARTIRAIT, par catégorie (jamais fusionné).
+function _gcAnalyse(){
+  var refs = _gcCollectRefs();
+  var out = { trip:{ids:[],names:[],bytes:0}, global:{ids:[],names:[],bytes:0} };
+  function pass(store, ref, dest){
+    if(!store) return;
+    Object.keys(store).forEach(function(id){
+      if(ref[id]) return;                       // encore référencé → on garde
+      var e = store[id] || {};
+      dest.ids.push(id);
+      dest.names.push(e.name || id);
+      dest.bytes += String(e.data || '').length;
+    });
+  }
+  pass(window.pdfStore,       refs.trip,   out.trip);
+  pass(window.globalPdfStore, refs.global, out.global);
+  return out;
+}
+
+window.openStorageCleanup = function(){
+  if(typeof closeSettingsModal === 'function') closeSettingsModal();
+  if(_gcFormOuvert()){
+    if(typeof openModal === 'function'){
+      openModal('<div class="modal-header"><div class="modal-title">Nettoyage impossible</div>'
+        + '<button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
+        + '<div class="gc-warn">Un formulaire est en cours de saisie. Une pièce jointe tout juste ajoutée n\'y est pas encore enregistrée et serait considérée comme inutilisée.</div>'
+        + '<div class="gc-hint">Ferme ou valide le formulaire, puis relance le nettoyage.</div>'
+        + '<div class="modal-footer"><button class="btn-primary" onclick="closeModal()">J\'ai compris</button></div>');
+    }
+    return;
+  }
+  var a = _gcAnalyse();
+  var total = a.trip.ids.length + a.global.ids.length;
+  if(!total){
+    openModal('<div class="modal-header"><div class="modal-title">Nettoyage du stockage</div>'
+      + '<button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
+      + '<div class="gc-empty">Aucun fichier inutilisé. Rien à nettoyer.</div>'
+      + '<div class="modal-footer"><button class="btn-primary" onclick="closeModal()">Fermer</button></div>');
+    return;
+  }
+  function bloc(titre, d){
+    var liste = d.names.slice(0,8).map(function(n){
+      return '<li>' + _tlEsc(n) + '</li>';
+    }).join('');
+    if(d.names.length > 8) liste += '<li class="gc-more">et ' + (d.names.length-8) + ' autre(s)…</li>';
+    return '<div class="gc-cat">'
+      + '<div class="gc-cat-head"><span class="gc-cat-name">' + titre + '</span>'
+      + '<span class="gc-cat-count">' + d.ids.length + ' fichier' + (d.ids.length>1?'s':'')
+      + ' · ' + _gcFmtSize(d.bytes) + '</span></div>'
+      + (d.ids.length ? '<ul class="gc-list">' + liste + '</ul>' : '<div class="gc-none">Aucun</div>')
+      + '</div>';
+  }
+  openModal('<div class="modal-header"><div class="modal-title">Nettoyage du stockage</div>'
+    + '<button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
+    + '<div class="gc-intro">Ces fichiers ne sont plus rattachés à aucun élément, dans aucun voyage.</div>'
+    + bloc('Pièces jointes de voyage', a.trip)
+    + bloc('Documents personnels', a.global)
+    + '<div class="gc-total">Total récupérable : <strong>' + _gcFmtSize(a.trip.bytes + a.global.bytes) + '</strong></div>'
+    + '<div class="modal-footer"><button class="btn-ghost" onclick="closeModal()">Annuler</button>'
+    + '<button class="btn-primary" onclick="runStorageCleanup()">Nettoyer</button></div>');
+};
+
+// Suppression effective. RE-CALCULE les références avant d'agir : même si
+// l'état a changé depuis le compte à blanc, on ne supprime que ce qui est
+// TOUJOURS orphelin.
+window.runStorageCleanup = function(){
+  var a = _gcAnalyse();
+  var nT = 0, nG = 0, bytes = 0;
+  a.trip.ids.forEach(function(id){
+    if(window.pdfStore && window.pdfStore[id]){
+      bytes += String(window.pdfStore[id].data||'').length;
+      delete window.pdfStore[id]; nT++;
+    }
+  });
+  a.global.ids.forEach(function(id){
+    if(window.globalPdfStore && window.globalPdfStore[id]){
+      bytes += String(window.globalPdfStore[id].data||'').length;
+      delete window.globalPdfStore[id]; nG++;
+    }
+  });
+  if(nT && typeof savePdfStore === 'function') savePdfStore();
+  if(nG && typeof _saveGlobalPdfStore === 'function') _saveGlobalPdfStore();
+
+  openModal('<div class="modal-header"><div class="modal-title">Nettoyage terminé</div>'
+    + '<button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
+    + '<div class="gc-cat"><div class="gc-cat-head"><span class="gc-cat-name">Pièces jointes de voyage</span>'
+    + '<span class="gc-cat-count">' + nT + ' supprimée' + (nT>1?'s':'') + '</span></div></div>'
+    + '<div class="gc-cat"><div class="gc-cat-head"><span class="gc-cat-name">Documents personnels</span>'
+    + '<span class="gc-cat-count">' + nG + ' supprimé' + (nG>1?'s':'') + '</span></div></div>'
+    + '<div class="gc-total">Espace récupéré : <strong>' + _gcFmtSize(bytes) + '</strong></div>'
+    + '<div class="modal-footer"><button class="btn-primary" onclick="closeModal()">Fermer</button></div>');
+};
+
 function _docFmtExpiry(ym){
   var m=/^(\d{4})-(\d{2})$/.exec(ym||''); if(!m) return ym||'';
   return m[2]+'/'+m[1];
@@ -10791,7 +11219,7 @@ function saveDoc(){
   if(!name){ alert('Donne un nom au document.'); return; }
   var editId=_docVal('doc-edit-id');
   var rec={
-    id: editId || ('doc_'+Date.now()+'_'+Math.floor(Math.random()*1000)),
+    id: editId || ('doc_'+_uidSuffix()),
     name: name,
     cat: _docVal('doc-cat')||'autre',
     number: _docVal('doc-number').trim(),
@@ -10917,7 +11345,7 @@ function saveGlobalDoc(id){
   var name=(_docVal('gdoc-name')||'').trim();
   if(!name){ alert('Donne un nom au document.'); return; }
   var rec={
-    id: id || ('g'+Date.now()),
+    id: id || ('g'+_uidSuffix()),
     name: name,
     cat: _docVal('gdoc-cat')||'autre',
     number: (_docVal('gdoc-number')||'').trim(),
@@ -10962,7 +11390,7 @@ function attachGlobalPdf(fileInput){
   if(file.size > 3*1024*1024){ alert('Fichier trop lourd (max 3 Mo pour un document personnel).'); fileInput.value=''; return; }
   var reader=new FileReader();
   reader.onload=function(e){
-    var id='gpdf_'+Date.now();
+    var id=_gpdfUid();
     window.globalPdfStore[id]={ name:file.name, data:e.target.result };
     if(!_saveGlobalPdfStore()){ delete window.globalPdfStore[id]; return; }
     var hid=document.getElementById('gdoc-pdfid'); if(hid) hid.value=id;
@@ -11119,6 +11547,34 @@ function _lieuCatMeta(cat){
   };
   var m=M[cat]||{c:'#8a93a3',i:'map-pin'};
   return { color:m.c, tint:m.c+'1e', svg:_lu(m.i, 19) };
+}
+
+// Couleur de l'HÉBERGEMENT — même valeur que la pastille de _pinIcon
+// (map-trip.js) et que _COLORS.hotel (timeline.js).
+var HOTEL_COLOR = '#F08080';
+
+// ── SOURCE UNIQUE DE COULEUR PAR ÉLÉMENT ─────────────────────────────
+// Renvoie la couleur CANONIQUE d'un item : exactement celle qui colore
+// son icône. Les points/pastilles/traits doivent tous en dériver, sinon
+// ils divergent (bug corrigé : la fiche détail peignait un point selon
+// une palette codée en dur, sans rapport avec l'icône — un lieu « Bar »
+// avait une icône or et un point turquoise).
+function _itemColor(kind, obj){
+  obj = obj || {};
+  if(kind === 'lieu'){
+    return _lieuCatMeta(obj.categorie || '').color;   // couleur PAR CATÉGORIE
+  }
+  if(kind === 'hotel')  return HOTEL_COLOR;
+  if(kind === 'transport'){
+    return (typeof MOB_COLORS !== 'undefined' && MOB_COLORS[obj.type]) || '#5C6BC0';
+  }
+  if(kind === 'pass'){
+    return (typeof PASS_COLORS !== 'undefined' && PASS_COLORS[obj.categorie]) || '#c9a227';
+  }
+  if(kind === 'location'){
+    return (typeof LOC_COLORS !== 'undefined' && LOC_COLORS[obj.type]) || '#7a8290';
+  }
+  return '#8a93a3';
 }
 
 // ── Modale d'une catégorie de documents : liste des docs du groupe,

@@ -11,7 +11,7 @@
 // PÉREMPTION   : tuiles conservées 7 jours, shell indéfini
 // ══════════════════════════════════════════════════════════════════════
 
-var CACHE_SHELL   = 'yume-shell-v122';
+var CACHE_SHELL   = 'yume-shell-v139';
 var CACHE_TILES   = 'yume-tiles-v1';
 var CACHE_API     = 'yume-api-v1';
 
@@ -19,6 +19,11 @@ var CACHE_API     = 'yume-api-v1';
 var SHELL_FILES = [
   './',
   './index.html',
+  './manifest.json',
+  './icons/icon-180.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-32.png',
   './css/style.css',
   './js/state.js',
   './js/map-world.js',

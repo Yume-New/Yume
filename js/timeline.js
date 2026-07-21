@@ -160,6 +160,8 @@ function _buildEvents() {
       icon: _ICONS[type] || _ICONS.vol,
       color: _COLORS[type] || _COLORS.vol,
       id: m.id,
+      // Liens web du transport (voir bloc Lieux plus bas pour la convention).
+      liens: (m.liens && m.liens.length) ? m.liens : null,
       extras: extras,
     });
   });
@@ -185,6 +187,9 @@ function _buildEvents() {
         icon: _ICONS.checkin,
         color: _COLORS.hotel,
         id: h.id,
+        // Un hôtel produit DEUX événements (check-in / check-out) : les liens
+        // sont une propriété de l'hôtel, donc portés par les deux fiches.
+        liens: (h.liens && h.liens.length) ? h.liens : null,
         extras: [],
       });
     }
@@ -201,6 +206,7 @@ function _buildEvents() {
         icon: _ICONS.checkout,
         color: _COLORS.checkout,
         id: h.id,
+        liens: (h.liens && h.liens.length) ? h.liens : null,
         extras: [],
       });
     }
@@ -226,9 +232,17 @@ function _buildEvents() {
       title: l.nom || '—',
       sub: sub,
       badge: l.visited ? 'Visité' : '',
-      icon: _ICONS.lieu,
-      color: _COLORS.lieu,
+      // Icône ET couleur tirées de la MÊME source que la carte
+      // (_lieuCatMeta) : un lieu « Bar » est or partout, pas générique
+      // ici et coloré ailleurs. Repli défensif si app.js n'est pas prêt.
+      icon: (typeof _lieuCatMeta === 'function')
+              ? _lieuCatMeta(l.categorie || '').svg : _ICONS.lieu,
+      color: (typeof _lieuCatMeta === 'function')
+              ? _lieuCatMeta(l.categorie || '').color : _COLORS.lieu,
       id: l.id,
+      // Liens web du lieu : rendus par _liensIconHtml (app.js) dans la fiche.
+      // Null si aucun → aucune icône (jamais de bouton vide).
+      liens: (l.liens && l.liens.length) ? l.liens : null,
       extras: [],
     });
   });
@@ -276,7 +290,42 @@ function _pad2(n){ return (n<10?'0':'')+n; }
 function _dayKey(d){ return d ? (d.getFullYear()+'-'+_pad2(d.getMonth()+1)+'-'+_pad2(d.getDate())) : null; }
 function _plReset(){ _PL.y=null; _PL.m=null; _PL.sel=null; _PL.view=null; }
 
+// ── Ville dormie, par jour ──────────────────────────────────────────
+// Construit { "YYYY-MM-DD": "Ville" } depuis les hôtels du voyage actif.
+// Une nuit = check-in inclus, check-out exclu (le soir du check-out, on
+// dort ailleurs — chez le prochain hôtel, ou nulle part). Une seule
+// ville par jour : en cas de chevauchement de données, le dernier
+// hôtel traité l'emporte (cas limite, non arbitré davantage).
+function _villeByDayMap(){
+  var map = {};
+  var _hot = (typeof hotels !== 'undefined') ? hotels : [];
+  _hot.forEach(function(h){
+    var villeName = h.ville || (h.fullAddress ? h.fullAddress.split(',')[0] : '');
+    if(!villeName) return;
+    var ci = _hotelDayObj(h.checkin);
+    var co = _hotelDayObj(h.checkout);
+    if(!ci || !co) return;
+    var cur = new Date(ci.getFullYear(), ci.getMonth(), ci.getDate());
+    var end = new Date(co.getFullYear(), co.getMonth(), co.getDate());
+    var guard = 0; // garde-fou anti-boucle infinie si dates corrompues
+    while(cur < end && guard < 400){
+      map[_dayKey(cur)] = villeName;
+      cur.setDate(cur.getDate()+1);
+      guard++;
+    }
+  });
+  return map;
+}
+
+function _escVille(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // Carte d'un événement — réutilise le style timeline (.tl-item / .tl-card)
+// Catégories d'événements qui portent des liens[] (clés = celles attendues
+// par _liensForItem, app.js). Toute autre catégorie n'affiche jamais d'icône.
+var _LIENS_CATS = { lieu:1, hotel:1, transport:1 };
+
 function _eventCard(ev){
   var badgeHtml = ev.badge
     ? '<span class="tl-badge" style="background:'+ev.color+'22;color:'+ev.color+';border-color:'+ev.color+'44">'+ev.badge+'</span>'
@@ -288,10 +337,27 @@ function _eventCard(ev){
     : '';
   var visitedClass  = (ev.type==='lieu' && ev.badge==='Visité') ? ' tl-card--visited' : '';
   var checkoutClass = (ev.type==='checkout') ? ' tl-card--checkout' : '';
+  // Icône « liens » : réutilise EXACTEMENT le helper des cartes d'items
+  // (même icône, même popover, même délégation #spa-root via data-*).
+  // Le helper renvoie '' sans lien → un item sans lien n'affiche rien.
+  // ev.category est passé TEL QUEL à _liensIconHtml : les valeurs de
+  // _LIENS_CATS sont exactement celles attendues par _liensForItem (app.js),
+  // donc chaque icône résout dans le tableau de SON type — aucune collision
+  // possible entre des ids identiques de tableaux différents.
+  // « pass » est volontairement absent : ce type ne porte pas de liens[], et
+  // _liensForItem retomberait sur mobilites (branche par défaut).
+  var liensHtml = (typeof _liensIconHtml === 'function' && _LIENS_CATS[ev.category])
+    ? _liensIconHtml(ev.category, ev.id, ev.liens)
+    : '';
   var clickNav = '';
   if (ev.id != null && ev.category){
     var _evId = String(ev.id).replace(/'/g, "\\'");
-    clickNav = ' onclick="if(typeof openTimelineDetail===\'function\')'
+    // PIÈGE : cet onclick INLINE se déclenche AVANT la délégation posée sur
+    // #spa-root (les handlers inline des descendants passent en premier dans
+    // la phase de bulle). Sans ce garde, cliquer l'icône de liens ouvrirait
+    // AUSSI la fiche détail. Même rôle que _cardDetailClick pour les cartes.
+    clickNav = ' onclick="if(event.target.closest&&event.target.closest(\'[data-liens-cat]\'))return;'
+      + 'if(typeof openTimelineDetail===\'function\')'
       + 'openTimelineDetail(\''+ev.category+'\',\''+_evId+'\')" style="cursor:pointer"';
   }
   return '<div class="tl-item">'
@@ -300,7 +366,7 @@ function _eventCard(ev){
       + '<div class="tl-line"></div>'
     + '</div>'
     + '<div class="tl-card'+visitedClass+checkoutClass+'"'+clickNav+'>'
-      + '<div class="tl-card-top"><div class="tl-card-type" style="color:'+ev.color+'">'+(_TYPE_LABEL[ev.type]||ev.type)+'</div>'+badgeHtml+'</div>'
+      + '<div class="tl-card-top"><div class="tl-card-type" style="color:'+ev.color+'">'+(_TYPE_LABEL[ev.type]||ev.type)+'</div>'+badgeHtml+liensHtml+'</div>'
       + '<div class="tl-card-title">'+ev.title+'</div>'
       + (ev.sub ? '<div class="tl-card-sub">'+ev.sub+'</div>' : '')
       + extraHtml
@@ -345,6 +411,7 @@ function _renderEvents(events){
   });
   var dayKeys = Object.keys(byDay).sort();
   var range = _tripRange();
+  var villeByDay = _villeByDayMap();
 
   // Init (1re fois / après reset) : on se place sur le mois du 1er
   // événement (ou du départ), AUCUN jour sélectionné par défaut.
@@ -376,8 +443,10 @@ function _renderEvents(events){
     var listHtml = '';
     dayKeys.forEach(function(k){
       var pp=k.split('-'); var dd=new Date(+pp[0],+pp[1]-1,+pp[2]);
+      var villeTag = villeByDay[k]
+        ? '<span class="pl-lhd-ville">'+_escVille(villeByDay[k])+'</span>' : '';
       listHtml += '<div class="pl-lgroup" id="plg-'+k+'">'
-        + '<div class="pl-lhd'+(k===todayKeyL?' today':'')+'">'+_fmtDate(dd)+'</div>'
+        + '<div class="pl-lhd'+(k===todayKeyL?' today':'')+'">'+_fmtDate(dd)+villeTag+'</div>'
         + byDay[k].map(_eventCard).join('')
       + '</div>';
     });
@@ -417,8 +486,12 @@ function _renderEvents(events){
         + (evs.length>4 ? '<span class="pl-more">+'+(evs.length-4)+'</span>' : '')
         + '</span>';
     }
+    var villeName = villeByDay[key] || '';
+    var villeHtml = villeName
+      ? '<span class="pl-cell-ville" title="'+_escVille(villeName)+'">'+_escVille(villeName)+'</span>'
+      : '';
     grid += '<div class="'+cls+'" onclick="if(window.plSelectDay)plSelectDay(\''+key+'\')">'
-          + '<span class="pl-num">'+d+'</span>'+dots+'</div>';
+          + '<span class="pl-num">'+d+'</span>'+villeHtml+dots+'</div>';
   }
   grid += '</div>';
 
@@ -542,6 +615,10 @@ window.plSelectDay = function(key){
     '.tl-card-type{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;}',
     '.tl-badge{font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px;'
       + 'border:1px solid;letter-spacing:.01em;}',
+    /* Icône « liens » (helper partagé) : calée à droite de la ligne de tête,
+       hors du titre qui est en ellipsis. Cible tactile élargie sans décaler
+       la ligne (padding + marge négative compensatoire). */
+    '.tl-card-top .card-lien-btn{margin-left:auto;padding:4px;margin-right:-4px;}',
 
     '.tl-card-title{font-size:14px;font-weight:600;color:var(--ink);'
       + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
@@ -574,6 +651,9 @@ window.plSelectDay = function(key){
     '.pl-lhd{font-size:11px;font-weight:600;color:var(--ink-hint);text-transform:uppercase;letter-spacing:.1em;margin:18px 0 10px;padding:0 2px;}',
     '.pl-lgroup:first-child .pl-lhd{margin-top:2px;}',
     '.pl-lhd.today{color:var(--brand);}',
+    '.pl-lhd-ville{font-size:10px;font-weight:600;color:var(--ink-muted);text-transform:none;'
+      + 'letter-spacing:0;padding:2px 8px;background:var(--surface-2);border-radius:8px;'
+      + 'margin-left:8px;vertical-align:middle;white-space:nowrap;}',
     /* ── VUE PLANNING : calendrier central + panneau détail à droite ── */
     '.pl-wrap{display:grid;grid-template-columns:1fr;gap:18px;align-items:start;}',
     '@media (min-width:1024px){.pl-wrap{grid-template-columns:minmax(0,1fr) 360px;gap:24px;}}',
@@ -596,6 +676,10 @@ window.plSelectDay = function(key){
     '.pl-cell.sel{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand) inset;background:var(--sakura-light);}',
     '.pl-num{font-size:13.5px;font-weight:500;line-height:1;}',
     '.pl-cell.today .pl-num{color:var(--brand);font-weight:700;}',
+    '.pl-cell-ville{font-size:9.5px;font-weight:500;color:var(--ink-muted);line-height:1.2;'
+      + 'max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+    '.pl-cell.today .pl-cell-ville{color:var(--brand);}',
+    '.pl-cell.dim .pl-cell-ville{color:var(--ink-hint);}',
     '.pl-dots{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:auto;}',
     '.pl-dots i{width:7px;height:7px;border-radius:50%;display:block;}',
     '.pl-more{font-size:9.5px;font-weight:600;color:var(--ink-hint);}',

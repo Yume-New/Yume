@@ -157,7 +157,7 @@ body.emode-lieux .elieu{cursor:pointer}
 .tld-row{display:flex;gap:14px;padding:9px 0;border-bottom:1px solid var(--border)}
 .tld-row:last-child{border-bottom:none}
 .tld-k{flex:0 0 120px;font-size:12.5px;color:var(--ink-hint);font-weight:500}
-.tld-v{flex:1 1 auto;min-width:0;font-size:13.5px;color:var(--ink);word-break:break-word}
+.tld-v{flex:1 1 auto;min-width:0;font-size:13.5px;color:var(--ink);word-break:break-word;white-space:pre-wrap}
 .tld-empty{font-size:13px;color:var(--ink-muted);padding:8px 0}
 .tld-pdf-wrap{margin-top:14px}
 .tld-pdf{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer;transition:all .15s}
@@ -698,6 +698,23 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
   padding:6px 10px;margin-top:4px;margin-bottom:6px;
   border-left:2px solid rgba(201,146,26,.4);
   line-height:1.5;
+  white-space:pre-wrap;overflow-wrap:anywhere;
+}
+
+/* ── Notes multi-lignes : transport et location ──────────────────────
+   La note d'un trajet vivait dans un badge .mob-tag (libellé court d'un
+   mot) ; elle a son bloc de texte dédié, qui respecte les sauts de
+   ligne saisis (pre-wrap). Même traitement pour la note de location. */
+.mob-note-text{
+  font-size:11.5px;color:var(--ink-muted);line-height:1.45;
+  margin-top:6px;padding:6px 9px;
+  background:var(--surface-2);border-radius:8px;
+  border-left:2px solid var(--brand);
+  white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.loc-note-text{
+  font-size:11px;color:var(--ink-muted);line-height:1.45;margin-top:6px;
+  white-space:pre-wrap;overflow-wrap:anywhere;
 }
 
 /* Groupe pass dans le formulaire — fond doré léger */
@@ -735,7 +752,7 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
 .place-name{font-size:14px;font-weight:500;color:var(--ink);margin-bottom:1px;line-height:1.3}
 .place-city{font-size:11px;color:var(--ink-muted)}
 .place-adresse{font-size:11px;color:var(--ink-muted);margin-top:2px;line-height:1.4}
-.place-note{font-size:11px;color:var(--ink-hint);margin-top:2px;font-style:italic;line-height:1.4}
+.place-note{font-size:11px;color:var(--ink-hint);margin-top:2px;font-style:italic;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
 
 /* ─ CARTES UNIFIÉES — fond blanc propre et arrondi pour toutes catégories ─ */
 /* Assure la cohérence visuelle entre .place-card, .loc-card, .mob-item, .hotel-item, .pass-card */
@@ -3227,9 +3244,9 @@ body::-webkit-scrollbar,
 #tripmap-resizer{display:none} /* visible seulement en desktop (grille) */
 
 .tmap-pin-card{
-  display:flex;align-items:center;gap:12px;
+  display:flex;align-items:center;gap:10px;
   background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--r-md);padding:11px 14px;
+  border-radius:var(--r-md);padding:10px 11px;
   cursor:pointer;transition:box-shadow .15s,border-color .15s;
 }
 .tmap-pin-card:hover{box-shadow:var(--shadow-md);border-color:var(--sakura)}
@@ -3241,6 +3258,10 @@ body::-webkit-scrollbar,
 }
 .tmap-pin-icon.hotel{background:#fceef1;border:1.5px solid rgba(240,128,128,.4)}
 .tmap-pin-icon.lieu {background:#e8f0f8;border:1.5px solid rgba(92,107,192,.3)}
+/* Fiche compacte de la liste (chantier 20) : icône resserrée pour laisser
+   la largeur au nom. SCOPÉ à la liste — .tmap-pin-icon est aussi utilisé
+   par le carrousel mobile, qui ne doit pas bouger. */
+#tripmap-list-inner .tmap-pin-icon{width:32px;height:32px}
 .tmap-pin-body{flex:1;min-width:0}
 .tmap-pin-name{font-size:13px;font-weight:500;color:var(--ink);
   white-space:normal;line-height:1.3;
@@ -3270,6 +3291,10 @@ body::-webkit-scrollbar,
   transition:all .15s;
 }
 .tmap-info-btn:hover{border-color:var(--brand);color:var(--brand);background:var(--sakura-light)}
+/* Bloc localisation dans la fenêtre info (chantier 20) : état « Localisé »
+   + lien Maps, retirés de la fiche compacte de la liste desktop. */
+.tld-geo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+.tld-geo .tmap-pin-open-btn{text-decoration:none;display:inline-flex;align-items:center}
 
 .tripmap-loading-bar{
   position:absolute;top:0;left:0;right:0;height:3px;
@@ -3725,7 +3750,7 @@ body::-webkit-scrollbar,
   #tab-bar::after{ content:none; }
   /* Bouton hamburger : replie/déploie rail + panneau (haut-gauche).
      Visible UNIQUEMENT sur la page voyage (un voyage ouvert) — ailleurs
-     (accueil, explorer, profil) il ne servirait à rien, donc masqué. */
+     (accueil, profil) il ne servirait à rien, donc masqué. */
   #rail-toggle{
     display:none;
     align-items:center; justify-content:center;
@@ -3791,7 +3816,31 @@ body::-webkit-scrollbar,
     position:absolute;
     right:28px; top:50%;
     transform:translateY(-50%);
-    display:flex; gap:8px;
+    display:flex; gap:8px; align-items:center;
+  }
+  /* Cloche « Échéances & alertes » — desktop, à gauche des compteurs.
+     Même gabarit que la cloche du héros mobile (rond translucide sur le
+     bandeau coloré). Position relative = ancre du badge. */
+  #tb-bell{
+    position:relative;
+    display:flex; align-items:center; justify-content:center;
+    flex:0 0 auto;
+    width:36px; height:36px; border-radius:50%;
+    border:1px solid rgba(255,255,255,.28);
+    background:rgba(255,255,255,.13);
+    color:#fff; cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+    transition:background .15s, border-color .15s;
+  }
+  #tb-bell:hover{ background:rgba(255,255,255,.22); border-color:rgba(255,255,255,.45); }
+  /* Le badge réutilise .hh-bell-badge (même style que la cloche mobile) */
+  #tb-bell .hh-bell-badge{
+    position:absolute; top:-3px; right:-3px;
+    min-width:17px; height:17px; padding:0 4px; border-radius:9px;
+    background:var(--surface); color:var(--brand);
+    border:1.5px solid var(--brand);
+    font-size:10px; font-weight:700; line-height:1;
+    display:flex; align-items:center; justify-content:center;
   }
   .tbs-chip{
     display:inline-flex; align-items:baseline; gap:5px;
@@ -4091,7 +4140,7 @@ body::-webkit-scrollbar,
     order:3;
     flex:1 1 auto; min-width:0;
     display:grid;
-    grid-template-columns:var(--tmap-panel-w, clamp(248px, 21vw, 320px)) minmax(0,1fr);
+    grid-template-columns:var(--tmap-panel-w, clamp(224px, 17vw, 272px)) minmax(0,1fr);
     grid-template-rows:auto minmax(0,1fr);
     height:calc(100vh - var(--topbar-h));
     overflow:hidden;
@@ -4101,7 +4150,7 @@ body::-webkit-scrollbar,
   /* Poignée de redimensionnement du volet gauche (desktop) */
   #tripmap-resizer{
     display:block; position:absolute; top:0; bottom:0;
-    left:var(--tmap-panel-w, clamp(248px, 21vw, 320px));
+    left:var(--tmap-panel-w, clamp(224px, 17vw, 272px));
     width:11px; transform:translateX(-5px);
     cursor:col-resize; z-index:30; background:transparent;
   }
@@ -4676,25 +4725,6 @@ body.trip-open .psp-label.psp-trip-only{ display:block; }
   flex:0 0 auto; max-height:38%; overflow-y:auto;
 }
 
-/* ── Page Explorer ── */
-#page-explorer{ background:var(--surface-2); overflow-y:auto; }
-#explorer-scroll{
-  max-width:880px;
-  width:100%;
-  box-sizing:border-box;
-  margin:0 auto;
-  padding:34px clamp(16px,4vw,40px) 60px;
-}
-/* État vide de la page Explorer (placeholder « bientôt disponible ») */
-.explorer-empty{
-  text-align:center; padding:64px 20px;
-  color:var(--ink-muted);
-}
-.explorer-empty-icon{ opacity:.45; margin-bottom:14px; }
-.explorer-empty-title{
-  font-size:16px; font-weight:600; color:var(--ink); margin-bottom:6px;
-}
-.explorer-empty-sub{ font-size:13px; color:var(--ink-hint); }
 
 
 /* Footer Explorer (clone) : hérite du style du footer principal */
@@ -4722,13 +4752,6 @@ body.trip-open .psp-label.psp-trip-only{ display:block; }
   .site-footer-clone .sf-link:hover{ color:#fff; }
   .site-footer-clone .sf-note{ display:block; color:rgba(255,255,255,.5); line-height:1.7; margin-bottom:8px; }
   .site-footer-clone .sf-bottom{ max-width:var(--content-max); margin:28px auto 0; padding-top:18px; border-top:1px solid rgba(255,255,255,.1); color:rgba(255,255,255,.4); font-size:12px; }
-
-  /* Explorer : flex column pour que le footer tombe sous le fold */
-  #page-explorer.active{
-    display:flex; flex-direction:column;
-    min-height:calc(100vh - var(--topbar-h));
-  }
-  #page-explorer.active > #explorer-scroll{ flex:1 0 auto; }
 }
 /* Clone masqué en mobile */
 @media (max-width:1023.98px){
@@ -5127,6 +5150,14 @@ body.trip-open .psp-label.psp-trip-only{ display:block; }
     line-height:1.3; white-space:normal; word-break:break-word;
   }
   .tmap-car-sub{ font-size:11.5px; color:var(--ink-muted); margin-top:2px; white-space:normal; }
+  /* Ligne temporelle dédiée (jour + horaire) : une LIGNE À PART plutôt que
+     d'entasser dans le sous-titre. Rendue seulement si l'élément a une date,
+     donc jamais de ligne vide. Retour à la ligne libre : ne peut pas tronquer
+     le titre, qui reste sur sa propre ligne. */
+  .tmap-car-when{
+    font-size:11.5px; font-weight:600; color:var(--brand);
+    margin-top:3px; white-space:normal; line-height:1.25;
+  }
   .tmap-car-foot{ display:flex; align-items:center; gap:8px; margin-top:auto; }
   .tmap-car-empty{
     flex:0 0 auto; width:76vw; padding:16px;
@@ -5205,6 +5236,41 @@ body.trip-open .psp-label.psp-trip-only{ display:block; }
   padding:14px 12px; text-align:center;
   font-size:12.5px; color:var(--ink-muted);
   background:var(--surface-2); border-radius:12px;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   NETTOYAGE DU STOCKAGE — compte à blanc + rapport (modale partagée).
+   Fonds opaques, aucune couleur en dur : var(--brand) uniquement.
+   ══════════════════════════════════════════════════════════════════ */
+.gc-intro{ font-size:12.5px; color:var(--ink-muted); line-height:1.5; margin-bottom:12px; }
+.gc-cat{
+  border:1px solid var(--border); border-radius:12px;
+  padding:10px 12px; margin-bottom:8px; background:var(--surface-2);
+}
+.gc-cat-head{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.gc-cat-name{ font-size:13px; font-weight:600; color:var(--ink); }
+.gc-cat-count{ font-size:11.5px; font-weight:600; color:var(--brand); white-space:nowrap; }
+.gc-list{
+  margin:8px 0 0; padding-left:16px;
+  max-height:132px; overflow-y:auto;
+  font-size:11.5px; color:var(--ink-muted); line-height:1.6;
+}
+.gc-list li{ word-break:break-word; }
+.gc-more{ font-style:italic; opacity:.8; list-style:none; margin-left:-16px; }
+.gc-none{ font-size:11.5px; color:var(--ink-hint); margin-top:4px; }
+.gc-total{
+  font-size:12.5px; color:var(--ink); margin:12px 0 4px; text-align:right;
+}
+.gc-total strong{ color:var(--brand); }
+.gc-warn{
+  font-size:12.5px; color:var(--ink); line-height:1.5;
+  background:var(--surface-2); border-left:2px solid var(--brand);
+  border-radius:8px; padding:10px 12px; margin-bottom:10px;
+}
+.gc-hint{ font-size:12px; color:var(--ink-muted); line-height:1.5; }
+.gc-empty{
+  font-size:12.5px; color:var(--ink-muted); text-align:center;
+  padding:18px 12px; background:var(--surface-2); border-radius:12px;
 }
 
 /* ── Profil : neutraliser le surlignage autofill (case grise du prénom) ── */
