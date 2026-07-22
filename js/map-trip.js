@@ -30,10 +30,34 @@
 var _map          = null;   // instance L.map (propre à la carte voyage)
 var _initDone     = false;
 var _markers      = [];     // [{ marker, type, id, lat, lng }]
+var _cluster      = null;   // L.markerClusterGroup (regroupement des pins) ; null si la lib n'est pas chargée
 var _pins         = [];     // données enrichies pour la liste sous la carte
 var _routes       = [];     // [{ layer: L.polyline[], type, label }]
 var _userMark     = null;   // point GPS bleu
 var _userCirc     = null;   // cercle de précision GPS
+
+// ── Regroupement : les marqueurs hôtel/lieu passent par le groupe de cluster
+// (Leaflet.markercluster vendoré) au lieu d'être ajoutés directement au _map.
+// Si la lib n'a pas encore été chargée (_cluster null), repli TRANSPARENT sur
+// l'ancien comportement (ajout direct) — la carte reste fonctionnelle, sans
+// regroupement. _ensureCluster est rappelé à chaque chargement de points, donc
+// le premier montage antérieur au chargement de la lib se rattrape au suivant.
+function _ensureCluster() {
+  if (_cluster || !_map || typeof L === 'undefined' || typeof L.markerClusterGroup !== 'function') return;
+  _cluster = L.markerClusterGroup({
+    maxClusterRadius:      44,     // px : agrégation tant que les pins sont proches
+    showCoverageOnHover:   false,  // pas de polygone de survol (sobriété)
+    zoomToBoundsOnClick:   true,   // clic pastille = éclatement natif (aucun effet carrousel)
+    spiderfyOnMaxZoom:     true,   // coords quasi identiques → éventail au zoom max
+    removeOutsideVisibleBounds: true,
+    animate:               true,
+    iconCreateFunction:    _clusterIcon
+  });
+  _cluster.addTo(_map);
+}
+// Ajoute/retire un marqueur via le cluster si dispo, sinon direct sur le map.
+function _addMarker(marker)    { if (_cluster) _cluster.addLayer(marker);    else if (_map) marker.addTo(_map); }
+function _removeMarker(marker) { if (_cluster) _cluster.removeLayer(marker); else if (_map) _map.removeLayer(marker); }
 
 // Filtres multi-select : {} = tout voir ; { hotels:true } = hôtels seulement
 var _activeFilters = {};
@@ -246,6 +270,59 @@ function _pinIcon(pin) {
   return { svg: svg, bg: bg };
 }
 
+// Pastille de groupe : anneau conic-gradient composé des couleurs de CATÉGORIE
+// des pins agrégés (proportionnel), disque blanc central portant le compte.
+// GARDE-FOU lisibilité (DA épurée, 34-40 px) : au-delà de 4 couleurs distinctes,
+// on garde les 3 dominantes en segments et on agrège le reste en UN segment
+// neutre — jamais 6+ tranches illisibles. Un seul type → anneau plein.
+var _CLUSTER_REST = '#c8ccd4';   // gris neutre « autres »
+function _clusterIcon(cluster) {
+  var ms = cluster.getAllChildMarkers();
+  var n  = ms.length, i;
+  var counts = {};
+  for (i = 0; i < ms.length; i++) {
+    var c = ms[i]._catColor || '#8a93a3';
+    counts[c] = (counts[c] || 0) + 1;
+  }
+  var entries = [];
+  for (var k in counts) { if (counts.hasOwnProperty(k)) entries.push({ c: k, n: counts[k] }); }
+  entries.sort(function (a, b) { return b.n - a.n; });
+
+  var CAP = 4, segs;
+  if (entries.length <= CAP) {
+    segs = entries;
+  } else {
+    segs = entries.slice(0, CAP - 1);            // 3 dominantes
+    var rest = 0;
+    for (i = CAP - 1; i < entries.length; i++) rest += entries[i].n;
+    segs.push({ c: _CLUSTER_REST, n: rest });     // + « autres » neutre
+  }
+
+  var deg = 0, stops = [];
+  for (i = 0; i < segs.length; i++) {
+    var d = deg + (segs[i].n / n) * 360;
+    // léger arrondi pour éviter les sous-pixels ; le dernier ferme à 360.
+    var end = (i === segs.length - 1) ? 360 : d;
+    stops.push(segs[i].c + ' ' + deg.toFixed(2) + 'deg ' + end.toFixed(2) + 'deg');
+    deg = d;
+  }
+  var grad  = (segs.length === 1) ? segs[0].c : 'conic-gradient(' + stops.join(',') + ')';
+  var W     = n < 10 ? 36 : 42;
+  var inner = W - 14;
+  var html =
+    '<div style="width:' + W + 'px;height:' + W + 'px;border-radius:50%;'
+      + 'background:' + grad + ';border:2.5px solid #fff;'
+      + 'box-shadow:0 2px 10px rgba(0,0,0,.28);'
+      + 'display:flex;align-items:center;justify-content:center">'
+      + '<div style="width:' + inner + 'px;height:' + inner + 'px;border-radius:50%;'
+        + 'background:#fff;display:flex;align-items:center;justify-content:center;'
+        + 'font-family:DM Sans,sans-serif;font-weight:600;font-size:13px;color:var(--ink)">'
+        + n
+      + '</div>'
+    + '</div>';
+  return L.divIcon({ className: '', html: html, iconSize: [W, W], iconAnchor: [W / 2, W / 2] });
+}
+
 function _makeIcon(type, label, pin) {
   var ic = (typeof _pinIcon === 'function')
     ? _pinIcon(pin || { type: type, emoji: label })
@@ -287,6 +364,10 @@ function _placeMarker(pin) {
     icon: _makeIcon(pin.type, pin.emoji, pin)
   }).bindPopup(_popupHTML(pin), { maxWidth: 240 });
 
+  // Couleur de catégorie mémorisée sur le marqueur → lue par _clusterIcon pour
+  // composer l'anneau (sans régresser la coloration par catégorie du pin).
+  marker._catColor = (typeof _pinIcon === 'function') ? _pinIcon(pin).bg : '#8a93a3';
+
   // Synchro pin → fiche (chantier A3) : tap sur le marqueur → le carrousel
   // défile jusqu'à la fiche correspondante (couple type/id). Mobile <768
   // uniquement (_carActive) ; le popup natif s'ouvre comme avant.
@@ -300,9 +381,9 @@ function _placeMarker(pin) {
     }
   });
 
-  // Visibilité selon filtres actifs
-  if (_showHotels() && pin.type === 'hotel') marker.addTo(_map);
-  if (_showLieux()  && pin.type === 'lieu')  marker.addTo(_map);
+  // Visibilité selon filtres actifs (via le groupe de cluster si dispo)
+  if (_showHotels() && pin.type === 'hotel') _addMarker(marker);
+  if (_showLieux()  && pin.type === 'lieu')  _addMarker(marker);
 
   _markers.push({ marker: marker, type: pin.type, id: pin.id, lat: pin.lat, lng: pin.lng });
   pin.marker = marker;
@@ -601,8 +682,9 @@ function _drawRoutes() {
 
 // ── §7 CHARGEMENT DES POINTS DU VOYAGE ───────────────────────────────
 function _loadTripPoints() {
+  _ensureCluster();   // crée le groupe de cluster si la lib est chargée (idempotent)
   // Vider les marqueurs existants
-  _markers.forEach(function (m) { if (_map) _map.removeLayer(m.marker); });
+  _markers.forEach(function (m) { _removeMarker(m.marker); });
   _markers = [];
   _pins    = [];
 
@@ -745,8 +827,8 @@ function _applyFilters() {
   _markers.forEach(function (m) {
     var show = (m.type === 'hotel' && showH) || (m.type === 'lieu' && showL);
     if (show && _activeDay) show = (_tmapWhen(_tmapCatOf(m.type), m.id).dayKey === _activeDay);
-    if (show) m.marker.addTo(_map);
-    else      _map.removeLayer(m.marker);
+    if (show) _addMarker(m.marker);
+    else      _removeMarker(m.marker);
   });
 
   _routes.forEach(function (r) {
@@ -1229,35 +1311,51 @@ function _carApply(idx, moveMap) {
   }
 
   var pin = _pins.filter(function (p) { return p.id === it.id && p.type === it.type; })[0];
-  // Fiche sans géométrie (« Introuvable », geoOff) : la carte reste en place.
+  // Fiche sans géométrie (« Introuvable », geoOff) : pas de marqueur → la carte
+  // reste en place. Les « Non situé » restent dans le carrousel (appariement par
+  // couple type/id, jamais par index) et n'entrent pas dans le regroupement.
   if (!pin || !pin.marker || pin.lat == null) return;
 
-  // Zoom RAPPROCHÉ animé (flyTo : pan+zoom doux, jamais de saut) au
-  // niveau quartier (15, comme le focus historique tripmapFocusPin) —
-  // sans redescendre si l'utilisateur est déjà plus zoomé. Le pin est
-  // décalé dans la moitié supérieure visible (centre - ch/2, projeté au
-  // zoom CIBLE, pas au zoom courant).
+  // Pin ABSORBÉ dans un cluster → le RÉVÉLER d'abord (zoomToShowLayer éclate le
+  // groupe / éventaille), PUIS focaliser dans le callback. Sinon focus direct.
+  var revealed = !_cluster ? true
+    : (function () { var vp = _cluster.getVisibleParent(pin.marker); return (vp === pin.marker); })();
+  if (revealed) {
+    _carFocusPin(pin, ch);
+  } else {
+    _cluster.zoomToShowLayer(pin.marker, function () { _carFocusPin(pin, ch); });
+  }
+}
+
+// Focalise un pin déjà VISIBLE (dé-clusterisé) : flyTo au niveau quartier avec
+// décalage moitié-haute, marqueur sélectionné, popup ouvert à la FIN du vol
+// (moveend — remplace le setTimeout fixe : robuste quel que soit l'itinéraire,
+// y compris après une révélation de cluster).
+function _carFocusPin(pin, ch) {
+  if (!_map || !pin || !pin.marker) return;
+  // Zoom RAPPROCHÉ animé (flyTo : pan+zoom doux) au niveau quartier (15), sans
+  // redescendre si déjà plus zoomé ; pin décalé dans la moitié supérieure
+  // visible (centre - ch/2, projeté au zoom CIBLE).
   var z  = Math.max(_map.getZoom(), 15);
   var pt = _map.project([pin.lat, pin.lng], z).add([0, ch / 2]);
-  _map.flyTo(_map.unproject(pt, z), z, { duration: 0.9 });
 
   // État sélectionné : agrandi (transform sur le div INTERNE du divIcon —
   // Leaflet pose son propre transform inline sur _icon, ne pas y toucher).
   _selMarker = pin.marker;
   if (_selMarker._icon && _selMarker._icon.classList) _selMarker._icon.classList.add('tmap-sel');
   if (_selMarker.setZIndexOffset) _selMarker.setZIndexOffset(1000);
-  // Popup ouvert APRÈS le flyTo (~0.9s — sinon son autoPan combat le vol) ;
-  // padding bas = hauteur carrousel pour qu'il ne glisse pas dessous.
   var pop = pin.marker.getPopup ? pin.marker.getPopup() : null;
   if (pop) {
     pop.options.autoPanPaddingTopLeft    = L.point(12, 64);
     pop.options.autoPanPaddingBottomLeft = L.point(12, ch + 14);
   }
-  setTimeout(function () {
+  // Popup à la fin du vol (son autoPan combattrait un vol en cours).
+  _map.once('moveend', function () {
     if (_selMarker === pin.marker && _map && _map.hasLayer(pin.marker)) {
       try { pin.marker.openPopup(); } catch (e) {}
     }
-  }, 980);
+  });
+  _map.flyTo(_map.unproject(pt, z), z, { duration: 0.9 });
 }
 
 // Fiche la plus proche du centre du viewport du carrousel.
@@ -1385,6 +1483,15 @@ window.tripmapFocusPin = function (id, type) {
         return;
       }
     }
+  }
+  // Desktop (ou mobile hors carrousel) : si le pin est absorbé dans un cluster,
+  // le RÉVÉLER via l'API dédiée (évite la course setView→openPopup où le
+  // marqueur n'est pas encore matérialisé), puis ouvrir le popup.
+  if (_cluster && _cluster.getVisibleParent(pin.marker) !== pin.marker) {
+    _cluster.zoomToShowLayer(pin.marker, function () {
+      try { pin.marker.openPopup(); } catch (e) {}
+    });
+    return;
   }
   _map.setView([pin.lat, pin.lng], 15, { animate: true });
   pin.marker.openPopup();
@@ -1587,7 +1694,7 @@ YumeState.on('trip:snapshot', function () {
 // (le nouvel appel à initTripMap() par app.js rechargera tout)
 YumeState.on('trip:changed', function () {
   if (!_initDone) return;
-  _markers.forEach(function (m) { if (_map) _map.removeLayer(m.marker); });
+  _markers.forEach(function (m) { _removeMarker(m.marker); });
   _markers = [];
   _pins    = [];
   _clearRoutes();
@@ -1600,7 +1707,7 @@ YumeState.on('trip:changed', function () {
 // abonnement dans map-world.js.
 YumeState.on('map:refresh', function () {
   if (!_initDone || !_map) return;
-  _markers.forEach(function (m) { _map.removeLayer(m.marker); });
+  _markers.forEach(function (m) { _removeMarker(m.marker); });
   _markers = [];
   _pins    = [];
   _clearRoutes();

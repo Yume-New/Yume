@@ -44,7 +44,17 @@ var S_SEL      = '#c4546e';
 // Trois CDN en cascade + message d'erreur gracieux si tous échouent.
 // ─────────────────────────────────────────────────────────────────────
 (function _loadLeaflet() {
-  if (typeof L !== 'undefined') return; // déjà chargé
+  // Leaflet.markercluster (regroupement des pins carte) — VENDORÉ localement,
+  // jamais d'un CDN. Chargé APRÈS Leaflet (il attache L.MarkerClusterGroup à L).
+  // La carte voyage s'en passe si absent (repli sans regroupement, cf. _ensureCluster).
+  function loadCluster() {
+    if (typeof L === 'undefined' || L.MarkerClusterGroup) return;
+    var c = document.createElement('script');
+    c.src = './js/vendor/leaflet.markercluster.js';
+    document.head.appendChild(c);
+  }
+
+  if (typeof L !== 'undefined') { loadCluster(); return; } // Leaflet déjà chargé
 
   var CDNS = [
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
@@ -62,7 +72,8 @@ var S_SEL      = '#c4546e';
     var s = document.createElement('script');
     s.src = CDNS[idx];
     s.onload  = function () {
-      // Leaflet chargé — init déclenchée par showTab() dans app.js
+      loadCluster();   // Leaflet chargé → charge le plugin de cluster local
+      // init déclenchée par showTab() dans app.js
     };
     s.onerror = function () { tryNext(idx + 1); };
     document.head.appendChild(s);
