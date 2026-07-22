@@ -233,6 +233,37 @@ body.emode-lieux .elieu{cursor:pointer}
 .form-row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 input[type=text],input[type=number],input[type=date],select,textarea{flex:1;min-width:0;padding:9px 12px;font-size:13px;font-family:'DM Sans',sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none;transition:border-color .15s}
 input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
+/* ── iOS : suppression du zoom auto au focus (chantier 12) ──────────────
+   Safari iOS zoome quand un champ FOCALISÉ a une police < 16px. Nos champs
+   sont à 13px : règle globale ci-dessus + de NOMBREUX styles INLINE en JS
+   (mSelect/mTextarea, em-*/eh-*/etx-*, buildJourSelect…) que seul !important
+   peut surcharger. UNE règle mobile porte tous les champs de SAISIE
+   focusables à 16px — les seuls qui déclenchent le zoom. checkbox/radio/
+   button/file/hidden non listés (ne zooment pas). Desktop garde 13px : il ne
+   zoome jamais au focus (arbitrage : option A, mobile seul).
+   Compensation : padding vertical 7px pour que la hauteur reste ~identique
+   (texte +≈4px, padding −≈4px) → aucun formulaire ne se déforme. On ne touche
+   QUE padding-top/-bottom : le padding gauche/droite est préservé (ex.
+   conv-input et son symbole de devise). Textes NON éditables (labels, badges,
+   valeurs affichées) intacts. */
+@media (max-width:767.98px){
+  input[type=text],input[type=number],input[type=date],input[type=time],
+  input[type=email],input[type=tel],input[type=url],input[type=search],
+  input[type=month],input[type=password],select,textarea{
+    font-size:16px !important;
+    padding-top:7px !important;padding-bottom:7px !important;
+  }
+  /* Champ de conversion : déjà ≥16px (grand format voulu), non concerné par
+     le zoom — on lui rend sa taille et son padding vertical d'origine.
+     Sélecteur input[type=number].conv-input (spécificité 0,2,1) pour BATTRE
+     input[type=number] ci-dessus (0,1,1) : sinon la règle générique, plus
+     spécifique qu'une simple classe, rétrécirait ce champ à 16px. Les deux
+     conv-input (conv-left/right) sont des type=number. */
+  input[type=number].conv-input{
+    font-size:clamp(16px,5vw,20px) !important;
+    padding-top:12px !important;padding-bottom:12px !important;
+  }
+}
 .btn-primary{padding:9px 18px;background:var(--sakura);color:white;border:none;border-radius:var(--r-sm);font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .15s,transform .1s;white-space:nowrap}
 .btn-primary:hover{background:var(--sakura-dark)}
 .btn-primary:active{transform:scale(.98)}
@@ -1068,6 +1099,9 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
 .tx-devise-tag{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;margin-left:5px;vertical-align:middle}
 .tx-devise-tag.yen{background:#fdf3df;color:#c9921a}
 .tx-devise-tag.eur{background:#e8f0f8;color:#2d5e8c}
+/* Dépense sans montant exploitable : comptée 0 dans les totaux, mais
+   SIGNALÉE — le problème est visible et corrigeable, jamais masqué. */
+.tx-amount-missing{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;margin-left:5px;vertical-align:middle;background:#fef0f0;color:#c0392b}
 .tx-raw{font-size:10px;color:var(--ink-hint);margin-top:1px;font-style:italic}
 .empty-state{text-align:center;padding:32px 20px;color:var(--ink-muted);font-size:13px}
 .empty-state .empty-icon{font-size:28px;margin-bottom:8px}
@@ -2546,6 +2580,16 @@ input, select, textarea {
   display:flex; align-items:center; justify-content:center;
   overflow:hidden; cursor:pointer; flex-shrink:0;
 }
+/* Contrôle « Retirer la photo » — masqué par défaut, affiché par
+   loadProfilPage quand un avatar est posé. Discret, accent var(--brand). */
+.profil-avatar-remove{
+  display:inline-flex; align-items:center; gap:5px;
+  margin-top:8px; padding:4px 11px; border-radius:20px;
+  background:transparent; border:1px solid var(--border);
+  color:var(--ink-muted); font-family:inherit; font-size:11.5px; font-weight:500;
+  cursor:pointer; transition:color .15s, border-color .15s;
+}
+.profil-avatar-remove:hover{ color:var(--brand); border-color:var(--brand); }
 .profil-avatar-circle svg{ width:30px; height:30px; }
 .profil-avatar-circle img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
 .profil-name{
@@ -4825,6 +4869,25 @@ body.trip-open .psp-label.psp-trip-only{ display:block; }
   transition:color .12s, border-color .12s;
 }
 .doc-row-pdf:active{ color:var(--sakura); border-color:var(--sakura); }
+
+/* ── Pièces jointes RATTACHÉES (agrégées, lecture seule) ──────────────
+   Distinguées des documents propres à l'onglet : liseré latéral, fond
+   légèrement retiré et badge « Rattaché ». Elles se gèrent depuis leur
+   élément d'origine, pas ici. */
+.doc-attach-note{
+  display:flex; align-items:flex-start; gap:9px;
+  margin:0 4px 8px; padding:10px 12px;
+  background:var(--surface-2); border:1px dashed var(--border);
+  border-radius:12px; font-size:12px; line-height:1.45; color:var(--ink-muted);
+}
+.doc-attach-note svg{ flex-shrink:0; margin-top:1px; color:var(--brand); }
+.doc-row-attach{ background:var(--surface-2); box-shadow:inset 3px 0 0 var(--brand); }
+.doc-row-attach .doc-row-name{ font-size:14px; }
+.doc-attach-badge{
+  flex-shrink:0; font-size:9.5px; font-weight:700; letter-spacing:.02em;
+  line-height:1.5; padding:2px 8px; border-radius:20px;
+  background:var(--surface); border:1px solid var(--border); color:var(--ink-muted);
+}
 
 /* Badges de validité */
 .doc-badge{

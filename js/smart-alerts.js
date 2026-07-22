@@ -147,15 +147,18 @@ function _buildBudgetSummary() {
 
   if (!txs.length) return null;
 
-  // Total dépensé
-  var spent = txs.reduce(function (s, t) { return s + (t.amount || 0); }, 0);
+  // Total dépensé — _txAmount (app.js) : SEULE façon de lire un montant de
+  // transaction dans le projet. `t.amount || 0` concaténait un montant stocké
+  // en chaîne (0 + "12.5" -> "012.5"). app.js est chargé AVANT ce fichier et
+  // ces helpers sont globaux, l'appel direct est donc sûr au runtime.
+  var spent = txs.reduce(function (s, t) { return s + _txAmount(t); }, 0);
   var rem   = bud - spent;
   var pct   = bud > 0 ? Math.round((spent / bud) * 100) : 0;
 
   // Par catégorie
   var byCat = {};
   txs.forEach(function (t) {
-    byCat[t.cat] = (byCat[t.cat] || 0) + (t.amount || 0);
+    byCat[t.cat] = (byCat[t.cat] || 0) + _txAmount(t);
   });
   var topCat = Object.entries(byCat)
     .sort(function (a, b) { return b[1] - a[1]; })
@@ -165,7 +168,7 @@ function _buildBudgetSummary() {
   var byDev = {};
   txs.forEach(function (t) {
     if (t.devise && t.devise !== 'EUR') {
-      byDev[t.devise] = (byDev[t.devise] || 0) + (t.raw || 0);
+      byDev[t.devise] = (byDev[t.devise] || 0) + _txRaw(t);
     }
   });
 

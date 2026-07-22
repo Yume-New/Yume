@@ -1781,6 +1781,9 @@ function loadProfilPage(){
       avatarEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
     }
   }
+  // Bouton « Retirer la photo » : visible UNIQUEMENT si un avatar est posé.
+  var avatarRemoveEl = document.getElementById('profil-avatar-remove');
+  if(avatarRemoveEl) avatarRemoveEl.style.display = avatar ? '' : 'none';
 
   // Stats
   var nbV = Object.keys(allTrips).length;
@@ -3325,6 +3328,24 @@ function saveProfileAvatar(fileInput){
     showToast('Photo de profil mise à jour', 'success');
   };
   reader.readAsDataURL(file);
+}
+
+// Retrait de la photo de profil → retour à l'avatar SVG par défaut.
+// Vide la variable ET la clé localStorage (donc absente de l'export JSON).
+// Confirmation via confirmDelete (comme les suppressions d'items), le prénom
+// sert de libellé naturel. Ne rien faire si aucune photo n'est posée.
+function removeProfileAvatar(){
+  if(!_profileAvatar && !localStorage.getItem('yume_profile_avatar')) return;
+  confirmDelete('la photo de profil', _profileName || 'Voyageur', false,
+    function(){
+      _profileAvatar = '';
+      localStorage.removeItem('yume_profile_avatar');
+      closeModal();
+      if(typeof loadProfilPage === 'function') loadProfilPage(); // re-rend l'avatar par défaut + masque le bouton
+      if(typeof showToast === 'function') showToast('Photo de profil retirée', 'info');
+    },
+    function(){ closeModal(); }
+  );
 }
 
 function updateGreeting(){
@@ -6572,6 +6593,7 @@ function _editVolUnified(m){
     // Bouton + titre en mode édition
     var btn=document.getElementById('mob-submit-btn'); if(btn) btn.textContent='Enregistrer';
     var ttl=document.getElementById('mob-form-title'); if(ttl) ttl.textContent='Modifier le vol';
+    _mobSyncDeleteBtn();   // édition → bouton « Supprimer » visible
     var prev=document.getElementById('mob-route-preview'); if(prev){ updateMobPreview(); }
   }, 110);
 }
@@ -6593,10 +6615,38 @@ function _mobClearPdf(){
 }
 
 // Sortie du mode édition : réinitialise l'état + le libellé du bouton/titre.
+// Affiche le bouton « Supprimer » du formulaire trajet UNIQUEMENT en mode
+// édition (_mobEditId posé) — jamais en création. Source unique de la
+// visibilité : appelé par _editVolUnified (édition) et _mobCancelEdit (sortie).
+function _mobSyncDeleteBtn(){
+  var b=document.getElementById('mob-delete-btn');
+  if(b) b.style.display = _mobEditId ? '' : 'none';
+}
 function _mobCancelEdit(){
   _mobEditId = null;
   var btn=document.getElementById('mob-submit-btn'); if(btn) btn.textContent='+ Ajouter';
   var ttl=document.getElementById('mob-form-title'); if(ttl) ttl.textContent='Ajouter un trajet';
+  _mobSyncDeleteBtn();   // création → bouton masqué
+}
+
+// Suppression d'un vol depuis l'édition unifiée. Même contrat que la
+// suppression des autres transports (train/bus via modalFooter → _askModalDelete) :
+// confirmDelete('le transport', libellé, aUnDoc, onConfirm, onCancel).
+// deleteMobilite retire la CHAÎNE complète (le vol + ses escales[], qui vivent
+// à la racine) et purge le PDF racine une seule fois — inchangé.
+function _mobDeleteCurrent(){
+  if(!_mobEditId) return;
+  var id = _mobEditId;
+  var m = mobilites.filter(function(x){ return x.id==id; })[0];
+  if(!m){ _mobCancelEdit(); return; }
+  var libelle = (typeof MOB_LABELS!=='undefined' && MOB_LABELS[m.type]) || m.titre || m.type || '';
+  confirmDelete('le transport', libelle, !!m.pdfId,
+    function(){                 // onConfirm : ferme+reset le formulaire, PUIS supprime
+      _mobCloseForm();          // reset complet (vide champs/escales, _mobEditId=null) + ferme
+      deleteMobilite(id);       // retire de mobilites[], purge le PDF, re-render + snapshot
+    },
+    function(){ closeModal(); } // onCancel : ferme la confirmation, le formulaire reste ouvert
+  );
 }
 
 // Fermeture du formulaire trajet (Annuler) : AUTO-RESET complet — vide tous
@@ -7569,10 +7619,9 @@ function editLieu(id){id=isNaN(+id)?id:+id;
     +'<div class="modal-row">'
 +modalField('Catégorie','<input type="text" id="el-categorie" value="'+(l.categorie||'')+
 '" placeholder="Temples, Restaurants…" list="el-cat-dl" autocomplete="off"/>'
-+'<datalist id="el-cat-dl"><option value="Temples"><option value="Parcs">'
-+'<option value="Randonnées"><option value="Restaurants"><option value="Bar">'
-+'<option value="Musées"><option value="Shopping"><option value="Onsen">'
-+'<option value="Châteaux"><option value="Plages"><option value="Points de vue"></datalist>')
+// Datalist DÉRIVÉE de LIEU_CATS (source unique) — plus de liste figée à
+// resynchroniser à chaque ajout de catégorie.
++'<datalist id="el-cat-dl">'+_lieuCatOptionsHtml()+'</datalist>')
 +'</div>'
 +modalField('Note',mTextarea('el-note',l.note||'','Conseil, prix…'))
     +modalField('Date de visite (optionnel)','<input type="text" id="el-jour" class="cal-trigger" value="'+(l.dateVisite||'')+'" placeholder="JJ/MM/AAAA" style="width:100%;cursor:pointer" readonly onclick="openCalendar(\'el-jour\')"/>')
@@ -8331,7 +8380,7 @@ function openExportFactures(){
     var clean = _catClean(k);
     var color = (typeof _catColor==='function') ? _catColor(k) : 'var(--sakura)';
     var arr = groups[k].slice().sort(function(a,b){ return _expDateKey(a.date)-_expDateKey(b.date); });
-    var catTotal = arr.reduce(function(s,t){ return s+(+t.amount||0); },0);
+    var catTotal = arr.reduce(function(s,t){ return s+_txAmount(t); },0);
     html += '<div class="exp-cat">'
       +'<label class="exp-cat-head">'
         +'<input type="checkbox" class="exp-chk exp-cat-chk" data-exp-cat="'+ci+'" data-exp-catclean="'+_tlEsc(clean)+'"/>'
@@ -8346,7 +8395,7 @@ function openExportFactures(){
           +'<span class="exp-fac-desc">'+_tlEsc(t.desc||'(sans libellé)')+'</span>'
           +'<span class="exp-fac-meta">'+_tlEsc(t.date||'')+'</span>'
         +'</span>'
-        +'<span class="exp-fac-amount">'+_expFmtEur(+t.amount||0)+'</span>'
+        +'<span class="exp-fac-amount">'+_expFmtEur(_txAmount(t))+'</span>'
       +'</label>';
     });
     html += '</div>';
@@ -8551,7 +8600,7 @@ function _expBuildCover(doc, font, fontBold, tripName, included, skipped){
   var tn = _pdfSafe(tripName); var tripLabel = (tn.text && tn.text.length>=2) ? tn.text : 'Voyage';
 
   var total = 0;
-  for(var ti=0; ti<included.length; ti++){ total += (+included[ti].amount||0); }
+  for(var ti=0; ti<included.length; ti++){ total += _txAmount(included[ti]); }
 
   // Libellé d'une facture pour la page de garde : desc si lisible, sinon fallback identifiable
   function facLabel(t){
@@ -8569,7 +8618,7 @@ function _expBuildCover(doc, font, fontBold, tripName, included, skipped){
   lines.push({ t:included.length+' facture'+(included.length>1?'s':'')+' incluse'+(included.length>1?'s':''), s:10, b:false, c:muted, gap:16 });
   included.forEach(function(t){
     var lbl = facLabel(t);
-    var line = '- ' + lbl + '  |  ' + _catClean(t.cat) + '  |  ' + (t.date||'') + '  |  ' + _expFmtEur(+t.amount||0);
+    var line = '- ' + lbl + '  |  ' + _catClean(t.cat) + '  |  ' + (t.date||'') + '  |  ' + _expFmtEur(_txAmount(t));
     lines.push({ t:_expTrunc(font, line, 10, maxW), s:10, b:false, c:ink, gap:5 });
   });
   lines.push({ t:'', s:6, b:false, c:ink, gap:6 });
@@ -8578,7 +8627,7 @@ function _expBuildCover(doc, font, fontBold, tripName, included, skipped){
     lines.push({ t:'', s:6, b:false, c:ink, gap:8 });
     lines.push({ t:skipped.length+' facture'+(skipped.length>1?'s':'')+' ignoree'+(skipped.length>1?'s':'')+' (illisible'+(skipped.length>1?'s':'')+') :', s:10, b:true, c:red, gap:5 });
     skipped.forEach(function(t){
-      var line = '- ' + facLabel(t) + '  |  ' + _catClean(t.cat) + '  |  ' + (t.date||'') + '  |  ' + _expFmtEur(+t.amount||0);
+      var line = '- ' + facLabel(t) + '  |  ' + _catClean(t.cat) + '  |  ' + (t.date||'') + '  |  ' + _expFmtEur(_txAmount(t));
       lines.push({ t:_expTrunc(font, line, 10, maxW), s:10, b:false, c:red, gap:5 });
     });
   }
@@ -8629,15 +8678,34 @@ function _expDownload(bytes, filename){
   setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
 }
 
+// ── Lecture SÛRE des montants d'une transaction ───────────────────────
+// updateBudget est appelé par openTrip : un t.amount absent y faisait
+// planter `.toLocaleString()`, donc l'ouverture du VOYAGE ENTIER — pas
+// seulement le budget. Une donnée incomplète (import partiel, saisie
+// interrompue, donnée héritée) ne doit jamais rendre un voyage
+// inaccessible : elle compte pour 0 et RESTE VISIBLE, signalée dans la
+// liste (badge « Montant manquant ») plutôt que masquée.
+function _txAmount(t){ var n = t ? +t.amount : NaN; return isFinite(n) ? n : 0; }
+function _txRaw(t){    var n = t ? +t.raw    : NaN; return isFinite(n) ? n : 0; }
+// Vrai si le montant est absent ou inexploitable (null/''/undefined/NaN).
+function _txAmountMissing(t){
+  if(!t) return true;
+  var v = t.amount;
+  if(v === null || v === undefined || v === '') return true;
+  return !isFinite(+v);
+}
+
 function updateBudget(){
   // ── Recalcul taux pour TOUTES les devises étrangères (live si dispo) ──
+  // La garde isFinite empêche d'ÉCRIRE un NaN dans le modèle : sans montant
+  // d'origine exploitable, on laisse la transaction telle quelle.
   transactions.forEach(function(t){
-    if(t.devise !== 'EUR'){
-      t.amount = localToEur(t.raw, t.devise);
+    if(t.devise !== 'EUR' && isFinite(+t.raw)){
+      t.amount = localToEur(+t.raw, t.devise);
     }
   });
 
-  var spent=transactions.reduce(function(s,t){return s+t.amount;},0);
+  var spent=transactions.reduce(function(s,t){return s+_txAmount(t);},0);
   var rem=budget-spent;
   var pct=budget>0?Math.min(100,(spent/budget)*100):0;
   var _el;
@@ -8649,7 +8717,7 @@ function updateBudget(){
   var bar=document.getElementById('budget-bar');
   if(bar){ bar.style.width=pct+'%'; bar.style.background=pct>90?'#c0392b':pct>70?'#c9921a':'var(--sakura)'; }
   var catTotals={};
-  transactions.forEach(function(t){catTotals[t.cat]=(catTotals[t.cat]||0)+t.amount;});
+  transactions.forEach(function(t){catTotals[t.cat]=(catTotals[t.cat]||0)+_txAmount(t);});
   var catEl=document.getElementById('cat-breakdown');
   if(catEl){
     if(!Object.keys(catTotals).length){catEl.innerHTML='<div class="empty-state" style="padding:16px 0"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg></div><div>Aucune dépense enregistrée</div></div>';}
@@ -8679,22 +8747,33 @@ function updateBudget(){
         : '<span class="tx-devise-tag eur">€ EUR</span>';
 
       // ── Montant principal affiché en € (EN GROS) ──
-      var eurStr = t.amount.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
+      // _txAmount : jamais de crash sur une transaction sans montant.
+      var missingAmt = _txAmountMissing(t);
+      var eurStr = _txAmount(t).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
+      // Le problème n'est pas masqué : la ligne reste listée, à 0,00 €, mais
+      // signalée pour que l'utilisateur puisse la corriger (crayon).
+      var missingBadge = missingAmt
+        ? '<span class="tx-amount-missing" title="Montant absent : cette dépense compte pour 0 dans les totaux">Montant manquant</span>'
+        : '';
 
       // ── Ligne secondaire : montant original si devise étrangère ──
       var rawLine = '';
       if(isLocal){
         // Formatage du montant original selon la magnitude de la devise
-        var rawFmt = t.raw >= 100
-          ? t.raw.toLocaleString('fr-FR',{maximumFractionDigits:0})
-          : t.raw.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+        var rawVal = _txRaw(t);
+        var rawFmt = rawVal >= 100
+          ? rawVal.toLocaleString('fr-FR',{maximumFractionDigits:0})
+          : rawVal.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
         rawLine = '<div class="tx-raw">'+rawFmt+' '+devSym+' converti</div>';
       }
 
       return '<div class="tx-item">'
         +'<div class="tx-body">'
           +'<div class="tx-desc">'+t.desc+deviseBadge+'</div>'
-          +'<div class="tx-cat"><span class="tx-cat-dot" style="background:'+tColor+'"></span>'+_catClean(t.cat)+'</div>'
+          // Badge sur la ligne CATÉGORIE et non sur .tx-desc : cette dernière
+          // est en nowrap + ellipsis, l'indicateur y disparaissait dès que la
+          // description était un peu longue (invisible en mobile).
+          +'<div class="tx-cat"><span class="tx-cat-dot" style="background:'+tColor+'"></span>'+_catClean(t.cat)+missingBadge+'</div>'
         +'</div>'
         +'<div class="tx-right">'
           +'<div class="tx-amount" style="font-size:15px;font-weight:600;color:var(--ink)">-'+eurStr+'</div>'
@@ -10202,8 +10281,13 @@ function computeGroupBalances(txList, members){
     var fw         = (tx.forWho && tx.forWho.length) ? tx.forWho : members;
     var recipients = fw.filter(function(p){ return members.indexOf(p) !== -1; });
     if(!recipients.length) recipients = members;
-    var perHead = tx.amount / recipients.length;
-    paid[tx.paidBy] += tx.amount;
+    // Sans garde, UNE transaction sans montant propage NaN dans paid/share :
+    // net[m] devient NaN, le membre sort des tests > 0.005 / < -0.005 et
+    // disparaît du règlement — les remboursements suggérés se vidaient
+    // silencieusement au lieu d'ignorer la seule ligne fautive.
+    var txAmt   = _txAmount(tx);
+    var perHead = txAmt / recipients.length;
+    paid[tx.paidBy] += txAmt;
     recipients.forEach(function(p){ share[p] += perHead; });
   });
 
@@ -10264,7 +10348,7 @@ function _renderGroupBalances(){
   var body = document.getElementById('gb-body');
   if(!body) return;
   var bal   = computeGroupBalances(transactions, _tripMembers);
-  var spent = transactions.reduce(function(s,t){ return s+t.amount; }, 0);
+  var spent = transactions.reduce(function(s,t){ return s+_txAmount(t); }, 0);
   var toggleChecked = window._gbHideDetails ? 'checked' : '';
 
   var html = '<div class="gb-toggle-row">'
@@ -11320,6 +11404,9 @@ function _renderDocCats(){
     + '<span class="doc-tile-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>'
     + '<div class="doc-tile-name">Ajouter</div></div>';
   html += '</div>';
+  // Même agrégat qu'en vue liste : l'onglet Documents montre TOUTES les
+  // pièces jointes du voyage, quelle que soit la vue choisie.
+  html += _renderAttachSection();
   html += _docSecure(true);
   return html;
 }
@@ -11605,6 +11692,16 @@ var LU = {
   'store':'<path d="m3 7 3-4h12l3 4"/><path d="M4 7v13a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/><path d="M3 7h18"/><path d="M9 21v-6h6v6"/>',
   'image':'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
   'martini':'<path d="M8 22h8"/><path d="M12 11v11"/><path d="m19 3-7 8-7-8Z"/><path d="M7.5 6.5h9"/>',
+  // Sanctuaire : Lucide n'a PAS d'icône torii/sanctuaire (le plus proche,
+  // 'church', est une église chrétienne — inadapté). Torii dessiné en trait
+  // Lucide (2 montants + 2 linteaux), cohérent avec le reste du set.
+  'torii-gate':'<path d="M3 5h18"/><path d="M6 9h12"/><path d="M7 5v16"/><path d="M17 5v16"/>',
+  // Téléphérique — Lucide 'cable-car' (exact).
+  'cable-car':'<path d="M10 3h.01"/><path d="M14 2h.01"/><path d="m2 9 20-5"/><path d="M12 12V6.5"/><rect width="16" height="10" x="4" y="12" rx="3"/><path d="M9 12v5"/><path d="M15 12v5"/><path d="M4 17h16"/>',
+  // Vie nocturne — Lucide 'moon-star' (exact).
+  'moon-star':'<path d="M18 5h4"/><path d="M20 3v4"/><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
+  // Escale — Lucide 'anchor' (exact).
+  'anchor':'<path d="M12 6v16"/><path d="m19 13 2-1a9 9 0 0 1-18 0l2 1"/><path d="M9 11h6"/><circle cx="12" cy="4" r="2"/>',
 
   // ── Documents ──
   'book-user':'<path d="M15 13a3 3 0 1 0-6 0"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><circle cx="12" cy="8" r="2"/>',
@@ -11666,28 +11763,105 @@ function _docColor(g){
 }
 
 // ── Recâblage : catégories de lieux (icône + couleur coordonnées) ──
-function _lieuCatMeta(cat){
-  var M={
-    'Temples':{c:'#cf4d6f',i:'landmark'},
-    'Parcs':{c:'#2e9c54',i:'trees'},
-    'Randonn\u00e9es':{c:'#2e9c54',i:'footprints'},
-    'Restaurants':{c:'#c79a2e',i:'utensils'},
-    'Mus\u00e9es':{c:'#8a52c4',i:'palette'},
-    'Shopping':{c:'#d24a7a',i:'shopping-bag'},
-    'Onsen':{c:'#169c93',i:'onsen'},
-    'Ch\u00e2teaux':{c:'#c79a2e',i:'castle'},
-    'Plages':{c:'#169c93',i:'umbrella'},
-    'Points de vue':{c:'#2a7fd4',i:'binoculars'},
-    'March\u00e9s':{c:'#2e9c54',i:'store'},
-    'Galeries':{c:'#8a52c4',i:'image'},
-    // Bar : or de la famille boire/manger (Restaurants/Ch\u00e2teaux).
-    // Alias pluriel : la cat\u00e9gorie est du texte libre, on tol\u00e8re les deux.
-    'Bar':{c:'#c79a2e',i:'martini'},
-    'Bars':{c:'#c79a2e',i:'martini'}
-  };
-  var m=M[cat]||{c:'#8a93a3',i:'map-pin'};
-  return { color:m.c, tint:m.c+'1e', svg:_lu(m.i, 19) };
+// \u2500\u2500 CAT\u00c9GORIES DE LIEUX \u2014 SOURCE UNIQUE (couleur + ic\u00f4ne + mots-cl\u00e9s) \u2500\u2500
+// Couleurs = donn\u00e9es en HEX FIXE (comme MOB_COLORS), PAS var(--brand) : les
+// familles doivent rester distinctes, un accent de th\u00e8me les uniformiserait.
+// Cette table alimente \u00c0 LA FOIS la r\u00e9solution couleur/ic\u00f4ne (_lieuCatMeta,
+// donc les 5 vues) ET les datalists de suggestion (ajout + \u00e9dition) via
+// _lieuCatOptionsHtml \u2014 plus aucune liste maintenue \u00e0 la main.
+// `label` = libell\u00e9 canonique (sugg\u00e9r\u00e9) ; `kw` = mots-cl\u00e9s normalis\u00e9s
+// (singuliers, sans accent) pour l'appariement tol\u00e9rant.
+var LIEU_CATS = [
+  { label:'Temples',       c:'#cf4d6f', i:'landmark',     kw:['temple'] },
+  { label:'Sanctuaire',    c:'#cf4d6f', i:'torii-gate',   kw:['sanctuaire','shrine'] },
+  { label:'Monuments',     c:'#c2683a', i:'landmark',     kw:['monument','memorial','mausolee'] },
+  { label:'Ch\u00e2teaux', c:'#c79a2e', i:'castle',       kw:['chateau','forteresse','palais'] },
+  { label:'Mus\u00e9es',   c:'#8a52c4', i:'palette',      kw:['musee'] },
+  { label:'Galeries',      c:'#8a52c4', i:'image',        kw:['galerie','expo'] },
+  { label:'Parcs',         c:'#2e9c54', i:'trees',        kw:['parc','jardin'] },
+  { label:'Nature',        c:'#2e9c54', i:'trees',        kw:['nature','foret'] },
+  { label:'Randonn\u00e9es', c:'#2e9c54', i:'footprints', kw:['randonnee','rando','trek','hike'] },
+  { label:'Excursion',     c:'#2e9c54', i:'footprints',   kw:['excursion','balade','sortie'] },
+  { label:'T\u00e9l\u00e9ph\u00e9rique', c:'#2e9c54', i:'cable-car', kw:['telepherique','cable','ropeway'] },
+  { label:'Points de vue', c:'#2a7fd4', i:'binoculars',   kw:['vue','panorama','belvedere'] },
+  { label:'Quartiers',     c:'#5a6acf', i:'building-2',   kw:['quartier','district'] },
+  { label:'Restaurants',   c:'#c79a2e', i:'utensils',     kw:['restaurant','resto','gastronomie'] },
+  { label:'Bar',           c:'#c79a2e', i:'martini',      kw:['bar','pub'] },
+  { label:'Vie nocturne',  c:'#8a52c4', i:'moon-star',    kw:['nocturne','nuit','club','discotheque'] },
+  { label:'Shopping',      c:'#d24a7a', i:'shopping-bag', kw:['shopping','boutique','magasin'] },
+  { label:'March\u00e9s',  c:'#2e9c54', i:'store',        kw:['marche','market'] },
+  { label:'Onsen',         c:'#169c93', i:'onsen',        kw:['onsen','spa','therme','bain'] },
+  { label:'Plages',        c:'#169c93', i:'umbrella',     kw:['plage','beach'] },
+  { label:'Escale',        c:'#4f8a9c', i:'anchor',       kw:['escale','port','halte'] }
+];
+var _LIEU_CAT_FALLBACK = { c:'#8a93a3', i:'map-pin' };
+
+// Retire les accents (ES5, pas de \p{} ni de normalize d\u00e9pendant) \u2014 table
+// explicite couvrant le fran\u00e7ais.
+var _LIEU_ACCENTS = { '\u00e0':'a','\u00e2':'a','\u00e4':'a','\u00e1':'a','\u00e3':'a',
+  '\u00e9':'e','\u00e8':'e','\u00ea':'e','\u00eb':'e',
+  '\u00ee':'i','\u00ef':'i','\u00ed':'i','\u00ec':'i',
+  '\u00f4':'o','\u00f6':'o','\u00f3':'o','\u00f2':'o','\u00f5':'o',
+  '\u00fb':'u','\u00fc':'u','\u00fa':'u','\u00f9':'u',
+  '\u00e7':'c','\u00f1':'n' };
+function _lieuCatNorm(s){
+  s = String(s==null?'':s).toLowerCase();
+  var out='';
+  for(var i=0;i<s.length;i++){ var ch=s.charAt(i); out += (_LIEU_ACCENTS[ch]||ch); }
+  // tout ce qui n'est pas lettre/chiffre devient une espace, puis on compacte
+  return out.replace(/[^a-z0-9]+/g,' ').replace(/^\s+|\s+$/g,'');
 }
+// Singularise prudemment : retire un \u00ab s \u00bb/\u00ab x \u00bb final (pluriel FR), mais
+// jamais sur les mots tr\u00e8s courts (\u00e9vite \u00ab bus \u00bb\u2192\u00ab bu \u00bb).
+function _lieuCatSingular(w){
+  return (w.length>3 && /[sx]$/.test(w)) ? w.slice(0,-1) : w;
+}
+// Index mot-cl\u00e9 \u2192 descripteur (construit une fois). Les kw sont uniques entre
+// descripteurs (garanti par conception), donc un mot \u2192 au plus une cat\u00e9gorie.
+var _LIEU_KW = (function(){
+  var m={};
+  for(var i=0;i<LIEU_CATS.length;i++){
+    for(var k=0;k<LIEU_CATS[i].kw.length;k++){ m[LIEU_CATS[i].kw[k]] = LIEU_CATS[i]; }
+  }
+  return m;
+})();
+
+// R\u00e9solution en 3 niveaux (repli neutre si rien) :
+//   1. exact sur le libell\u00e9 canonique normalis\u00e9 (r\u00e9tro-compat, rapide) ;
+//   2. PREMIER mot du libell\u00e9 reconnu comme mot-cl\u00e9 (l'ordre de saisie d\u00e9cide :
+//      \u00ab Nature / T\u00e9l\u00e9ph\u00e9rique \u00bb \u2192 nature ; \u00ab Restaurant avec vue \u00bb \u2192 restaurant) ;
+//   3. sinon gris neutre.
+function _lieuCatDescriptor(cat){
+  var norm = _lieuCatNorm(cat);
+  if(!norm) return null;
+  var i;
+  for(i=0;i<LIEU_CATS.length;i++){ if(_lieuCatNorm(LIEU_CATS[i].label)===norm) return LIEU_CATS[i]; }
+  var words = norm.split(' ');
+  for(i=0;i<words.length;i++){
+    var key=_lieuCatSingular(words[i]);
+    if(key && _LIEU_KW[key]) return _LIEU_KW[key];
+  }
+  return null;
+}
+function _lieuCatMeta(cat){
+  var d = _lieuCatDescriptor(cat) || _LIEU_CAT_FALLBACK;
+  var c = d.c, ic = d.i;
+  return { color:c, tint:c+'1e', svg:_lu(ic, 19) };
+}
+// <option> des cat\u00e9gories canoniques \u2014 source unique des DEUX datalists
+// (ajout : #lieu-cat-datalist ; \u00e9dition : #el-cat-dl).
+function _lieuCatOptionsHtml(){
+  var h='';
+  for(var i=0;i<LIEU_CATS.length;i++){ h += '<option value="'+LIEU_CATS[i].label+'">'; }
+  return h;
+}
+// Remplit la datalist statique du formulaire d'ajout (d\u00e9riv\u00e9e, pas maintenue
+// \u00e0 la main). Idempotent, s\u00fbr si l'\u00e9l\u00e9ment n'existe pas encore.
+function _fillLieuCatDatalist(){
+  var dl=document.getElementById('lieu-cat-datalist');
+  if(dl) dl.innerHTML=_lieuCatOptionsHtml();
+}
+document.addEventListener('DOMContentLoaded', _fillLieuCatDatalist);
 
 // Couleur de l'HÉBERGEMENT — même valeur que la pastille de _pinIcon
 // (map-trip.js) et que _COLORS.hotel (timeline.js).
