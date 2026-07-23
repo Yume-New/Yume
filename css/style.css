@@ -120,6 +120,16 @@ body.emode-locations .elocations .edit-item-btn,
 body.emode-hotels .ehotel .edit-item-btn,
 body.emode-passes .epass .edit-item-btn,
 body.emode-lieux .elieu .edit-item-btn{visibility:visible;opacity:1;pointer-events:auto}
+/* Gouttière en mode édition : réserve la place de la pastille (right:8px + 28px + marge)
+   pour qu'elle ne recouvre plus heure/date/badges du coin haut-droit. Le bouton est ancré
+   au bord du padding-box → il ne bouge pas, seul le contenu se décale. Hors emode : inchangé. */
+body.emode-vols .evol,
+body.emode-trains .etrain,
+body.emode-mobilite .emobilite,
+body.emode-locations .elocations,
+body.emode-hotels .ehotel,
+body.emode-passes .epass,
+body.emode-lieux .elieu{padding-right:46px !important}
 body.emode-vols .evol,
 body.emode-trains .etrain,
 body.emode-mobilite .emobilite,
@@ -2552,7 +2562,13 @@ input, select, textarea {
   display:flex; align-items:center; justify-content:space-between;
   padding:calc(env(safe-area-inset-top,0px) + 8px) 18px 8px;
   background:var(--body-bg);
-  position:sticky; top:0; z-index:50;
+  /* BUG 1 : la page Profil a DEUX conteneurs de défilement imbriqués
+     (#page-profil ET #profil-scroll, tous deux overflow-y:auto). Une barre
+     sticky prise entre les deux se collait au conteneur INTERNE décalé → elle
+     se figeait au milieu de l'écran. En flux normal (static), la barre suit
+     simplement le défilement, quel que soit le conteneur qui scrolle — jamais
+     figée. Sélecteur propre à Profil, aucune autre page touchée. */
+  position:static;
 }
 .profil-topbar2-title{ color:var(--ink); font-size:20px; font-weight:700; letter-spacing:-.01em; }
 .profil-gear{

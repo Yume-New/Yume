@@ -665,9 +665,16 @@ window.plSelectDay = function(key){
     '.pl-arrow:hover{border-color:var(--brand);color:var(--brand);}',
     '.pl-today{border:1px solid var(--border);background:var(--surface);color:var(--ink);font-family:inherit;font-size:12.5px;font-weight:500;padding:7px 14px;border-radius:9px;cursor:pointer;transition:all .15s;}',
     '.pl-today:hover{border-color:var(--brand);color:var(--brand);}',
-    '.pl-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}',
+    // minmax(0,1fr) et non 1fr : 1fr = minmax(auto,1fr), dont le minimum AUTO
+    // s'élargit à la largeur min-content du contenu. Un libellé de ville long en
+    // white-space:nowrap (ex. « Taïwan (TPE Airport) ») gonflait donc sa colonne
+    // et déséquilibrait la grille. minmax(0,...) borne le minimum à 0 → 7 colonnes
+    // strictement égales, la ville tronquée (ellipsis) au lieu d'élargir.
+    '.pl-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}',
     '.pl-wd{font-size:10.5px;font-weight:600;color:var(--ink-hint);text-align:left;padding:2px 0 8px 4px;text-transform:uppercase;letter-spacing:.04em;}',
-    '.pl-cell{min-height:84px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:8px;border-radius:11px;color:var(--ink);cursor:pointer;position:relative;border:1px solid var(--border);background:var(--surface);transition:background .12s,border-color .12s,box-shadow .12s;}',
+    // min-width:0 : autorise la cellule (item de grille) à rétrécir sous la
+    // largeur min-content de son contenu → l'ellipsis de la ville s'applique.
+    '.pl-cell{min-width:0;min-height:84px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:8px;border-radius:11px;color:var(--ink);cursor:pointer;position:relative;border:1px solid var(--border);background:var(--surface);transition:background .12s,border-color .12s,box-shadow .12s;}',
     '@media (max-width:1023.98px){.pl-cell{min-height:54px;padding:5px;border-radius:8px;}}',
     '.pl-cell--blank{border-color:transparent;background:transparent;cursor:default;}',
     '.pl-cell:not(.pl-cell--blank):hover{border-color:var(--brand);box-shadow:var(--shadow-sm);}',
