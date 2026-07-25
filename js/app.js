@@ -797,6 +797,39 @@ function pickTransport(mode){
   }
 }
 
+// ── Feuille d'ajout déplacement en 2 temps (étape 4 §8.3) ──
+// 1) type (Transport/Pass/Location) ; 2) si Transport, mode (vol/train/…),
+// révélé DANS la même feuille. Un mode (ou Pass, ou Location) ouvre le
+// formulaire EXISTANT inchangé.
+function _resetTransportChoice(){
+  var m=document.getElementById('tc-modes'); if(m) m.style.display='none';
+  var t=document.getElementById('tc-type-transport'); if(t) t.classList.remove('tc-active');
+}
+function tcPickType(type){
+  if(type==='transport'){
+    var m=document.getElementById('tc-modes'); if(m) m.style.display='';
+    var t=document.getElementById('tc-type-transport'); if(t) t.classList.add('tc-active');
+    return; // on reste dans la feuille et on révèle les modes
+  }
+  closeTransportChoiceModal();
+  if(type==='pass'){ pickTransport('pass'); }
+  else if(type==='location'){ if(typeof openAddTop==='function') openAddTop('form-location'); }
+}
+function tcPickMode(mode){
+  closeTransportChoiceModal();
+  openMobiliteAs(mode);
+  setTimeout(function(){
+    var chips=document.getElementById('mob-type-chips'); if(chips) chips.style.display='';
+    var passChip=document.querySelector('#mob-type-chips .mob-chip[data-type="pass"]'); if(passChip) passChip.style.display='none';
+    var title=document.getElementById('mob-form-title');
+    if(title){
+      title.innerHTML='<span style="display:flex;align-items:center;gap:8px">'
+        +'<span style="background:#e8f0f8;color:#2d5e8c;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid rgba(45,94,140,.2)">Trajet</span>'
+        +'<span>Nouveau '+((typeof MOB_LABELS!=='undefined'&&MOB_LABELS[mode])||'Trajet')+'</span></span>';
+    }
+  }, 80);
+}
+
 
 // ══════════════════════════════════════════════════════════════════
 // clearAllModals() — Reset intégral & hermétique de TOUS les formulaires
@@ -930,6 +963,17 @@ function showHomeScreen(){
   showPage('home', homeBtn);
 }
 
+// Retour depuis la page Profil (étape 3 : la barre du bas est masquée hors
+// voyage, le Profil n'a donc plus de sortie par la barre). Retour CONTEXTUEL
+// (arbitrage Kylian) : au voyage ouvert s'il y en a un, sinon à l'Accueil.
+function profileBack(){
+  if(typeof currentTripId !== 'undefined' && currentTripId && allTrips[currentTripId]){
+    showPage('voyage');
+  } else {
+    showHomeScreen();
+  }
+}
+
 // ══════════════════════════════════════════
 // SPA — Navigation entre pages
 // ══════════════════════════════════════════
@@ -972,6 +1016,9 @@ function showPage(pageId, btn){
     }
     updateHomeTopbarStats();
     if(typeof renderTripsList === 'function') renderTripsList();
+    // Cloche d'en-tête accueil : recibler/recompter même si le héros n'a pas
+    // été rendu (aucun voyage → renderHomeHero sort avant _refreshBellBadge).
+    if(typeof _refreshBellBadge === 'function') _refreshBellBadge();
   } else if(pageId === 'voyage'){
     // Si un voyage est actif, (ré)afficher son contenu proprement ;
     // sinon montrer le placeholder.
@@ -1050,6 +1097,49 @@ var _deplActive = 'mobilite';   // partie déplacement par défaut : Transport
 var _lastNavId = null;      // dernière sous-section nav (optimisation rebuild)
 
 // ══════════════════════════════════════════════════════════════════════
+// PAGES MOBILES (étape 3 refonte nav §8.3) — belt découpé PAR PAGE.
+// Chaque page mobile n'expose dans le belt QUE ses propres sections : le
+// swipe horizontal ne peut donc PAS franchir une frontière de page (les
+// sections des autres pages sont display:none, hors flux de scroll-snap).
+// Changement de PAGE = barre du bas (#voyage-tabbar), affichage DIRECT sans
+// animation de contenu. Changement de SOUS-SECTION = glissement horizontal
+// conservé (tap smooth + swipe natif) DANS la page. MOBILE UNIQUEMENT :
+// le desktop garde son rail plat + toutes les sections (règles !important).
+var _currentPage = 'organiser';   // organiser | timeline | carte | budget
+function _pageForSection(s){
+  if(s === 'timeline') return 'timeline';
+  if(s === 'carte')    return 'carte';
+  if(s === 'budget' || s === 'convertir') return 'budget';
+  return 'organiser';  // mobilite/pass/locations/hotels/lieux/documents
+}
+// Sections du belt exposées pour une page, DANS L'ORDRE DOM (piège §5.7 :
+// ce tableau, l'ordre DOM des <section> et l'ordre des sous-onglets doivent
+// rester alignés). Les 3 sous-vues Déplacement restent groupées : seule la
+// partie active (_deplActive) occupe le slot « Déplacements » (slot 0).
+function _pageBeltSections(pageId){
+  // Étape 4 : « Déplacements » est une PAGE UNIQUE (#tab-mobilite) qui fusionne
+  // transports + pass + locations. Plus de slot _deplActive.
+  if(pageId === 'organiser') return ['mobilite', 'hotels', 'lieux', 'documents'];
+  if(pageId === 'timeline')  return ['timeline'];
+  if(pageId === 'budget')    return (SECTION_ORDER.indexOf('convertir') !== -1) ? ['budget','convertir'] : ['budget'];
+  return [];  // carte : hors belt (#voyage-map-host)
+}
+// Expose UNIQUEMENT les sections de la page (mobile) ; les autres en
+// display:none (hors flux de scroll). Sur desktop, les règles !important
+// (.section{display:none} / .section.active{display:block}) dominent cet
+// inline → aucun effet, desktop intact.
+function _exposePageSections(pageId){
+  var wanted = _pageBeltSections(pageId);
+  ['pass','mobilite','locations','hotels','lieux','documents','timeline','alertes','budget','convertir']
+    .forEach(function(s){
+      var el = document.getElementById('tab-' + s);
+      if(!el) return;
+      el.style.display = (wanted.indexOf(s) !== -1) ? '' : 'none';
+    });
+}
+function _isMobileNav(){ return window.innerWidth < 1024; }
+
+// ══════════════════════════════════════════════════════════════════════
 // NAVIGATION À DEUX NIVEAUX (refonte ergonomique)
 // Niveau 1 : 4 groupes — Logistique / Activités / Finance / Carte
 // Niveau 2 : sous-sections de chaque groupe (réutilise switchSection)
@@ -1100,6 +1190,7 @@ var SUB_ICONS = {
   budget:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1.3"/>',
   convertir:'<path d="M4 9h13l-3-3M20 15H7l3 3"/>',
   carte:'<path d="M9 4 3 7v13l6-3 6 3 6-3V4l-6 3z"/><path d="M9 4v13M15 7v13"/>',
+  organiser:'<path d="M9 4H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>',
   deplacements:'<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8.2 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.8"/>',
   documents:'<path d="M14 3v5a1 1 0 0 0 1 1h5"/><path d="M9 4H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M9 13h6M9 17h4"/>'
 };
@@ -1174,25 +1265,52 @@ function _mobileActiveTab(){
   return 'organiser';
 }
 
+// BARRE DU BAS (étape 3) — les 4 onglets Organiser/Planning/Carte/Budget,
+// dans #voyage-tabbar (mobile, fixé en bas). Contenu statique ; l'état actif
+// et le slider sont gérés par _syncVoyageTabbar.
+function _buildVoyageTabbar(){
+  var bar = document.getElementById('voyage-tabbar');
+  if(!bar) return;
+  var activeId = _mobileActiveTab();
+  var h = '<span id="vtb-slider" aria-hidden="true"></span>';
+  MOBILE_TABS.forEach(function(t){
+    h += '<button type="button" class="vtb-tab' + (t.id === activeId ? ' active' : '') + '" '
+       + 'data-tab="' + t.id + '" onclick="goToPage(\'' + t.id + '\')">'
+       + _subIcon(t.id) + '<span>' + t.label + '</span></button>';
+  });
+  bar.innerHTML = h;
+}
+// Met à jour l'onglet actif de la barre du bas + repositionne le slider.
+function _syncVoyageTabbar(){
+  var activeId = _mobileActiveTab();
+  document.querySelectorAll('#voyage-tabbar .vtb-tab').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-tab') === activeId);
+  });
+  if(typeof _moveVtbSlider === 'function') _moveVtbSlider();
+}
+function _moveVtbSlider(){
+  var bar = document.getElementById('voyage-tabbar');
+  if(!bar) return;
+  var slider = document.getElementById('vtb-slider');
+  var act = bar.querySelector('.vtb-tab.active');
+  if(!slider || !act) return;
+  slider.style.width = act.offsetWidth + 'px';
+  slider.style.transform = 'translateX(' + act.offsetLeft + 'px)';
+}
+
+// RANGÉE DE SOUS-SECTIONS (haut) — #voyage-mobile-nav ne porte plus les
+// 4 onglets (descendus en bas) : seulement les sous-sections de la page
+// active (Organiser : Déplac/Héberg/Lieux/Docs + parties ; Budget :
+// Budget/Convertir). Vide (repliée) sur Planning et Carte.
 function _buildMobileNav(){
   var nav = document.getElementById('voyage-mobile-nav');
   if(!nav) return;
   var cur = _navCurrent();
   var activeId = _mobileActiveTab();
   var activeTab = null;
+  MOBILE_TABS.forEach(function(t){ if(t.id === activeId) activeTab = t; });
 
-  // Rangée 1 — barre unique à 4 entrées (icônes filaires : Planning + Carte)
-  var r1 = '<div class="vmn-tabs">';
-  MOBILE_TABS.forEach(function(t){
-    if(t.id === activeId) activeTab = t;
-    var ico = (t.id === 'timeline' || t.id === 'carte') ? _subIcon(t.id) : '';
-    r1 += '<button type="button" class="vmn-tab' + (t.id === activeId ? ' active' : '') + '" '
-        + 'data-tab="' + t.id + '" onclick="mobileSelectTab(\'' + t.id + '\')">'
-        + ico + '<span>' + t.label + '</span></button>';
-  });
-  r1 += '</div>';
-
-  // Rangée 2 — sous-sections de l'entrée active (crème), si plusieurs
+  // Rangée 2 — sous-sections de la page active (si plusieurs)
   var r2 = '';
   var subs = (activeTab && activeTab.items) ? _navItems(activeTab) : [];
   if(subs.length > 1){
@@ -1206,38 +1324,52 @@ function _buildMobileNav(){
     r2 += '</div>';
   }
 
-  // Rangée 3 (optionnelle) — parties de « Déplacements » : Pass / Transport /
-  // Location, soulignées selon la partie courante (swipe vertical).
-  var r3 = '';
-  if(cur === 'deplacements'){
-    var partLbl = { pass:'Pass', mobilite:'Transport', locations:'Location' };
-    r3 = '<div class="vmn-parts">';
-    _DEPL.forEach(function(p){
-      r3 += '<button type="button" class="vmn-part' + (p === _deplActive ? ' active' : '') + '" '
-          + 'data-part="' + p + '" onclick="mobileGoPart(\'' + p + '\')">'
-          + partLbl[p] + '</button>';
-    });
-    r3 += '</div>';
+  // (Étape 4 : la rangée 3 « parties » Transport/Pass/Location est SUPPRIMÉE
+  //  — les 3 types cohabitent désormais dans la page unique Déplacements.)
+  nav.innerHTML = r2;
+  _syncVoyageTabbar();
+}
+
+// Tap sur un onglet de la barre du bas : change de PAGE (affichage direct,
+// sans animation de contenu). Décision Kylian : on retombe TOUJOURS sur la
+// 1re sous-section de la page (pas de mémorisation).
+function goToPage(pageId){
+  _currentPage = pageId;
+  var sections = document.getElementById('voyage-sections');
+  var mapHost  = document.getElementById('voyage-map-host');
+
+  if(pageId === 'carte'){
+    _currentSection = 'carte';
+    if(sections) sections.style.display = 'none';
+    if(mapHost){
+      mapHost.style.display = '';
+      mapHost.classList.add('is-visible');
+      mapHost.classList.remove('is-full');
+      if(typeof initTripMap === 'function') initTripMap();
+      setTimeout(function(){
+        if(window._tripmapInstance && window._tripmapInstance.invalidateSize) window._tripmapInstance.invalidateSize();
+      }, 160);
+    }
+    _syncVoyageTabbar();
+    _buildMobileNav();
+    return;
   }
 
-  nav.innerHTML = r1 + r2 + r3;
+  if(mapHost){ mapHost.style.display = 'none'; mapHost.classList.remove('is-visible'); }
+  if(sections) sections.style.display = '';
+  if(pageId === 'organiser') _deplActive = 'mobilite';   // 1re sous-section
+  var first = _pageBeltSections(pageId)[0] || 'mobilite';
+  switchSection(first, null, { animate:false });          // affichage DIRECT
+  _syncVoyageTabbar();
+  _buildMobileNav();
 }
 
-// Tap sur une entrée de la barre (rangée 1) : Planning/Carte naviguent
-// directement ; Organiser/Budget basculent vers leur 1re sous-section
-// si on n'y est pas déjà.
-function mobileSelectTab(id){
-  if(id === 'timeline' || id === 'carte'){ goToSection(id, null); return; }
-  var tab = null;
-  MOBILE_TABS.forEach(function(t){ if(t.id === id) tab = t; });
-  var items = (tab && tab.items) ? _navItems(tab) : [];
-  if(!items.length) return;
-  if(items.indexOf(_navCurrent()) === -1){ goToSection(items[0]); }
-  else { _buildMobileNav(); }
-}
-// Tap sur une sous-section (rangée 2)
+// Compat : l'ancien nom mobileSelectTab reste appelé par du code existant.
+function mobileSelectTab(id){ goToPage(id); }
+
+// Tap sur une sous-section (rangée 2) — glissement horizontal animé.
 function mobileGoSub(s){
-  goToSection(s);
+  goToSection(s, null, { animate:true });
   _buildMobileNav();
 }
 
@@ -1246,17 +1378,8 @@ function mobileGoSub(s){
 // L'indicateur sous la barre montre la partie déplacement courante et
 // permet d'y sauter directement.
 
-// Met à jour uniquement le soulignement des parties (sans reconstruire la nav)
-function _syncDeplParts(){
-  document.querySelectorAll('.vmn-part').forEach(function(b){
-    b.classList.toggle('active', b.getAttribute('data-part') === _deplActive);
-  });
-}
-// Tap sur une partie (Pass / Transport / Location) → navigation horizontale directe
-function mobileGoPart(s){
-  goToSection(s);
-  _syncDeplParts();
-}
+// (Étape 4 : _syncDeplParts / mobileGoPart supprimés — plus de rangée de
+//  parties Transport/Pass/Location, la page Déplacements est unifiée.)
 
 // Affiche TOUTES les sections du belt (nav à plat). 'alertes' reste masquée.
 function _exposeAllSections(){
@@ -1271,7 +1394,7 @@ function _exposeAllSections(){
 // Aiguillage d'un item de la barre à plat : 'carte' affiche le host carte,
 // 'deplacements' résout vers la dernière sous-vue (pass/transport/location),
 // sinon on montre le belt de sections et on bascule dessus.
-function goToSection(id, btn){
+function goToSection(id, btn, opts){
   if(id === 'deplacements'){ id = 'mobilite'; _deplActive = 'mobilite'; }
   // L'item de nav surligné est « Déplacements » pour les 3 sous-vues
   var navId = (_DEPL.indexOf(id) !== -1) ? 'deplacements' : id;
@@ -1282,6 +1405,7 @@ function goToSection(id, btn){
   var mapHost  = document.getElementById('voyage-map-host');
 
   if(id === 'carte'){
+    _currentPage = 'carte';
     _currentSection = 'carte';
     if(sections) sections.style.display = 'none';
     if(mapHost){
@@ -1295,33 +1419,21 @@ function goToSection(id, btn){
         if(window._tripmapInstance && window._tripmapInstance.invalidateSize) window._tripmapInstance.invalidateSize();
       }, 160);
     }
+    if(typeof _syncVoyageTabbar === 'function') _syncVoyageTabbar();
     if(typeof _buildMobileNav === 'function') _buildMobileNav();
     return;
   }
 
   if(mapHost){ mapHost.style.display = 'none'; mapHost.classList.remove('is-visible'); }
   if(sections) sections.style.display = '';
-  switchSection(id, btn);
+  _currentPage = _pageForSection(id);
+  switchSection(id, btn, opts);
+  if(typeof _syncVoyageTabbar === 'function') _syncVoyageTabbar();
   if(typeof _buildMobileNav === 'function') _buildMobileNav();
 }
 
-// Sélecteur 3 icônes (Pass / Transport / Location) injecté en haut de
-// chacun des 3 panneaux déplacement. Chaque panneau surligne sa propre vue.
-function _buildDeplSwitch(){
-  var labels = { pass:'Pass', mobilite:'Transport', locations:'Location' };
-  _DEPL.forEach(function(sec){
-    var host = document.getElementById('tab-' + sec);
-    if(!host || host.querySelector('.depl-switch')) return;
-    var sw = document.createElement('div');
-    sw.className = 'depl-switch';
-    sw.innerHTML = _DEPL.map(function(o){
-      var act = (o === sec) ? ' active' : '';
-      return '<button class="depl-seg'+act+'" type="button" onclick="goToSection(\''+o+'\',null)">'
-        + _subIcon(o) + '<span>' + labels[o] + '</span></button>';
-    }).join('');
-    host.insertBefore(sw, host.firstChild);
-  });
-}
+// (Étape 4 : _buildDeplSwitch supprimé — le sélecteur 3 segments intra-section
+//  Transport/Pass/Location n'a plus lieu d'être, la page est unifiée.)
 
 // Affiche uniquement les sections du groupe actif dans le belt
 // (les sections des autres groupes sont retirées du flux → le swipe
@@ -1366,7 +1478,7 @@ function switchGroup(groupId, btn){
 // ── Lazy render : sections rendues uniquement au premier accès ──
 var _sectionRendered = {};
 
-function switchSection(id, btn){
+function switchSection(id, btn, opts){
   // Fermer tout formulaire modal ouvert avant de changer de section
   if(typeof _closeFormModal === 'function' && typeof _currentOpenForm !== 'undefined' && _currentOpenForm){
     _closeFormModal(_currentOpenForm, true);
@@ -1374,8 +1486,16 @@ function switchSection(id, btn){
   _currentSection = id;
   if(_DEPL.indexOf(id) !== -1){ _deplActive = id; }
 
-  // Nav à plat : toutes les sections du belt sont exposées en permanence.
-  if(typeof _exposeAllSections === 'function') _exposeAllSections();
+  // Exposition du belt : MOBILE → seulement les sections de la page courante
+  // (le swipe ne peut pas franchir une frontière de page) ; DESKTOP → toutes
+  // (rail plat inchangé). Voir §8.3 / piège §5.7.
+  var mobile = _isMobileNav();
+  if(mobile){
+    _currentPage = _pageForSection(id);
+    _exposePageSections(_currentPage);
+  } else if(typeof _exposeAllSections === 'function'){
+    _exposeAllSections();
+  }
 
   // Update nav pills — les 3 sous-vues déplacement surlignent « Déplacements »
   var navId = (_DEPL.indexOf(id) !== -1) ? 'deplacements' : id;
@@ -1390,14 +1510,18 @@ function switchSection(id, btn){
   // Repositionner le slider animé sous la section active
   if(typeof _moveSectionSlider === 'function') _moveSectionSlider();
 
-  // Scroll the snap container — index dans la liste à plat des sections.
+  // Scroll du belt — MOBILE uniquement. Index LOCAL dans les sections
+  // exposées de la page (pas l'index global SECTION_ORDER). Animation :
+  // 'smooth' pour un changement de sous-section (tap), 'auto' (direct) pour
+  // un changement de page. Le desktop n'a pas de scroll horizontal (§CSS).
   var container = document.getElementById('voyage-sections');
   var sec = document.getElementById('tab-' + id);
-  if(container && sec){
-    var idx2 = SECTION_ORDER.indexOf(id);
-    if(idx2 < 0) idx2 = 0;
+  if(mobile && container && sec){
+    var exposed = _pageBeltSections(_currentPage);
+    var local = exposed.indexOf(id); if(local < 0) local = 0;
     var sectionWidth = container.clientWidth || window.innerWidth;
-    container.scrollTo({left: idx2 * sectionWidth, behavior: 'auto'});
+    var beh = (opts && opts.animate) ? 'smooth' : 'auto';
+    container.scrollTo({left: local * sectionWidth, behavior: beh});
   }
 
   // Keep legacy .section.active for render callbacks
@@ -1487,13 +1611,9 @@ function _adaptSectionsForTrip(tid){
           document.querySelectorAll('.vsn-item').forEach(function(b){
             b.classList.toggle('active', b.getAttribute('data-tab') === navId);
           });
-          // Optimisation : en swipant pass→transport→location (toujours dans
-          // « Déplacements »), on met juste à jour le soulignement des parties.
-          if(navId === 'deplacements' && _lastNavId === 'deplacements'){
-            if(typeof _syncDeplParts === 'function') _syncDeplParts();
-          } else if(typeof _buildMobileNav === 'function'){
-            _buildMobileNav();
-          }
+          // (Étape 4 : plus de sous-vues parties dans « Déplacements » — la page
+          //  est unifiée. On reconstruit simplement la rangée de sous-sections.)
+          if(typeof _buildMobileNav === 'function') _buildMobileNav();
           _lastNavId = navId;
           // Update active section class
           document.querySelectorAll('.section').forEach(function(s){
@@ -1537,77 +1657,12 @@ function _adaptSectionsForTrip(tid){
   }
 })();
 
-// ── Coutures de swipe autour de la Carte (fusion A1) ──────────────────
-// Ordre visuel de la nav : Organiser · Planning · Carte · Budget.
-// Le belt scroll-snap gère nativement toutes les transitions SAUF celles
-// qui touchent la Carte, qui vit HORS belt (#voyage-map-host) :
-//   · Planning —doigt vers la gauche (dx<0, révèle la droite)→ Carte
-//     (sinon fuite native vers Budget, voisin PHYSIQUE de droite) ;
-//   · Budget —doigt vers la droite (dx>0, révèle la gauche)→ Carte
-//     (sinon retour natif vers Planning, voisin PHYSIQUE de gauche) ;
-//   · Carte → Planning / Budget : intercepté sur la LISTE sous la carte
-//     uniquement (mobile < 1024 px) — le canvas Leaflet garde son pan
-//     (décision produit : ne pas intercepter le tactile de la carte).
-// Les autres directions ne sont PAS interceptées : le scroll-snap natif
-// fait le bon geste (Planning→Documents, Budget→Convertir).
-(function initCarteSeamSwipe(){
-  var TH_HORIZ = 8;   // seuil px pour reconnaître l'intention horizontale
-  var TH_GO    = 45;  // seuil px pour valider la navigation
-
-  // dirLeft / dirRight : section cible pour un doigt allant vers la
-  // gauche (dx<0) / vers la droite (dx>0). null = geste natif du belt.
-  function attach(el, dirLeft, dirRight, mobileOnly){
-    var x0 = 0, y0 = 0, horiz = false, capture = false, tracking = false;
-
-    el.addEventListener('touchstart', function(e){
-      if(e.touches.length !== 1){ tracking = false; return; }
-      if(mobileOnly && window.innerWidth >= 1024){ tracking = false; return; }
-      tracking = true; horiz = false; capture = false;
-      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
-    }, {passive:true});
-
-    el.addEventListener('touchmove', function(e){
-      if(!tracking) return;
-      var dx = e.touches[0].clientX - x0;
-      var dy = e.touches[0].clientY - y0;
-      // Intention horizontale nette → décider une fois pour ce geste.
-      if(!horiz && Math.abs(dx) > TH_HORIZ && Math.abs(dx) > Math.abs(dy) * 1.3){
-        horiz = true;
-        // On ne capture que si cette direction est interceptée ; sinon
-        // le scroll-snap natif du belt reste maître du geste.
-        capture = (dx < 0) ? !!dirLeft : !!dirRight;
-      }
-      // Bloque le scroll-snap natif uniquement sur un geste capturé.
-      // Le scroll vertical de la section reste libre (on ne bloque pas).
-      if(horiz && capture && e.cancelable){ e.preventDefault(); }
-    }, {passive:false});
-
-    el.addEventListener('touchend', function(e){
-      if(!tracking) return;
-      tracking = false;
-      if(!horiz || !capture) return;
-      var dx = e.changedTouches[0].clientX - x0;
-      var target = (dx < 0) ? dirLeft : dirRight;
-      if(target && Math.abs(dx) >= TH_GO && typeof goToSection === 'function'){
-        goToSection(target, null);
-      }
-    }, {passive:true});
-  }
-
-  function init(){
-    var pl = document.getElementById('tab-timeline');
-    var bu = document.getElementById('tab-budget');
-    var ml = document.getElementById('tripmap-list-wrap');
-    if(pl) attach(pl, 'carte', null, false);
-    if(bu) attach(bu, null, 'carte', false);
-    if(ml) attach(ml, 'budget', 'timeline', true);
-  }
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
+// ── initCarteSeamSwipe SUPPRIMÉ (étape 3 refonte nav §8.3) ─────────────
+// Il n'existait que pour arbitrer le swipe INTER-pages autour de la Carte
+// (hors belt) avec le pan Leaflet et le carrousel. Désormais chaque page a
+// son belt local (sections des autres pages en display:none) : le swipe ne
+// peut PLUS franchir une frontière de page, il n'y a donc plus de couture à
+// intercepter. Le changement de page passe par la barre du bas #voyage-tabbar.
 
 
 
@@ -1999,12 +2054,15 @@ function showAppScreen(){
   if(typeof _applyRailState === 'function') _applyRailState();
   // Update progress bar
   if(typeof updateVoyageProgressBar === 'function') updateVoyageProgressBar();
-  // Construit la barre de navigation à plat (toutes les destinations),
-  // injecte le sélecteur Pass/Transport/Location, et atterrit sur Déplacements.
+  // Construit la nav desktop (rail plat) + la barre du bas mobile (4 onglets),
+  // injecte le sélecteur Pass/Transport/Location, et atterrit sur Organiser
+  // (Déplacements). Ouvrir un voyage arrive TOUJOURS sur Organiser.
   _currentSection = 'mobilite';
+  _currentPage = 'organiser';
   if(typeof _buildSubNav === 'function') _buildSubNav();
-  if(typeof _buildDeplSwitch === 'function') _buildDeplSwitch();
-  goToSection('deplacements', null);
+  // (Étape 4 : plus de _buildDeplSwitch — la page Déplacements est unifiée.)
+  if(typeof _buildVoyageTabbar === 'function') _buildVoyageTabbar();
+  goToPage('organiser');
 }
 
 
@@ -2235,6 +2293,134 @@ function _bellTargetTrip(){
   return _featuredTrip().id;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// TIROIR DE NAVIGATION (mobile) — Étape 1 refonte nav §8.3
+// Navigation PURE : Accueil, liste des voyages groupée, Nouveau voyage.
+// Overlay : n'ouvre/ferme qu'une classe body → ne démonte JAMAIS le
+// voyage (position de défilement préservée). Rendu à chaque ouverture,
+// réutilise _featuredTrip() (voyage « À la une ») et parseDDMMYYYY.
+// ══════════════════════════════════════════════════════════════════
+var _ND_MOIS = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+function _navDrawerState(m, now){
+  var dep = m.dateDep ? parseDDMMYYYY(m.dateDep) : null;
+  var ret = m.dateRet ? parseDDMMYYYY(m.dateRet) : null;
+  if(dep && ret && now >= dep && now <= ret) return 'ongoing';
+  if(dep && dep > now) return 'upcoming';
+  if(ret || dep) return 'past';
+  return 'nodate';
+}
+function _navDrawerRange(m){
+  var dep = m.dateDep ? parseDDMMYYYY(m.dateDep) : null;
+  var ret = m.dateRet ? parseDDMMYYYY(m.dateRet) : null;
+  function dm(x){ return x.getDate()+' '+_ND_MOIS[x.getMonth()]; }
+  if(dep && ret){
+    if(dep.getFullYear()===ret.getFullYear()){
+      var left = (dep.getMonth()===ret.getMonth()) ? (''+dep.getDate()) : dm(dep);
+      return left+' – '+dm(ret)+' '+ret.getFullYear();
+    }
+    return dm(dep)+' '+dep.getFullYear()+' – '+dm(ret)+' '+ret.getFullYear();
+  }
+  if(dep) return dm(dep)+' '+dep.getFullYear();
+  return 'Dates à définir';
+}
+function _navDrawerFeaturedSub(m, now){
+  var DAY = 86400000;
+  var st = _navDrawerState(m, now);
+  var dep = m.dateDep ? parseDDMMYYYY(m.dateDep) : null;
+  var ret = m.dateRet ? parseDDMMYYYY(m.dateRet) : null;
+  if(st==='ongoing'){
+    var total = Math.max(1, Math.round((ret-dep)/DAY)+1);
+    var jour  = Math.min(total, Math.round((now-dep)/DAY)+1);
+    return 'jour '+jour+' / '+total;
+  }
+  if(st==='upcoming'){
+    var j = Math.round((dep-now)/DAY);
+    return j===0 ? "Aujourd'hui" : (j===1 ? 'Demain' : 'Dans '+j+' jours');
+  }
+  if(st==='past') return 'Terminé';
+  return _navDrawerRange(m);
+}
+function _navDrawerYear(m){
+  var ret = m.dateRet ? parseDDMMYYYY(m.dateRet) : null;
+  var dep = m.dateDep ? parseDDMMYYYY(m.dateDep) : null;
+  var d = ret || dep;
+  return d ? (''+d.getFullYear()) : '';
+}
+function _renderNavDrawerTrips(){
+  var host = document.getElementById('nav-drawer-trips');
+  if(!host) return;
+  var ids = Object.keys(allTrips || {});
+  if(!ids.length){ host.innerHTML = '<div class="nd-group-title" style="opacity:.6">Aucun voyage</div>'; return; }
+  var now = new Date(); now.setHours(0,0,0,0);
+  var featId = _featuredTrip().id;
+  var cur = (typeof currentTripId !== 'undefined') ? currentTripId : null;
+  var avenir = [], passes = [];
+  ids.forEach(function(tid){
+    if(tid === featId) return;
+    var m = (allTrips[tid] && allTrips[tid].meta) || {};
+    if(_navDrawerState(m, now) === 'past') passes.push(tid); else avenir.push(tid);
+  });
+  function depKey(tid){ var m=(allTrips[tid]&&allTrips[tid].meta)||{}; var d=m.dateDep?parseDDMMYYYY(m.dateDep):null; return d?d.getTime():Infinity; }
+  function retKey(tid){ var m=(allTrips[tid]&&allTrips[tid].meta)||{}; var d=(m.dateRet?parseDDMMYYYY(m.dateRet):(m.dateDep?parseDDMMYYYY(m.dateDep):null)); return d?d.getTime():0; }
+  avenir.sort(function(a,b){ return depKey(a)-depKey(b); });
+  passes.sort(function(a,b){ return retKey(b)-retKey(a); });
+
+  function rowHtml(tid, sub, featured){
+    var m = (allTrips[tid] && allTrips[tid].meta) || {};
+    var name = m.name || m.country || 'Voyage';
+    var isCur = (tid === cur);
+    return '<button class="nd-trip'+(featured?' featured':'')+(isCur?' current':'')+'" data-tid="'+_tlEsc(String(tid))+'">'
+      + '<span class="nd-trip-head">'
+        + (isCur ? '<span class="nd-dot" aria-hidden="true"></span>' : '')
+        + '<span class="nd-trip-name">'+_tlEsc(name)+'</span>'
+      + '</span>'
+      + (sub ? '<span class="nd-trip-sub">'+_tlEsc(sub)+'</span>' : '')
+    + '</button>';
+  }
+
+  var html = '';
+  if(featId){
+    var fm = (allTrips[featId] && allTrips[featId].meta) || {};
+    html += '<div class="nd-group-title">À la une</div>' + rowHtml(featId, _navDrawerFeaturedSub(fm, now), true);
+  }
+  if(avenir.length){
+    html += '<div class="nd-group-title">À venir</div>';
+    avenir.forEach(function(tid){ html += rowHtml(tid, _navDrawerRange((allTrips[tid]&&allTrips[tid].meta)||{}), false); });
+  }
+  if(passes.length){
+    html += '<div class="nd-group-title">Passés · '+passes.length+'</div>';
+    passes.forEach(function(tid){ html += rowHtml(tid, _navDrawerYear((allTrips[tid]&&allTrips[tid].meta)||{}), false); });
+  }
+  host.innerHTML = html;
+  // Câblage sans interpolation d'id dans un onclick (piège §5.1)
+  var btns = host.querySelectorAll('.nd-trip');
+  for(var i=0;i<btns.length;i++){
+    btns[i].onclick = function(){ _navDrawerOpenTrip(this.getAttribute('data-tid')); };
+  }
+}
+function openNavDrawer(){
+  _renderNavDrawerTrips();
+  document.body.classList.add('nav-drawer-open');
+  var d=document.getElementById('nav-drawer'); if(d) d.setAttribute('aria-hidden','false');
+  var s=document.getElementById('nav-drawer-scrim'); if(s) s.setAttribute('aria-hidden','false');
+  document._navDrawerEsc = function(e){ if(e.key === 'Escape') closeNavDrawer(); };
+  document.addEventListener('keydown', document._navDrawerEsc);
+}
+function closeNavDrawer(){
+  document.body.classList.remove('nav-drawer-open');
+  var d=document.getElementById('nav-drawer'); if(d) d.setAttribute('aria-hidden','true');
+  var s=document.getElementById('nav-drawer-scrim'); if(s) s.setAttribute('aria-hidden','true');
+  if(document._navDrawerEsc){ document.removeEventListener('keydown', document._navDrawerEsc); document._navDrawerEsc=null; }
+}
+function _navDrawerGoHome(){ closeNavDrawer(); showHomeScreen(); }
+function _navDrawerNewTrip(){ closeNavDrawer(); if(typeof openCreateModal==='function') openCreateModal(); }
+function _navDrawerOpenTrip(tid){
+  closeNavDrawer();
+  // Taper le voyage déjà ouvert : ne pas le re-monter (préserve le défilement).
+  if(typeof currentTripId !== 'undefined' && tid === currentTripId) return;
+  if(typeof openTrip==='function') openTrip(tid);
+}
+
 function renderHomeHero(){
   var el = document.getElementById('home-hero');
   if(!el) return;
@@ -2279,15 +2465,12 @@ function renderHomeHero(){
   var ICO_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
   var ICO_CAL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="14" height="14"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>';
   var ICO_USER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="14" height="14"><circle cx="12" cy="8" r="4"/><path d="M5 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg>';
-  var ICO_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="19" height="19"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>';
 
   el.innerHTML = ''
     + '<div class="hh-bg" aria-hidden="true"></div>'
     + '<div class="hh-top">'
       + '<div class="hh-greet"><span class="hh-hi">' + hello + '</span>'
       + '<span class="hh-kicker">' + kicker + '</span></div>'
-      + '<button class="hh-bell" data-trip="' + best + '" onclick="event.stopPropagation();openBellPanel(\'' + best + '\')" aria-label="Échéances et alertes du voyage">'
-        + ICO_BELL + '</button>'
     + '</div>'
     + '<div class="hh-body">'
       + (pill ? '<span class="hh-pill hh-pill-'+pillCls+'">' + ICO_CLOCK + ' ' + pill + '</span>' : '')
@@ -2312,27 +2495,26 @@ function renderHomeHero(){
 // badge. Appelé au rendu du héros ET par smart-alerts.js après son init :
 // le PREMIER rendu de l'Accueil précède le chargement du module (dernier
 // script de la page), le badge serait sinon absent au premier affichage.
-// Rafraîchit le badge de TOUTES les cloches présentes : celle du héros
-// d'accueil (.hh-bell, mobile) et celle de l'en-tête desktop (#tb-bell).
-// Chacune porte son propre data-trip ; la desktop suit le voyage ACTIF et
-// est donc réévaluée à chaque ouverture de voyage.
+// Rafraîchit le badge de TOUTES les cloches présentes : en-tête voyage
+// (#app-bell, mobile), en-tête accueil (#home-bell, mobile) et rail desktop
+// (#tb-bell). Chacune porte son propre data-trip, posé ci-dessus.
+function _bellSetTarget(bell, tid){
+  if(!bell) return;
+  if(tid){ bell.setAttribute('data-trip', tid); bell.style.display = ''; }
+  else   { bell.removeAttribute('data-trip'); bell.style.display = 'none'; } // rien à signaler
+}
 function _refreshBellBadge(){
   if(!window.SmartAlerts || !SmartAlerts.bellReport) return;
 
-  // Cloche desktop : cible recalculée (voyage actif, sinon à la une)
-  var deskBell = document.getElementById('tb-bell');
-  if(deskBell){
-    var dtid = _bellTargetTrip();
-    if(dtid){
-      deskBell.setAttribute('data-trip', dtid);
-      deskBell.style.display = '';
-    } else {
-      deskBell.removeAttribute('data-trip');
-      deskBell.style.display = 'none';   // aucun voyage → rien à signaler
-    }
-  }
+  // Cloche desktop (rail) : voyage actif, sinon à la une.
+  _bellSetTarget(document.getElementById('tb-bell'), _bellTargetTrip());
+  // Cloche en-tête VOYAGE (mobile) : le voyage OUVERT.
+  var openTid = (typeof currentTripId !== 'undefined' && currentTripId && allTrips[currentTripId]) ? currentTripId : null;
+  _bellSetTarget(document.getElementById('app-bell'), openTid);
+  // Cloche en-tête ACCUEIL (mobile) : le voyage à la une.
+  _bellSetTarget(document.getElementById('home-bell'), _featuredTrip().id);
 
-  document.querySelectorAll('.hh-bell, #tb-bell').forEach(function(bell){
+  document.querySelectorAll('#tb-bell, #app-bell, #home-bell').forEach(function(bell){
     var tid = bell.getAttribute('data-trip');
     var old = bell.querySelector('.hh-bell-badge');
     if(old) old.remove();
@@ -5548,15 +5730,8 @@ function _updatePassesPinTop(){
   if(trajetsSep) trajetsSep.style.display = (hasPasses && mobilites && mobilites.length) ? '' : 'none';
 }
 
-function renderPasses(){
-  var el=document.getElementById('passes-list');
-  if(!el) return;
-  el.style.display='';
-  if(!passes.length){
-    el.innerHTML='<div class="empty-state"><div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M2 12h20"/><circle cx="7" cy="12" r="1.5"/></svg></div><div class="es-title">Aucun pass enregistré</div><div class="es-sub">Ajoute ton JR Pass ou autre pass ferroviaire ci-dessous.</div><button class="es-cta" onclick="pickTransport(\'pass\')">+ Ajouter un pass</button></div>';
-    return;
-  }
-  el.innerHTML=passes.map(function(p){
+// Carte d'un pass (gabarit « ticket » à liseré ambré via .pass-card).
+function _passCard(p, typeBadge){
     var sc=p.statut==='Activé'?'badge-green':p.statut==='Non activé'?'badge-gold':'badge-muted';
     var avt=p.avantages?p.avantages.split(',').map(function(a){
       return '<span class="badge badge-sakura" style="margin-right:4px">'+a.trim()+'</span>';
@@ -5572,8 +5747,9 @@ function renderPasses(){
         +(emodes&&emodes.passes ? '<button class="pdf-del-btn" data-pid="'+p.pdfId+'" data-passid="'+p.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>' : '')
       +'</div>';
     }
+    var tb = typeBadge ? '<span class="depl-type-badge depl-badge-pass">Pass</span>' : '';
     return '<div class="pass-card item-wrap epass" style="position:relative" data-detail-cat="pass" data-detail-id="'+p.id+'">'
-      +'<div class="pass-title">'+p.nom+' <span class="badge '+sc+'">'+p.statut+'</span></div>'
+      +'<div class="pass-title">'+tb+p.nom+' <span class="badge '+sc+'">'+p.statut+'</span></div>'
       +(validite?'<div class="pass-info">'+validite+(p.numero?' · N° <span class="copyable" data-copy="'+(p.numero+'').replace(/"/g,'&quot;')+'">'+p.numero+'</span>':'')+(p.prix?' · '+p.prix+' €':'')+'</div>':'')
       +(p.numero&&!validite?'<div class="pass-info">N° <span class="copyable" data-copy="'+(p.numero+'').replace(/"/g,'&quot;')+'">'+p.numero+'</span>'+(p.prix?' · '+p.prix+' €':'')+'</div>':'')
       +(!validite&&!p.numero&&p.prix?'<div class="pass-info">'+p.prix+' €</div>':'')
@@ -5583,23 +5759,9 @@ function renderPasses(){
       +pdfHtml
       +'<button class="edit-item-btn" data-act="editPass" data-id="'+p.id+'"></button>'
     +'</div>';
-  }).join('');
-  // Listeners PDF
-  el.querySelectorAll('.pdf-view-btn[data-pid]').forEach(function(btn){
-    btn.addEventListener('click',function(){ openPdf(this.getAttribute('data-pid')); });
-  });
-  el.querySelectorAll('.pdf-del-btn[data-passid]').forEach(function(btn){
-    btn.addEventListener('click',function(){
-      var pid=this.getAttribute('data-pid');
-      var passid=parseInt(this.getAttribute('data-passid'));
-      var p=passes.find(function(x){return x.id==passid;});
-      if(p&&confirm('Supprimer ce PDF ?')){
-        if(window.pdfStore) delete window.pdfStore[pid];
-        p.pdfId=null; renderPasses(); snapshotCurrentTrip();
-      }
-    });
-  });
 }
+// Rendu du pass : délègue à la page unique Déplacements (étape 4).
+function renderPasses(){ if(typeof renderDeplacements==='function') renderDeplacements(); }
 function editPass(id){id=isNaN(+id)?id:+id;
   var p=passes.find(function(x){return x.id==id;});if(!p)return;
   openModal(
@@ -6308,43 +6470,20 @@ function _getMobGroupVal(group, id){
 }
 
 // ── Rendu liste — avec champs spécifiques affichés ──
-function renderMobilite(){
-  var el=document.getElementById('mobilite-list');
-  if(!el)return;
-  el.style.display=''; // toujours réafficher — toggleForm peut avoir mis display:none
+// ══════════════════════════════════════════════════════════════════
+// DÉPLACEMENTS — page unique (étape 4 refonte nav §8.3)
+// Les 3 types (mobilites[]/passes[]/locations[]) cohabitent sur une seule
+// page, triés par DATE (défaut) ou par CATÉGORIE. Données INCHANGÉES (3
+// tableaux distincts) ; on ne fait que les AFFICHER ensemble. Les cartes
+// gardent leur gabarit distinct (le pass = ticket à liseré ambré). Chaque
+// type est classé chronologiquement à sa date de DÉBUT (transport=départ,
+// pass=début de validité, location=prise en charge) et n'apparaît qu'UNE
+// fois. Le rendu de carte est extrait en _mobCard/_passCard/_locCard.
+// ══════════════════════════════════════════════════════════════════
+var _deplSort = 'date';   // 'date' (défaut) | 'categorie'
 
-  // Toujours rafraîchir les pass (maintenant dans cette section)
-  renderPasses();
-  _updatePassesPinTop();
-
-  var nb=mobilites.length;
-  var sumNb=document.getElementById('mob-sum-nb');if(sumNb)sumNb.textContent=nb+(passes.length?' + '+passes.length+' pass':'');
-  var vols_mob=mobilites.filter(function(m){return m.type==='vol';});
-  if(vols_mob.length){
-    var aller=vols_mob[0], retour=vols_mob[vols_mob.length-1];
-    var sa=document.getElementById('mob-sum-aller');
-    var sr=document.getElementById('mob-sum-retour');
-    if(sa)sa.textContent=(aller.dep||'—')+' → '+(aller.arr||'—');
-    if(sr)sr.textContent=(retour.dep||'—')+' → '+(retour.arr||'—');
-  }
-
-  if(!mobilites.length){
-    el.innerHTML='<div class="empty-state">'
-      +'<div class="es-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="8" width="12" height="13" rx="2"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/><line x1="12" y1="12" x2="12" y2="16"/></svg></div>'
-      +'<div class="es-title">Aucun trajet enregistré</div>'
-      +'<div class="es-sub">Vols, trains, bus, ferries… ajoute ton premier trajet.</div>'
-      +'<button class="es-cta" onclick="pickTransport(\'trajet\')">+ Ajouter un trajet</button>'
-      +'</div>';
-    return;
-  }
-
-  var sorted=mobilites.slice().sort(function(a,b){
-    var da=a.date||'',db=b.date||'';
-    if(da<db)return -1;if(da>db)return 1;
-    return(a.heureDep||'').localeCompare(b.heureDep||'');
-  });
-
-  el.innerHTML=sorted.map(function(m){
+// Carte d'un transport (mobilité). typeBadge=true → badge de mode (mode Date).
+function _mobCard(m, typeBadge){
     var icon=MOB_ICONS[m.type]||'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>';
     var statutOk=MOB_STATUT_OK.indexOf(m.statut)!==-1;
     var color=MOB_COLORS[m.type]||'var(--sakura)';
@@ -6431,9 +6570,10 @@ function renderMobilite(){
         +(m.note?'<div class="mob-note-text">'+_tlEsc(m.note)+'</div>':'');
     }
 
+    var tb = typeBadge ? '<span class="depl-type-badge">'+(MOB_LABELS[m.type]||'Transport')+'</span>' : '';
     return '<div class="mob-item item-wrap emobilite'+(escVol?' has-seg2':'')+'" data-detail-cat="transport" data-detail-id="'+m.id+'">'
       +'<div class="mob-icon '+m.type+'" style="background:'+color+'18;border-color:'+color+'44;color:'+color+'" title="Transport">'+icon+'</div>'
-      +'<div class="mob-body">'+bodyHtml+'</div>'
+      +'<div class="mob-body">'+tb+bodyHtml+'</div>'
       +(!escVol
         ?'<div class="mob-right">'
           +(m.heureDep?'<div class="mob-time">'+m.heureDep+(m.heureArr?' → '+m.heureArr:'')+'</div>':'')
@@ -6447,7 +6587,6 @@ function renderMobilite(){
       )
       +'<button class="edit-item-btn" data-act="editMobilite" data-id="'+m.id+'"></button>'
     +'</div>';
-  }).join('');
 }
 
 // ── Ajouter un trajet — lit les champs du groupe actif ──
@@ -6871,27 +7010,16 @@ var LOC_ICONS={voiture:'🚗',scooter:'🛵',velo:'🚲',camping:'🚐',bateau:'
 var LOC_LABELS={voiture:'Voiture',scooter:'Scooter / Moto',velo:'Vélo',camping:'Camping-car',bateau:'Bateau de plaisance'};
 var PASS_CAT_ICONS={rail:'Rail',urban:'Urbain',vignette:'Vignette',autre:'Autre'};
 
-function renderLocations(){
-  var el=document.getElementById('locations-list');
-  if(!el)return;
-  el.style.display=''; // toujours réafficher — toggleForm peut avoir mis display:none
-  if(!locations.length){
-    el.innerHTML='<div class="empty-state">'
-      +'<div class="es-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 17H3a2 2 0 0 1-2-2v-4l3-7h14l3 7v4a2 2 0 0 1-2 2h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><line x1="9" y1="17" x2="15" y2="17"/></svg></div>'
-      +'<div class="es-title">Aucune location</div>'
-      +'<div class="es-sub">Voitures, scooters, vélos en location.</div>'
-      +'<button class="es-cta" onclick="openAddTop(\'form-location\')">+ Ajouter une location</button>'
-      +'</div>';
-    return;
-  }
-  el.innerHTML=locations.map(function(l){
+// Carte d'une location (gabarit à grille prise/restitution via .loc-card).
+function _locCard(l, typeBadge){
     var icon=LOC_ICONS[l.type]||'—';
     var lcolor=(typeof LOC_COLORS!=='undefined'&&LOC_COLORS[l.type])||'#7a8290';
+    var tb = typeBadge ? '<span class="depl-type-badge depl-badge-loc">Loc.</span>' : '';
     return '<div class="loc-card item-wrap elocations" data-detail-cat="location" data-detail-id="'+l.id+'">'
       +'<div class="loc-card-header">'
         +'<div class="loc-icon" style="background:'+lcolor+'18;color:'+lcolor+'" title="Location">'+icon+'<span class="loc-key-badge"></span></div>'
         +'<div style="flex:1;min-width:0">'
-          +'<div class="loc-title">'+(l.modele||LOC_LABELS[l.type]||'Location')+'</div>'
+          +'<div class="loc-title">'+tb+(l.modele||LOC_LABELS[l.type]||'Location')+'</div>'
           +'<div class="loc-sub">'+(l.loueur?l.loueur+' · ':'')+(l.statut||'Confirmée')+'</div>'
         +'</div>'
         +(l.resa?'<span class="badge badge-muted" style="font-size:10px">'+l.resa+'</span>':'')
@@ -6906,7 +7034,121 @@ function renderLocations(){
       +(l.note?'<div class="loc-note-text">'+_tlEsc(l.note)+'</div>':'')
       +'<button class="edit-item-btn" data-act="editLocation" data-id="'+l.id+'"></button>'
     +'</div>';
-  }).join('');
+}
+// Rendu des locations : délègue à la page unique Déplacements (étape 4).
+function renderLocations(){ if(typeof renderDeplacements==='function') renderDeplacements(); }
+
+// ── Page unique DÉPLACEMENTS — renderer + tri + emode + feuille d'ajout ──
+var _DEPL_JOURS = ['Dim.','Lun.','Mar.','Mer.','Jeu.','Ven.','Sam.'];
+var _DEPL_MOIS  = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+// Date de DÉBUT d'un item selon son type (règle §8.3 étape 4) :
+// transport=départ, pass=début de validité, location=prise en charge.
+function _deplStartDate(kind, o){
+  if(kind==='mob')  return o.date  || '';
+  if(kind==='pass') return o.debut || '';
+  if(kind==='loc')  return o.dateDep || '';
+  return '';
+}
+// Clé de tri chronologique. Sans date → Infinity (en fin, groupe « Sans date »).
+function _deplSortKey(kind, o){
+  var d = parseDDMMYYYY(_deplStartDate(kind, o));
+  return {
+    ymd: d ? (d.getFullYear()*10000 + (d.getMonth()+1)*100 + d.getDate()) : Infinity,
+    t:   (kind==='mob' && o.heureDep) ? o.heureDep : ''
+  };
+}
+function _deplDayLabel(dstr){
+  var d = parseDDMMYYYY(dstr);
+  if(!d) return 'Sans date';
+  return _DEPL_JOURS[d.getDay()] + ' ' + d.getDate() + ' ' + _DEPL_MOIS[d.getMonth()];
+}
+function _attachDeplPdfListeners(el){
+  el.querySelectorAll('.pdf-view-btn[data-pid]').forEach(function(btn){
+    btn.addEventListener('click', function(){ openPdf(this.getAttribute('data-pid')); });
+  });
+  el.querySelectorAll('.pdf-del-btn[data-passid]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var pid=this.getAttribute('data-pid'), passid=this.getAttribute('data-passid');
+      var p=passes.find(function(x){ return String(x.id)===String(passid); });
+      if(p && confirm('Supprimer ce PDF ?')){
+        if(window.pdfStore) delete window.pdfStore[pid];
+        p.pdfId=null; renderDeplacements(); snapshotCurrentTrip();
+      }
+    });
+  });
+}
+function _syncDeplSortToggle(){
+  document.querySelectorAll('#depl-sort .depl-sort-seg').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-sort')===_deplSort);
+  });
+}
+function setDeplSort(mode){
+  _deplSort = (mode==='categorie') ? 'categorie' : 'date';
+  renderDeplacements();
+}
+// Renderer UNIFIÉ — les 3 types dans #mobilite-list.
+function renderDeplacements(){
+  var el=document.getElementById('mobilite-list');
+  if(!el) return;
+  el.style.display='';
+  var total = (mobilites?mobilites.length:0) + (passes?passes.length:0) + (locations?locations.length:0);
+  if(!total){
+    el.innerHTML='<div class="empty-state depl-empty">'
+      +'<div class="es-icon"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="6" r="2.4"/><path d="M8.4 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.6"/></svg></div>'
+      +'<div class="es-title">Aucun déplacement pour l\'instant</div>'
+      +'<div class="es-sub">Transports, pass et locations, rassemblés ici.</div>'
+      +'<button class="es-cta" onclick="showAddDeplacement()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="15" height="15" style="vertical-align:-2px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un déplacement</button>'
+      +'</div>';
+    _syncDeplSortToggle();
+    return;
+  }
+  var html='';
+  if(_deplSort==='categorie'){
+    if(mobilites.length){
+      var sm=mobilites.slice().sort(function(a,b){ var da=a.date||'',db=b.date||''; if(da<db)return -1;if(da>db)return 1; return (a.heureDep||'').localeCompare(b.heureDep||''); });
+      html+='<div class="depl-group-title">Transport</div>'+sm.map(function(m){ return _mobCard(m,false); }).join('');
+    }
+    if(passes.length){
+      html+='<div class="depl-group-title">Pass</div>'+passes.map(function(p){ return _passCard(p,false); }).join('');
+    }
+    if(locations.length){
+      html+='<div class="depl-group-title">Location</div>'+locations.map(function(l){ return _locCard(l,false); }).join('');
+    }
+  } else {
+    // Par DATE : fusion + tri chronologique + groupement par jour (badges de type).
+    var entries=[];
+    mobilites.forEach(function(m){ entries.push({ key:_deplSortKey('mob',m),  date:_deplStartDate('mob',m),  html:_mobCard(m,true) }); });
+    passes.forEach(function(p){    entries.push({ key:_deplSortKey('pass',p), date:_deplStartDate('pass',p), html:_passCard(p,true) }); });
+    locations.forEach(function(l){  entries.push({ key:_deplSortKey('loc',l),  date:_deplStartDate('loc',l),  html:_locCard(l,true) }); });
+    entries.sort(function(a,b){ if(a.key.ymd!==b.key.ymd) return a.key.ymd-b.key.ymd; return (a.key.t||'').localeCompare(b.key.t||''); });
+    var lastDay=null;
+    entries.forEach(function(e){
+      var dayLbl = (e.key.ymd===Infinity) ? 'Sans date' : _deplDayLabel(e.date);
+      if(dayLbl!==lastDay){ html+='<div class="depl-day-title">'+dayLbl+'</div>'; lastDay=dayLbl; }
+      html+=e.html;
+    });
+  }
+  el.innerHTML=html;
+  _attachDeplPdfListeners(el);
+  _syncDeplSortToggle();
+}
+// Délégateur : renderMobilite (appelé partout) rend la page unifiée.
+function renderMobilite(){ renderDeplacements(); }
+// Mode Modifier UNIFIÉ : (dés)active l'édition des 3 types ensemble.
+function toggleDeplEmode(){
+  var on = !(emodes.mobilite || emodes.passes || emodes.locations);
+  ['mobilite','passes','locations','vols','trains'].forEach(function(t){
+    emodes[t]=on;
+    document.body.classList.toggle('emode-'+t, on);
+  });
+  var btn=document.getElementById('bedit-depl'); if(btn) btn.classList.toggle('active', on);
+  var banner=document.getElementById('ebanner-depl'); if(banner) banner.classList.toggle('visible', on);
+  renderDeplacements(); // ré-affiche les boutons PDF-suppr des pass en emode
+}
+// Feuille d'ajout en 2 temps (type → mode). Réutilise la modale existante.
+function showAddDeplacement(){
+  if(typeof _resetTransportChoice==='function') _resetTransportChoice();
+  if(typeof showTransportPicker==='function') showTransportPicker();
 }
 
 function addLocation(){

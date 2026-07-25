@@ -83,6 +83,14 @@
 <div class="spa-page active" id="page-home">
   <div id="home-topbar">
     <div id="home-topbar-title">夢 Yume</div>
+    <div id="home-topbar-actions">
+      <button id="home-bell" class="hdr-icon-btn hdr-bell" onclick="openBellPanel(this.getAttribute('data-trip'))" aria-label="Échéances et alertes" title="Échéances et alertes" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="19" height="19" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      </button>
+      <button id="home-profile-btn" class="hdr-icon-btn hdr-profile" onclick="showPage('profil')" aria-label="Profil" title="Profil">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      </button>
+    </div>
     <div id="home-topbar-stats">
       <div class="hts-chip"><span class="hts-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M21 16l-3-8-3 3-5-5-3 3 2 3-4 2 1 2 5-1 1 3 3-1 1 3 3-3z"/></svg></span><b id="hts-voyages">0</b><span>voyages</span></div>
       <div class="hts-chip"><span class="hts-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span><b id="hts-pays">0</b><span>pays</span></div>
@@ -299,11 +307,18 @@
 
     <!-- Header voyage — compact, barre de progression sous lui -->
     <header class="app-header" style="height:calc(48px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px)">
-      <button onclick="showHomeScreen()" style="background:none;border:none;cursor:pointer;padding:6px;color:var(--ink-muted);font-size:20px;display:flex;align-items:center" title="Accueil">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      <button id="nav-drawer-btn" onclick="openNavDrawer()" aria-label="Ouvrir le menu de navigation" title="Navigation" style="background:none;border:none;cursor:pointer;padding:0;width:40px;height:40px;flex-shrink:0;color:var(--ink-muted);display:flex;align-items:center;justify-content:center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
       </button>
       <span id="app-trip-name" style="flex:1;font-size:15px;font-weight:600;color:var(--ink);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px"></span>
-      <div style="width:34px"></div><!-- spacer for centering -->
+      <div class="hdr-actions">
+        <button id="app-bell" class="hdr-icon-btn hdr-bell" onclick="openBellPanel(this.getAttribute('data-trip'))" aria-label="Échéances et alertes du voyage" title="Échéances et alertes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="19" height="19" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        </button>
+        <button id="app-profile-btn" class="hdr-icon-btn hdr-profile" onclick="showPage('profil')" aria-label="Profil" title="Profil">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        </button>
+      </div>
       <!-- Hidden compat elements -->
       <span id="tp-days-label" style="display:none"></span>
       <div id="tp-bar" style="display:none"><div id="tp-fill"></div></div>
@@ -359,16 +374,21 @@
 <!-- NB : ordre du belt = Transport · Pass · Location (cf. _DEPL et
      SECTION_ORDER). Ces 3 doivent rester dans le MÊME ordre. -->
 <section class="section active" id="tab-mobilite">
-  <div class="section-top">
-    <div class="section-top-title">Transports</div>
+  <!-- DÉPLACEMENTS — page unique (étape 4). Sélecteur de tri (Date/Catégorie)
+       + bouton Ajouter unique (feuille type→mode). Les 3 types cohabitent. -->
+  <div class="section-top depl-top">
+    <div id="depl-sort" class="depl-sort" role="tablist" aria-label="Trier les déplacements">
+      <button type="button" class="depl-sort-seg active" data-sort="date" onclick="setDeplSort('date')">Date</button>
+      <button type="button" class="depl-sort-seg" data-sort="categorie" onclick="setDeplSort('categorie')">Catégorie</button>
+    </div>
     <div class="section-top-actions">
-      <button class="btn-add-top" onclick="pickTransport('trajet')" title="Ajouter un trajet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter</button>
-      <button class="btn-edit-mode" id="bedit-mobilite" onclick="toggleEmode('mobilite')">Modifier</button>
+      <button class="btn-add-top" onclick="showAddDeplacement()" title="Ajouter un déplacement"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter</button>
+      <button class="btn-edit-mode" id="bedit-depl" onclick="toggleDeplEmode()">Modifier</button>
     </div>
   </div>
-  <div class="edit-banner" id="ebanner-mobilite">Mode édition — cliquez sur l'icône d'un trajet pour le modifier ou le supprimer</div>
+  <div class="edit-banner" id="ebanner-depl">Mode édition — cliquez sur l'icône d'un déplacement pour le modifier ou le supprimer</div>
 
-  <!-- Liste des trajets -->
+  <!-- Liste unifiée des déplacements (transports + pass + locations) -->
   <div id="mobilite-list"></div>
 
   <!-- Formulaire d'ajout unifié — champs dynamiques par type -->
@@ -1336,6 +1356,12 @@
 
   </div><!-- /voyage-content -->
 
+  <!-- ══ BARRE DU BAS DU VOYAGE (mobile) — Étape 3 refonte nav §8.3 ══
+       4 onglets Organiser/Planning/Carte/Budget. Construite par
+       _buildVoyageTabbar ; visible seulement quand un voyage est ouvert
+       (body.trip-open) et en mobile (garde-fou desktop en CSS). -->
+  <nav id="voyage-tabbar" aria-label="Sections du voyage"></nav>
+
   <!-- Settings overlay — global, outside swipe area -->
 <!-- (Ancienne modale Paramètres de l'Accueil supprimée — les paramètres
      vivent désormais dans la modale de la page Profil, #settings-modal-overlay.) -->
@@ -1357,6 +1383,9 @@
 
     <!-- Barre simple : titre + réglages (plus de bannière qui masque l'avatar) -->
     <div class="profil-topbar2">
+      <button class="profil-back" type="button" onclick="profileBack()" aria-label="Retour" title="Retour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
       <span class="profil-topbar2-title">Profil</span>
       <button class="profil-gear" type="button" onclick="openSettingsModal()" aria-label="Paramètres">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="19" height="19"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1656,6 +1685,34 @@
   <div id="editModalInner" class="modal" style="width:100%;max-width:min(560px,96vw);max-height:90vh;overflow-y:auto;padding:24px 26px;background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow-xl)"></div>
 </div>
 
+<!-- ══ TIROIR DE NAVIGATION (mobile) — Étape 1 refonte nav §8.3 ══
+     Navigation PURE : Accueil, liste des voyages groupée, Nouveau voyage.
+     Ouvert par le hamburger de l'en-tête voyage. Glisse depuis la gauche
+     (transform), voyage assombri à droite (scrim). Ne démonte jamais le
+     voyage : fermer = retirer une classe, défilement préservé. -->
+<div id="nav-drawer-scrim" onclick="closeNavDrawer()" aria-hidden="true"></div>
+<aside id="nav-drawer" role="dialog" aria-modal="true" aria-label="Navigation" aria-hidden="true">
+  <div id="nav-drawer-head">
+    <span id="nav-drawer-logo">夢 Yume</span>
+    <button id="nav-drawer-close" onclick="closeNavDrawer()" aria-label="Fermer le menu" title="Fermer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+    </button>
+  </div>
+  <div id="nav-drawer-body">
+    <button id="nav-drawer-home" onclick="_navDrawerGoHome()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="18" height="18" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/><polyline points="9 21 9 12 15 12 15 21"/></svg>
+      <span>Accueil</span>
+    </button>
+    <div id="nav-drawer-trips"></div>
+  </div>
+  <div id="nav-drawer-foot">
+    <button id="nav-drawer-new" onclick="_navDrawerNewTrip()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" width="17" height="17" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Nouveau voyage</span>
+    </button>
+  </div>
+</aside>
+
 <!-- ══ TOASTS ══ -->
 <div id="toast-container" style="position:fixed;bottom:calc(76px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:9000;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none"></div>
 
@@ -1673,26 +1730,49 @@
 <div id="transport-choice-overlay" onclick="closeTransportChoiceOnBg(event)">
   <div id="transport-choice-box">
     <div class="tc-header">
-      <div class="tc-title">Ajouter à Transports</div>
-      <div class="tc-sub">Choisissez le type à ajouter</div>
+      <div class="tc-title">Ajouter un déplacement</div>
+      <button class="tc-x" type="button" onclick="closeTransportChoiceModal()" aria-label="Fermer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
+    <div class="tc-step-label">1 · Quel type ?</div>
     <div class="tc-cards">
-      <button class="tc-card tc-card-trajet" onclick="pickTransport('trajet')">
+      <button class="tc-card tc-card-trajet" id="tc-type-transport" onclick="tcPickType('transport')">
         <div class="tc-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><rect x="3" y="6" width="18" height="13" rx="2"/><line x1="3" y1="11" x2="21" y2="11"/><circle cx="7.5" cy="20" r="1.5"/><circle cx="16.5" cy="20" r="1.5"/></svg></div>
         <div class="tc-card-body">
-          <div class="tc-card-label">Ajouter un Trajet</div>
-          <div class="tc-card-desc">Vol, Train, Bus, Bateau…</div>
+          <div class="tc-card-label">Transport</div>
+          <div class="tc-card-desc">Vol, train, bus, bateau…</div>
         </div>
         <div class="tc-card-arrow">›</div>
       </button>
-      <button class="tc-card tc-card-pass" onclick="pickTransport('pass')">
+      <button class="tc-card tc-card-pass" onclick="tcPickType('pass')">
         <div class="tc-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M2 12h20"/><circle cx="7" cy="12" r="1.5"/></svg></div>
         <div class="tc-card-body">
-          <div class="tc-card-label">Ajouter un Pass</div>
-          <div class="tc-card-desc">JR Pass, Navigo, Eurail…</div>
+          <div class="tc-card-label">Pass</div>
+          <div class="tc-card-desc">Forfait transport, city-pass</div>
         </div>
         <div class="tc-card-arrow">›</div>
       </button>
+      <button class="tc-card tc-card-loc" onclick="tcPickType('location')">
+        <div class="tc-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M5 17H3a2 2 0 0 1-2-2v-4l3-7h14l3 7v4a2 2 0 0 1-2 2h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><line x1="9" y1="17" x2="15" y2="17"/></svg></div>
+        <div class="tc-card-body">
+          <div class="tc-card-label">Location</div>
+          <div class="tc-card-desc">Voiture, vélo, scooter…</div>
+        </div>
+        <div class="tc-card-arrow">›</div>
+      </button>
+    </div>
+    <div id="tc-modes" style="display:none">
+      <div class="tc-step-label">2 · Mode de transport</div>
+      <div class="tc-mode-chips">
+        <button class="tc-mode" type="button" onclick="tcPickMode('vol')">Vol</button>
+        <button class="tc-mode" type="button" onclick="tcPickMode('train')">Train</button>
+        <button class="tc-mode" type="button" onclick="tcPickMode('bus')">Bus</button>
+        <button class="tc-mode" type="button" onclick="tcPickMode('bateau')">Bateau</button>
+        <button class="tc-mode" type="button" onclick="tcPickMode('covoiturage')">Covoit.</button>
+        <button class="tc-mode" type="button" onclick="tcPickMode('metro')">Métro</button>
+        <button class="tc-mode" type="button" onclick="tcPickMode('taxi')">Taxi</button>
+      </div>
     </div>
     <button class="tc-cancel" onclick="closeTransportChoiceModal()">Annuler</button>
   </div>
