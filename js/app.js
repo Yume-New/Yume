@@ -61,9 +61,11 @@ function _migrateAllTrips(){
     if(t.lieux) t.lieux.forEach(function(l){
       if(l && l.jour && !l.dateVisite){ l.dateVisite = _isoToFrDate(l.jour); delete l.jour; }
     });
-    // ── Multi-documents (étape 5) : docs[] sur les 4 porteurs. Idempotente,
+    // ── Multi-documents (étape 5) : docs[] sur les porteurs. Idempotente,
     //    non destructive (pdfId conservé, aucun blob dupliqué).
-    ['mobilites','hotels','lieux','documents'].forEach(function(key){
+    //    `passes` a rejoint DOC_CARRIERS (E4) : un pass qui portait déjà une
+    //    pièce via son pdfId récupère l'entrée docs[] correspondante.
+    ['mobilites','hotels','lieux','passes','documents'].forEach(function(key){
       if(Array.isArray(t[key])) t[key].forEach(_migrateDocs);
     });
     // ── Statut de réservation : UNE migration pour les DEUX types ──
@@ -416,6 +418,11 @@ function _sanitizeAddrFields(prefix){
         _flashField(villeEl?villeEl.id:(prefix+'-ville'));
         var legacyV=document.getElementById(prefix+'-ville');
         if(legacyV&&legacyV!==villeEl) legacyV.value=villeClean;
+        // Second champ « Ville » de la modale hébergement (ligne du haut) : une
+        // écriture programmatique ne déclenche pas le miroir oninput, on le
+        // répercute donc explicitement pour que les deux restent d'accord (E5).
+        var topV=document.getElementById(prefix+'-ville-top');
+        if(topV&&topV!==villeEl) topV.value=villeClean;
         ville=villeClean;
       }
     }
@@ -677,9 +684,11 @@ function verifierAdresse(context){
 // fullAddress/adresse et lat/lng → plus aucun pin (même pas par repli nom).
 function _addrRemoveGeo(prefix){
   ['-rue','-cp','-pays'].forEach(function(s){ var e=document.getElementById(prefix+s); if(e) e.value=''; });
-  // Ville : vider TOUTES les occurrences (l'hôtel a un doublon d'id eh-ville :
-  // champ « Ville » du haut + champ du bloc adresse) → aucune valeur ne survit.
-  var villes=document.querySelectorAll('[id="'+prefix+'-ville"]');
+  // Ville : l'hébergement l'affiche DEUX fois (ligne du haut + bloc adresse).
+  // Les deux ids sont distincts depuis E5 (`eh-ville` / `eh-ville-top`), mais on
+  // continue de balayer par sélecteur ET de traiter le suffixe `-ville-top` :
+  // aucune valeur de ville ne doit survivre à un retrait de localisation.
+  var villes=document.querySelectorAll('[id="'+prefix+'-ville"],[id="'+prefix+'-ville-top"]');
   for(var i=0;i<villes.length;i++){ villes[i].value=''; }
   var flag=document.getElementById(prefix+'-geo-remove'); if(flag) flag.value='1';
   var res=document.getElementById(prefix+'-addr-result');
@@ -5393,6 +5402,17 @@ function mSelect(id,options,val){
   options.forEach(function(o){s+='<option'+(o===val?' selected':'')+'>'+o+'</option>';});
   s+='</select>';return s;
 }
+// Variante CLÉ → LIBELLÉ de mSelect (même gabarit visuel, seule la génération
+// des <option> change). Nécessaire quand la valeur STOCKÉE est une clé et non le
+// libellé affiché — cas du type de véhicule d'une location (`voiture`) et de la
+// catégorie d'un pass (`rail`). `pairs` = [[cle, libelle], …].
+function mSelectKV(id,pairs,val){
+  var s='<select id="'+id+'" style="flex:1;min-width:0;padding:9px 12px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none">';
+  pairs.forEach(function(p){
+    s+='<option value="'+p[0]+'"'+(p[0]===val?' selected':'')+'>'+p[1]+'</option>';
+  });
+  s+='</select>';return s;
+}
 function mJour(id,val){
   return '<select id="'+id+'" data-build-jour="1" data-val="'+(val||'')+'" style="min-width:72px;flex:none;padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none"></select>';
 }
@@ -6273,6 +6293,15 @@ function editPass(id){id=isNaN(+id)?id:+id;
       +modalField('Nom du pass',mInput('ep-nom',p.nom,'JR Pass 30 jours','width:100%'))
       +mSelect('ep-statut',['Activé','Non activé','En transit'],p.statut)
     +'</div>'
+    // Catégorie : choisie à la création mais absente de l'édition, donc non
+    // modifiable après coup (E19). Libellés dérivés de PASS_CAT_ICONS, la table
+    // déjà utilisée par la carte — pas de liste dupliquée. Valeur stockée = une
+    // CLÉ (`rail`), d'où mSelectKV.
+    +'<div class="modal-row">'
+      +modalField('Catégorie',mSelectKV('ep-categorie',
+          Object.keys(PASS_CAT_ICONS).map(function(k){ return [k, PASS_CAT_ICONS[k]]; }),
+          p.categorie||'autre'))
+    +'</div>'
     +'<div class="modal-row">'
       +modalField('Date début',mInput('ep-debut',p.debut||'','JJ/MM/AAAA'))
       +modalField('Date fin',mInput('ep-fin',p.fin||'','JJ/MM/AAAA'))
@@ -6285,9 +6314,15 @@ function editPass(id){id=isNaN(+id)?id:+id;
     +'<div class="modal-row"><div class="modal-field w-full"><label>Notes</label>'
       +'<textarea id="ep-note" rows="2" style="width:100%;resize:vertical;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r-sm);font-family:DM Sans,sans-serif">'+((p.note)||'')+'</textarea>'
     +'</div></div>'
+    +_liensBlockHtml('ep')
     +mPdfBlock('ep-pdf', p.pdfId||'')
+    // Le pass porte désormais des documents (E4) : sans ce bloc, ceux saisis à
+    // la création seraient invisibles ici — exactement le défaut corrigé sur le
+    // vol (E1).
+    +_docsBlockHtml('pass', id)
     +modalFooter('savePass(\''+id+'\')','deletePass(\''+id+'\')',{type:'le pass',libelle:p.nom||'',hasDoc:!!p.pdfId,fn:'deletePass',id:id})
   );
+  setTimeout(function(){ _lienFillRows('ep', p.liens); }, 0);
 }
 function savePass(id){id=isNaN(+id)?id:+id;
   var p=passes.find(function(x){return x.id==id;});if(!p)return;
@@ -6299,11 +6334,18 @@ function savePass(id){id=isNaN(+id)?id:+id;
   p.numero =document.getElementById('ep-numero').value;
   p.zone   =(document.getElementById('ep-zone')||{}).value||'';
   p.note   =(document.getElementById('ep-note')||{}).value||'';
+  // Catégorie (E19) : lecture GARDÉE — le champ vient d'être ajouté à la modale,
+  // une valeur absente ne doit pas écraser la catégorie stockée.
+  var _epc=document.getElementById('ep-categorie');
+  if(_epc && _epc.value) p.categorie=_epc.value;
+  p.liens  =_lienReadRows('ep');
   var epPdf=document.getElementById('ep-pdf');
   var _prevPid=p.pdfId;                       // ré-attache : purge l'orphelin
   if(epPdf) p.pdfId=epPdf.value;
   if(_prevPid && _prevPid!==p.pdfId) _purgePdfIfUnused(_prevPid);
   p.validite=p.debut&&p.fin?p.debut+' → '+p.fin:(p.debut?p.debut+' →':'');
+  // Le pass est un porteur de documents depuis E4 : même resynchronisation (E7).
+  _syncItemExpense('pass', id);
   closeModal();renderPasses();_updatePassesPinTop();snapshotCurrentTrip();
 }
 // addPass est maintenant géré directement dans addMobilite (type 'pass')
@@ -6316,7 +6358,14 @@ function addPass(){
   }
 }
 function deletePass(id){id=isNaN(+id)?id:+id;
+  // Dépense automatique liée : retirée AVEC le pass (sinon montant fantôme),
+  // aligné sur deleteHotel / deleteLieu / deleteMobilite.
+  _dropItemExpense('pass', id);
+  var _dp=passes.filter(function(p){return p.id==id;})[0]||{};
+  var _pids=[_dp.pdfId].concat(_itemDocPdfIds(_dp));
   passes=passes.filter(function(p){return p.id!=id;});
+  // APRÈS retrait : les blobs ne sont plus référencés par ce pass.
+  for(var i=0;i<_pids.length;i++) _purgePdfIfUnused(_pids[i]);
   closeModal();renderPasses();_updatePassesPinTop();snapshotCurrentTrip();
 }
 
@@ -7180,18 +7229,32 @@ function addMobilite(){
     var zone   =(document.getElementById('mob-pass-zone')||{}).value.trim()||'';
     var validite=debut&&fin?debut+' → '+fin:(debut?debut+' →':'');
 
+    // Liens et documents étaient IGNORÉS ici alors que le formulaire pass
+    // affiche les deux blocs : tout ce qui y était saisi disparaissait au
+    // premier enregistrement, et un prix de document ne créait aucune ligne
+    // budget (E4). Ils sont lus comme pour les autres types.
+    var _passId=uid();
     passes.push({
-      id:uid(), nom:nom, statut:statut,
+      id:_passId, nom:nom, statut:statut,
       validite:validite, debut:debut, fin:fin,
       numero:numero, avantages:'', prix:prix,
-      categorie:cat, zone:zone, pdfId:null,
+      categorie:cat, zone:zone,
+      pdfId:(document.getElementById('mob-pdf')||{}).value||'',
+      liens:_lienReadRows('mob'),
+      docs:_docDraftTake('mob'),
       note:(document.getElementById('mob-pass-note')||{}).value||''
     });
+    // Prix porté par un document → ligne de dépense (même règle que les autres
+    // porteurs : UNE dépense par élément).
+    _syncItemExpense('pass', _passId);
 
     // Reset champs pass
     ['mob-pass-nom','mob-pass-debut','mob-pass-fin','mob-pass-prix','mob-pass-numero','mob-pass-note','mob-pass-zone'].forEach(function(id){
       var el=document.getElementById(id); if(el) el.value='';
     });
+    ['mob-pdf'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+    _lienFillRows('mob', []);
+    var _passBadge=document.getElementById('mob-pdf-badge'); if(_passBadge) _passBadge.innerHTML='';
 
     toggleForm('form-mobilite');
     _resetTransportForm();
@@ -7301,6 +7364,11 @@ function _editVolUnified(m){
     _mobRenderPdfBadge(m.pdfId);
     // Liens web
     _lienFillRows('mob', m.liens);
+    // Multi-documents : le slot a été rendu sur le BROUILLON à l'ouverture du
+    // formulaire (_mobEditId n'était pas encore posé). Maintenant qu'il l'est,
+    // on le rebranche sur le vol RÉEL — sinon ses documents restent invisibles
+    // et ceux qu'on ajoute sont perdus à l'enregistrement (E1).
+    _docsDraftRender('mob', 'mob-docs-slot');
     // Escales : coche la case + rend + remplit les blocs (ou reste direct)
     _fillVolEscalesForm(m);
     // Bouton + titre en mode édition
@@ -7340,6 +7408,11 @@ function _mobCancelEdit(){
   var btn=document.getElementById('mob-submit-btn'); if(btn) btn.textContent='+ Ajouter';
   var ttl=document.getElementById('mob-form-title'); if(ttl) ttl.textContent='Ajouter un trajet';
   _mobSyncDeleteBtn();   // création → bouton masqué
+  // Le slot Documents était branché sur le vol édité : on le rend au brouillon
+  // (vide), sinon le prochain « nouveau trajet » afficherait encore les
+  // documents du vol précédent. _mobEditId vient d'être remis à null, donc
+  // _docSlotTarget('mob') renvoie null → rendu brouillon.
+  if(typeof _docsDraftRender==='function') _docsDraftRender('mob','mob-docs-slot');
 }
 
 // Suppression d'un vol depuis l'édition unifiée. Même contrat que la
@@ -7393,6 +7466,19 @@ function _saveMobiliteVolFromForm(id){
   if(_prevPid && _prevPid!==m.pdfId) _purgePdfIfUnused(_prevPid);
   _readVolEscalesInto(m); // escales[] + écrase infos racine par SEG.1 si escale
   _freezeVolRootGps(m);   // gel coords origine/destination depuis codes IATA
+  // Multi-documents : le bloc est branché sur le vol réel (_docSlotTarget),
+  // donc chaque geste a déjà écrit dans m.docs — rien à relire ici. Filet de
+  // sécurité : si un document a malgré tout atterri dans le brouillon (saisi
+  // dans l'intervalle entre l'ouverture du formulaire et la pose de
+  // _mobEditId), on le verse au lieu de le perdre (E1).
+  var _draftLeft=_docDraftTake('mob');
+  if(_draftLeft && _draftLeft.length){
+    if(!Array.isArray(m.docs)) m.docs=[];
+    m.docs=m.docs.concat(_draftLeft);
+  }
+  // Dépense automatique : montant (prix des documents), libellé et date en
+  // dérivent — resynchronisation systématique (E7).
+  _syncItemExpense('transport', m.id);
   _mobCancelEdit();
   toggleForm('form-mobilite');
   _resetTransportForm();
@@ -7492,6 +7578,15 @@ function saveMobilite(id){id=isNaN(+id)?id:+id;
   // On travaille sur une COPIE profonde pour éviter toute mutation de référence partagée
   var m=JSON.parse(JSON.stringify(mobilites[idx]));
   var _gv=function(elId){var e=document.getElementById(elId);return e?e.value:'';};
+  // Lecture CONSERVATRICE : rend la valeur du champ s'il existe, sinon la valeur
+  // déjà stockée. Indispensable pour les champs que la modale n'affiche pas
+  // toujours : bus / covoiturage / métro / taxi n'ont pas de champ « N° résa »
+  // (ni en création ni en édition), et _gv y renvoyait '' — donc toute édition,
+  // même d'une simple note, effaçait un n° de réservation déjà en base (E6).
+  var _gvKeep=function(elId, prev){
+    var e=document.getElementById(elId);
+    return e ? e.value : (prev==null?'':prev);
+  };
   m.dep      =_gv('em-dep')||m.dep;
   m.arr      =_gv('em-arr')||m.arr;
   m.date     =_gv('em-date');
@@ -7510,7 +7605,7 @@ function saveMobilite(id){id=isNaN(+id)?id:+id;
   } else if(m.type==='train'){
     m.siege  =_gv('em-siege');
     m.voiture=_gv('em-voiture');
-    m.resa   =_gv('em-resa');
+    m.resa   =_gvKeep('em-resa', m.resa);
     // Champs vol/bateau absents pour les trains — nettoyage défensif
     delete m.codeDep; delete m.codeArr; delete m.terminal; delete m.porte;
     delete m.bagages; delete m.segment2; delete m.escales;
@@ -7518,12 +7613,13 @@ function saveMobilite(id){id=isNaN(+id)?id:+id;
   } else if(m.type==='bateau'){
     m.cabine=_gv('em-cabine');
     m.pont  =_gv('em-pont');
-    m.resa  =_gv('em-resa');
+    m.resa  =_gvKeep('em-resa', m.resa);
     delete m.codeDep; delete m.codeArr; delete m.siege; delete m.voiture;
     delete m.segment2; delete m.escales;
   } else {
-    // Bus, ferry, autre : resa seulement
-    m.resa=_gv('em-resa');
+    // Bus, ferry, autre : resa seulement. Ces types n'ont PAS de champ dédié
+    // dans la modale — la lecture conservatrice évite l'effacement (E6).
+    m.resa=_gvKeep('em-resa', m.resa);
     delete m.codeDep; delete m.codeArr; delete m.siege; delete m.voiture;
     delete m.segment2; delete m.escales; delete m.cabine; delete m.pont;
   }
@@ -7548,6 +7644,11 @@ function saveMobilite(id){id=isNaN(+id)?id:+id;
   if(_prevPid && _prevPid!==m.pdfId) _purgePdfIfUnused(_prevPid);
   // Remplacement atomique dans le tableau — aucun lien de référence subsistant
   mobilites[idx]=m;
+  // Dépense automatique : libellé et date en dérivent (trajet, date de départ).
+  // Sans cette resynchronisation, la ligne budget gardait l'ancien libellé et
+  // l'ancienne date après modification de l'élément (E7). APRÈS le remplacement,
+  // sinon _syncItemExpense lirait encore l'objet périmé.
+  _syncItemExpense('transport', id);
   closeModal();renderMobilite();snapshotCurrentTrip();
 }
 
@@ -7784,6 +7885,13 @@ function editLocation(id){id=isNaN(+id)?id:+id;
   openModal(
     '<div class="modal-header"><div class="modal-title">Modifier la location</div><button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
     +'<div class="modal-row">'
+      // Type de véhicule : présent à la CRÉATION mais absent de l'édition, donc
+      // non modifiable après coup (E17). Options dérivées de LOC_LABELS, la même
+      // table que les libellés de carte — pas de liste dupliquée. La valeur
+      // stockée est une CLÉ (`voiture`), d'où mSelectKV.
+      +modalField('Type',mSelectKV('el2-type',
+          Object.keys(LOC_LABELS).map(function(k){ return [k, LOC_LABELS[k]]; }),
+          l.type))
       +modalField('Modèle / Desc.',mInput('el2-modele',l.modele,'Toyota Yaris'))
       +modalField('Loueur',mInput('el2-loueur',l.loueur,'Hertz, Budget…'))
     +'</div>'
@@ -7810,6 +7918,10 @@ function editLocation(id){id=isNaN(+id)?id:+id;
 }
 function saveLocation(id){id=isNaN(+id)?id:+id;
   var l=locations.find(function(x){return x.id==id;});if(!l)return;
+  // Type de véhicule (E17) : lecture GARDÉE — le champ vient d'être ajouté à la
+  // modale, une valeur absente ne doit pas écraser le type stocké.
+  var _l2t=document.getElementById('el2-type');
+  if(_l2t && _l2t.value) l.type=_l2t.value;
   l.modele=document.getElementById('el2-modele').value||l.modele;
   l.loueur=document.getElementById('el2-loueur').value;
   l.resa=document.getElementById('el2-resa').value;
@@ -8036,21 +8148,27 @@ function editHotel(id){id=isNaN(+id)?id:+id;
     '<div class="modal-header"><div class="modal-title">Modifier cet hébergement</div><button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
     +'<div class="modal-row">'
       +modalField('Nom',mInput('eh-nom',h.nom,'Nom de l\'hôtel','width:100%'))
-      +modalField('Ville',mInput('eh-ville',h.ville,'Tokyo / Kyoto / …'))
+      +modalField('Ville',mInput('eh-ville-top',h.ville,'Tokyo / Kyoto / …'))
     +'</div>'
+    // Chaque heure REJOINT sa date (E16), comme dans le formulaire de
+    // création : Check-in + Heure d'arrivée, puis Check-out + Heure de départ.
+    // Les nuits, calculées, prennent leur propre ligne. Déplacement SEUL —
+    // mêmes ids, mêmes champs, aucune logique touchée.
     +'<div class="modal-row">'
       +modalField('Check-in','<input type="text" id="eh-ci" class="cal-trigger" value="'+ciVal+'" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar(\'eh-ci\')" style="width:100%;cursor:pointer"/>')
+      +modalField('Heure d\'arrivée','<input type="time" id="eh-heure-arr" value="'+(h.heureArr||'')+'" style="padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none;width:100%"/>')
+    +'</div>'
+    +'<div class="modal-row">'
       +modalField('Check-out','<input type="text" id="eh-co" class="cal-trigger" value="'+coVal+'" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar(\'eh-co\')" style="width:100%;cursor:pointer"/>')
+      +modalField('Heure de départ','<input type="time" id="eh-heure-dep" value="'+(h.heureDep||'')+'" style="padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none;width:100%"/>')
+    +'</div>'
+    +'<div class="modal-row">'
       +'<div class="modal-field" style="flex:none"><label>Nuits <span style="font-weight:400;color:var(--ink-hint)">(auto)</span></label><input type="number" id="eh-nuits" class="nuits-auto" value="'+(_hotelNights(h)||'')+'" readonly tabindex="-1" aria-readonly="true" title="Calculé automatiquement depuis les dates" style="max-width:70px;min-width:60px;flex:none;padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);outline:none"/></div>'
     +'</div>'
     +'<div class="modal-row">'
       +modalField('Type de chambre',mInput('eh-type',h.type,'Chambre double'))
       +modalField('N° réservation',mInput('eh-resa',h.resa,'ABC-123'))
       +modalField('Statut',mSelect('eh-statut',STATUT_VALUES,_statutNorm(h.statut)))
-    +'</div>'
-    +'<div class="modal-row">'
-      +modalField('Heure d\'arrivée','<input type="time" id="eh-heure-arr" value="'+(h.heureArr||'')+'" style="padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none;width:100%"/>')
-      +modalField('Heure de départ','<input type="time" id="eh-heure-dep" value="'+(h.heureDep||'')+'" style="padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none;width:100%"/>')
     +'</div>'
     +'<div class="modal-row">'
       +modalField('Note (petit-déj, wifi, étage…)','<textarea id="eh-note" rows="2" placeholder="Petit-déj inclus 7h-10h · code wifi…" style="padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none;width:100%;resize:vertical">'+((h.note||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'))+'</textarea>')
@@ -8090,7 +8208,19 @@ function editHotel(id){id=isNaN(+id)?id:+id;
   setTimeout(function(){
     autoHotelEdit(); // normalise l'affichage initial des nuits
     _lienFillRows('eh', h.liens);
+    _ehWireVilleMirror();
   }, 0);
+}
+// Les deux champs « Ville » de la modale hébergement (ligne du haut et bloc
+// Adresse) décrivent la MÊME donnée : on les tient en miroir pour que celui que
+// l'utilisateur édite fasse foi, quel qu'il soit. Remplace l'ancien doublon d'id
+// qui faisait gagner le champ du haut en silence (E5).
+function _ehWireVilleMirror(){
+  var top=document.getElementById('eh-ville-top');
+  var addr=document.getElementById('eh-ville');
+  if(!top || !addr) return;
+  top.oninput  = function(){ addr.value = top.value; };
+  addr.oninput = function(){ top.value  = addr.value; };
 }
 // Recalcule le champ Nuits (lecture seule) de la modale d'édition depuis
 // les champs calendrier check-in/check-out (JJ/MM/AAAA). Dates
@@ -8106,7 +8236,14 @@ function autoHotelEdit(){
 function saveHotel(id){id=isNaN(+id)?id:+id;
   var h=hotels.find(function(x){return x.id==id;});if(!h)return;
   h.nom=document.getElementById('eh-nom').value||h.nom;
-  h.ville=document.getElementById('eh-ville').value||h.ville;
+  // Ville : DEUX champs l'affichent (ligne du haut + bloc Adresse). Ils portaient
+  // le MÊME id, si bien que getElementById ne voyait que celui du haut et qu'une
+  // correction faite dans le bloc Adresse était silencieusement jetée (E5). Ils
+  // ont désormais des ids distincts et sont maintenus en miroir par
+  // _ehWireVilleMirror ; on lit le bloc Adresse, avec repli sur le haut.
+  var _vAddr=(document.getElementById('eh-ville')||{value:''}).value.trim();
+  var _vTop =(document.getElementById('eh-ville-top')||{value:''}).value.trim();
+  h.ville=_vAddr||_vTop||h.ville;
   // Dates du calendrier partagé — stockées en JJ/MM/AAAA, comme le
   // formulaire d'ajout (addHotel). Les parseurs (_hotelDateObj, timeline,
   // smart-alerts) gèrent aussi l'ancien « JJ mois » (piège §5.10).
@@ -8174,6 +8311,9 @@ function saveHotel(id){id=isNaN(+id)?id:+id;
       }
     }
   }
+  // Dépense automatique : son libellé (nom de l'hébergement) et sa date
+  // (check-in) dérivent de l'élément — à resynchroniser après modification (E7).
+  _syncItemExpense('hotel', id);
   closeModal(); _syncTotalNuits(); renderHotels();snapshotCurrentTrip();
   showToast('Hébergement mis à jour ','success');
 }
@@ -8423,8 +8563,26 @@ function editLieu(id){id=isNaN(+id)?id:+id;
   setTimeout(function(){ if(typeof _populatePaysDatalists==='function') _populatePaysDatalists(); },0);
   openModal(
     '<div class="modal-header"><div class="modal-title">Modifier ce lieu</div><button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
+    // Ordre aligné sur le formulaire de CRÉATION (E15) : nom, puis ville +
+    // catégorie, puis date de visite, puis horaires, puis localisation, puis
+    // note. Réorganisation SEULE — aucun champ ajouté ni retiré, aucune
+    // nouvelle logique de saisie (le champ Ville reste un input simple, sans
+    // autocomplétion, et le bloc adresse n'est pas replié en accordéon).
     +'<div class="modal-row">'
       +modalField('Nom',mInput('el-nom',l.nom,'Nom du lieu'))
+    +'</div>'
+    // Ville REMONTÉE ici depuis le bloc Adresse (même id `el-ville`, donc
+    // saveLieu, _sanitizeAddrFields et _addrRemoveGeo continuent de la trouver).
+    +'<div class="modal-row">'
+      +modalField('Ville',mInput('el-ville',l.ville,'Tokyo, Kyoto…'))
+      +modalField('Catégorie','<input type="text" id="el-categorie" value="'+(l.categorie||'')+
+        '" placeholder="Temples, Restaurants…" list="el-cat-dl" autocomplete="off"/>'
+        // Datalist DÉRIVÉE de LIEU_CATS (source unique) — plus de liste figée à
+        // resynchroniser à chaque ajout de catégorie.
+        +'<datalist id="el-cat-dl">'+_lieuCatOptionsHtml()+'</datalist>')
+    +'</div>'
+    +'<div class="modal-row">'
+      +modalField('Date de visite (optionnel)','<input type="text" id="el-jour" class="cal-trigger" value="'+(l.dateVisite||'')+'" placeholder="JJ/MM/AAAA" style="width:100%;cursor:pointer" readonly onclick="openCalendar(\'el-jour\')"/>')
     +'</div>'
     +'<div class="modal-row">'
       +'<div class="modal-field"><label>Ouverture</label>'
@@ -8438,8 +8596,6 @@ function editLieu(id){id=isNaN(+id)?id:+id;
         +'<div class="addr-field"><label>Pays</label>'
           +'<input type="text" id="el-pays" value="'+(l.pays||'')+'" placeholder="Japon, France…" list="el-pays-datalist"/>'
           +'<datalist id="el-pays-datalist"></datalist></div>'
-        +'<div class="addr-field"><label>Ville</label>'
-          +'<input type="text" id="el-ville" value="'+(l.ville||'')+'" placeholder="Tokyo, Kyoto…"/></div>'
         +'<div class="addr-field"><label>Code Postal</label>'
           +'<input type="text" id="el-cp" value="'+(l.cp||'')+'" placeholder="604-8344…"/></div>'
         +'<div class="addr-field"><label>Rue / N°</label>'
@@ -8456,14 +8612,8 @@ function editLieu(id){id=isNaN(+id)?id:+id;
       +_gpsBlockHtml('el', l.gpsLat, l.gpsLng)
     +'</div>'
     +'<div class="modal-row">'
-+modalField('Catégorie','<input type="text" id="el-categorie" value="'+(l.categorie||'')+
-'" placeholder="Temples, Restaurants…" list="el-cat-dl" autocomplete="off"/>'
-// Datalist DÉRIVÉE de LIEU_CATS (source unique) — plus de liste figée à
-// resynchroniser à chaque ajout de catégorie.
-+'<datalist id="el-cat-dl">'+_lieuCatOptionsHtml()+'</datalist>')
-+'</div>'
-+modalField('Note',mTextarea('el-note',l.note||'','Conseil, prix…'))
-    +modalField('Date de visite (optionnel)','<input type="text" id="el-jour" class="cal-trigger" value="'+(l.dateVisite||'')+'" placeholder="JJ/MM/AAAA" style="width:100%;cursor:pointer" readonly onclick="openCalendar(\'el-jour\')"/>')
+      +modalField('Note',mTextarea('el-note',l.note||'','Conseil, prix…'))
+    +'</div>'
     +_liensBlockHtml('el')
     +mPdfBlock('el-pdf', l.pdfId||'')
     // Multi-documents : exposé AUSSI par le parcours « Modifier », pas
@@ -8537,6 +8687,9 @@ function saveLieu(id){id=isNaN(+id)?id:+id;
       }
     }
   }
+  // Dépense automatique : libellé (nom du lieu) et date (date de visite) en
+  // dérivent — à resynchroniser après modification (E7).
+  _syncItemExpense('lieu', id);
   closeModal(); renderLieux(); snapshotCurrentTrip();
   showToast('Lieu mis à jour ', 'success');
 }
@@ -9076,7 +9229,10 @@ function _expPieces(){
           pdfId:d.pdfId,
           titre:d.titre || (window.pdfStore[d.pdfId].name||'Document'),
           type:d.type||'autre',
-          prix:_docPrixMissing(d)?null:_docPrix(d),
+          // Montant EN EUROS : l'écran d'export et sa page de garde totalisent
+          // et formatent en € (_expFmtEur). Un montant en devise d'origine y
+          // serait affiché comme des euros.
+          prix:_docPrixMissing(d)?null:_docPrixEur(d),
           cat:(tx&&tx.cat) || _AUTO_CAT[cat] || '📱 Divers',
           date:(tx&&tx.date) || (typeof _autoTxDate==='function'?_autoTxDate(cat,o):'') || '',
           srcCat:cat, srcId:String(o.id), txId:tx?String(tx.id):''
@@ -9667,9 +9823,15 @@ function updateBudget(){
   var rem=budget-spent;
   var pct=budget>0?Math.min(100,(spent/budget)*100):0;
   var _el;
-  _el=document.getElementById('m-budget');    if(_el) _el.textContent=budget.toLocaleString('fr-FR',{minimumFractionDigits:2})+' €';
-  _el=document.getElementById('m-spent');     if(_el) _el.textContent=spent.toLocaleString('fr-FR',{minimumFractionDigits:2})+' €';
-  _el=document.getElementById('m-remaining'); if(_el){ _el.textContent=rem.toLocaleString('fr-FR',{minimumFractionDigits:2})+' €'; _el.className='metric-value '+(rem<0?'expense':'safe'); }
+  // maximumFractionDigits:2 explicite : sans lui, toLocaleString retombe sur 3
+  // décimales par défaut et un total incluant une conversion de devise
+  // s'affichait « 160,514 € ». Les montants convertis ne sont pas arrondis dans
+  // le modèle (updateBudget les recalcule au taux courant) — c'est l'AFFICHAGE
+  // qui doit se limiter aux centimes.
+  var _EUR2={minimumFractionDigits:2, maximumFractionDigits:2};
+  _el=document.getElementById('m-budget');    if(_el) _el.textContent=budget.toLocaleString('fr-FR',_EUR2)+' €';
+  _el=document.getElementById('m-spent');     if(_el) _el.textContent=spent.toLocaleString('fr-FR',_EUR2)+' €';
+  _el=document.getElementById('m-remaining'); if(_el){ _el.textContent=rem.toLocaleString('fr-FR',_EUR2)+' €'; _el.className='metric-value '+(rem<0?'expense':'safe'); }
   _el=document.getElementById('budget-pct-label'); if(_el) _el.textContent=Math.round(pct)+'% utilisé';
   _el=document.getElementById('budget-max-label'); if(_el) _el.textContent=budget.toLocaleString('fr-FR')+' €';
   var bar=document.getElementById('budget-bar');
@@ -9742,7 +9904,9 @@ function updateBudget(){
             return '<span class="tx-doc-chip'+(has?'':' nofile')+'"'
               +(has?' data-act="openPdf" data-id="'+_tlEsc(String(d.pdfId))+'"':'')+'>'
               +_tlEsc(_docTypeLabel(d.type))+' · '+_tlEsc(d.titre||'sans nom')
-              +(_docPrixMissing(d)?'':' · '+_expFmtEur(_docPrix(d)))
+              // Montant affiché DANS SA DEVISE : formater un prix en yens avec
+              // _expFmtEur donnerait « 25 000,00 € » pour 25 000 ¥.
+              +(_docPrixMissing(d)?'':' · '+_docPrixLabel(d))
             +'</span>';
           }).join('')+'</div>';
         }
@@ -10722,16 +10886,28 @@ document.addEventListener('click', function(e) {
       if(latEl && latEl.value && lngEl && lngEl.value){
         _origAddHotel(); return;
       }
-      // Construire fullAddress depuis les champs structurés
+      // Construire fullAddress depuis les champs structurés.
+      // PIÈGE (E8) : la ville saisie par l'utilisateur est dans `ht-ville-addr`
+      // (champ VISIBLE du bloc Adresse). `ht-ville` est le champ CACHÉ de
+      // compatibilité, laissé vide — le lire réduisait la requête au seul pays,
+      // et Nominatim renvoyait le CENTROÏDE DU PAYS : tous les hébergements
+      // étaient enregistrés au centre du Japon, donc épinglés là sur la carte
+      // (lat/lng renseignés → _loadTripPoints ne géocode plus la ville).
       var rue   = (document.getElementById('ht-rue')  ||{}).value||'';
       var cp    = (document.getElementById('ht-cp')   ||{}).value||'';
-      var ville = (document.getElementById('ht-ville')||{}).value||'';
+      var ville = (document.getElementById('ht-ville-addr')||{}).value||'';
+      if(!ville) ville = (document.getElementById('ht-ville')||{}).value||'';
       var pays  = (document.getElementById('ht-pays') ||{}).value||'';
       var nom   = (document.getElementById('ht-nom')  ||{}).value||'';
       var query = typeof buildFullAddress === 'function'
         ? buildFullAddress(rue, cp, ville, pays)
         : '';
       if(!query) query = (nom && ville) ? nom+', '+ville : ville;
+      // Garde-fou : une requête réduite au seul PAYS ne peut renvoyer qu'un
+      // centroïde national. Mieux vaut aucune coordonnée (la carte géocodera
+      // par nom/ville, et l'hébergement est signalé « Non situé » s'il n'est
+      // vraiment pas localisable) qu'un point faux au milieu du pays.
+      if(!rue && !cp && !ville) query = '';
 
       if(query){
         fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(query),{headers:{'Accept-Language':'fr,en'}})
@@ -11897,6 +12073,10 @@ var DOC_CARRIERS = {
   transport: function(){ return typeof mobilites!=='undefined'?mobilites:[]; },
   hotel:     function(){ return typeof hotels   !=='undefined'?hotels   :[]; },
   lieu:      function(){ return typeof lieux    !=='undefined'?lieux    :[]; },
+  // Le pass rejoint les porteurs (E4) : son formulaire de création affichait
+  // déjà les blocs Liens et Documents, mais la branche pass d'addMobilite les
+  // ignorait — tout ce qui y était saisi était jeté en silence.
+  pass:      function(){ return typeof passes   !=='undefined'?passes   :[]; },
   document:  function(){ return typeof documents!=='undefined'?documents:[]; }
 };
 // ── BROUILLONS (création) ────────────────────────────────────────────
@@ -11924,23 +12104,34 @@ function _docDraftTake(key){
   return out;
 }
 // Rend (ou re-rend) le bloc dans le slot d'un formulaire de création.
-// Le formulaire Documents sert aussi à l'ÉDITION (doc-edit-id renseigné). Dans
-// ce cas le bloc doit être lié au document réel, pas à un brouillon.
-function _docDraftEditing(key){
-  if(key!=='doc') return false;
-  var e=document.getElementById('doc-edit-id');
-  return !!(e && e.value);
+// DEUX formulaires servent aussi à l'ÉDITION d'un élément existant :
+//   · form-doc      → document réel (doc-edit-id renseigné)
+//   · form-mobilite → VOL réel (_mobEditId posé, édition unifiée)
+// Dans ces cas le bloc doit être lié à l'élément réel, JAMAIS au brouillon :
+// sinon ses documents sont invisibles et ceux qu'on ajoute partent dans un
+// brouillon que l'enregistrement ne prélève pas (E1).
+// Cible du slot d'un formulaire, ou null s'il est en création (brouillon).
+function _docSlotTarget(key){
+  if(key==='doc'){
+    var e=document.getElementById('doc-edit-id');
+    if(e && e.value) return { cat:'document', id:e.value };
+    return null;
+  }
+  if(key==='mob'){
+    // Le formulaire mobilité n'édite un élément existant que pour les vols
+    // (édition unifiée). Les autres types passent par la modale em-*.
+    if(typeof _mobEditId!=='undefined' && _mobEditId) return { cat:'transport', id:_mobEditId };
+    return null;
+  }
+  return null;
 }
+function _docDraftEditing(key){ return !!_docSlotTarget(key); }
 
 function _docsDraftRender(key, slotId){
   var slot=document.getElementById(slotId);
   if(!slot) return;
-  if(key==='doc' && _docDraftEditing('doc')){
-    var did=document.getElementById('doc-edit-id').value;
-    slot.innerHTML=_docsBlockHtml('document', did);
-    return;
-  }
-  slot.innerHTML=_docsBlockHtml('draft', key);
+  var t=_docSlotTarget(key);
+  slot.innerHTML = t ? _docsBlockHtml(t.cat, t.id) : _docsBlockHtml('draft', key);
 }
 
 function _docCarrierArr(cat){ var f=DOC_CARRIERS[cat]; return f?f():[]; }
@@ -11955,6 +12146,7 @@ function _docsOf(o){ return (o && Array.isArray(o.docs)) ? o.docs : []; }
 
 // Montant d'un document (toujours un nombre fini, 0 en repli) — même contrat que
 // _txAmount côté transactions, pour ne jamais propager de NaN dans le budget.
+// C'est le montant DANS SA DEVISE D'ORIGINE (voir _docDevise / _docPrixEur).
 function _docPrix(d){
   var n = parseFloat(d && d.prix);
   return isFinite(n) ? n : 0;
@@ -11962,11 +12154,63 @@ function _docPrix(d){
 function _docPrixMissing(d){
   return !d || d.prix===null || d.prix===undefined || d.prix==='' || !isFinite(parseFloat(d.prix));
 }
-// Somme des prix des documents d'un élément — base de sa ligne de dépense.
+// ══════════════════════════════════════════════════════════════════════
+// DEVISE D'UN DOCUMENT
+// ══════════════════════════════════════════════════════════════════════
+// `prix` est stocké dans sa devise d'ORIGINE, `devise` porte le code ISO. Devise
+// absente = EUR implicite : les documents déjà enregistrés restent donc lus à
+// l'identique, sans migration.
+// La conversion réutilise localToEur — le MÊME mécanisme de taux que les
+// dépenses manuelles du Budget (taux live _cachedRates, puis FALLBACK_RATES,
+// puis convRate). Aucune logique de change n'est réécrite ici.
+function _docDevise(d){
+  var c = (d && d.devise) ? String(d.devise).trim().toUpperCase() : '';
+  return c || 'EUR';
+}
+function _docPrixEur(d){
+  var v = _docPrix(d);
+  if(!v) return 0;
+  var e = localToEur(v, _docDevise(d));
+  return isFinite(e) ? e : 0;
+}
+// Somme des prix des documents d'un élément, EN EUROS — base du montant de sa
+// ligne de dépense (les devises peuvent être mélangées d'un document à l'autre).
 function _docsTotal(o){
+  var t=0, arr=_docsOf(o);
+  for(var i=0;i<arr.length;i++) t += _docPrixEur(arr[i]);
+  return Math.round(t*100)/100;
+}
+// Devise commune aux documents PAYANTS d'un élément, ou '' si elles diffèrent.
+// Quand elle est unique et non-EUR, la ligne de dépense peut porter le montant
+// d'origine (raw + devise) et s'afficher comme une dépense manuelle en devise
+// étrangère : « 12 000 ¥ converti » sous le montant en euros.
+function _docsCommonDevise(o){
+  var arr=_docsOf(o), code=null;
+  for(var i=0;i<arr.length;i++){
+    if(_docPrixMissing(arr[i])) continue;
+    var c=_docDevise(arr[i]);
+    if(code===null) code=c;
+    else if(code!==c) return '';
+  }
+  return code||'EUR';
+}
+// Somme dans la devise d'origine (n'a de sens que si _docsCommonDevise != '').
+function _docsTotalRaw(o){
   var t=0, arr=_docsOf(o);
   for(var i=0;i<arr.length;i++) t += _docPrix(arr[i]);
   return Math.round(t*100)/100;
+}
+// Montant d'un document formaté DANS SA DEVISE (symbole de CURRENCY_INFO, la
+// même table que les badges du Budget). Les devises sans décimale usuelle (yen)
+// restent lisibles : on n'impose pas deux décimales sur un gros montant entier.
+function _docPrixLabel(d){
+  var v=_docPrix(d), code=_docDevise(d);
+  var info=(typeof CURRENCY_INFO!=='undefined' && CURRENCY_INFO[code]) || null;
+  var sym=info?info.sym:code;
+  var txt=(v>=1000 && v===Math.round(v))
+    ? v.toLocaleString('fr-FR',{maximumFractionDigits:0})
+    : v.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return (code==='EUR') ? (txt+' '+sym) : (txt+' '+sym);
 }
 function _docsPricedCount(o){
   var n=0, arr=_docsOf(o);
@@ -12007,6 +12251,7 @@ var _AUTO_CAT = {
   transport: '🚉 Transport',
   hotel:     '🏯 Hébergement',
   lieu:      '🎌 Activités',
+  pass:      '🚉 Transport',   // un pass de transport est une dépense de transport
   document:  '📱 Divers'
 };
 // (Les clés de catégorie budgétaire contiennent un emoji de préfixe : exception
@@ -12031,6 +12276,7 @@ function _autoTxDesc(cat, o){
   }
   if(cat==='hotel')    return o.nom || 'Hébergement';
   if(cat==='lieu')     return o.nom || 'Lieu';
+  if(cat==='pass')     return o.nom || 'Pass';
   if(cat==='document') return o.name || o.nom || 'Document';   // saveDoc stocke .name
   return 'Dépense';
 }
@@ -12039,6 +12285,7 @@ function _autoTxDate(cat, o){
   if(cat==='transport') return o.date || '';
   if(cat==='hotel')     return o.checkin || '';
   if(cat==='lieu')      return o.dateVisite || '';
+  if(cat==='pass')      return o.debut || '';   // date de DÉBUT de validité
   return '';
 }
 
@@ -12058,12 +12305,21 @@ function _syncItemExpense(cat, id){
     if(tx) transactions=transactions.filter(function(x){ return x!==tx; });
     return;
   }
+  // `amount` est TOUJOURS en euros (contrat de la chaîne budgétaire). Quand tous
+  // les documents payants partagent une même devise étrangère, on renseigne en
+  // plus `raw` + `devise` avec le montant d'origine : la ligne s'affiche alors
+  // exactement comme une dépense manuelle en devise étrangère (montant en euros
+  // en gros, badge de devise, « 12 000 ¥ converti » en dessous) — aucun rendu
+  // spécifique à écrire. Devises mélangées → seul l'euro a un sens.
+  var _cd  = _docsCommonDevise(o);
+  var _dev = (_cd && _cd!=='EUR') ? _cd : 'EUR';
+  var _raw = (_dev==='EUR') ? total : _docsTotalRaw(o);
   if(tx){
     // Mise à jour EN PLACE : on ne touche que les champs dérivés. paidBy /
     // forWho, éventuellement renseignés à la main sur cette ligne, survivent.
     tx.amount = total;
-    tx.raw    = total;
-    tx.devise = 'EUR';
+    tx.raw    = _raw;
+    tx.devise = _dev;
     tx.desc   = _autoTxDesc(cat,o);
     tx.date   = _autoTxDate(cat,o) || tx.date || '';
     if(!tx.cat) tx.cat = _AUTO_CAT[cat] || '📱 Divers';
@@ -12071,7 +12327,7 @@ function _syncItemExpense(cat, id){
     transactions.push({
       id: uid(),
       desc: _autoTxDesc(cat,o),
-      amount: total, raw: total, devise: 'EUR',
+      amount: total, raw: _raw, devise: _dev,
       cat: _AUTO_CAT[cat] || '📱 Divers',
       date: _autoTxDate(cat,o),
       paidBy: '', forWho: '',
@@ -12108,6 +12364,26 @@ function _txSrcDocs(t){
 function _docsBlockId(cat, id){
   return 'docs-block-'+String(cat)+'-'+String(id).replace(/[^A-Za-z0-9_-]/g,'');
 }
+// Options du sélecteur de devise d'un document — RECOPIÉES du select du Budget
+// (#tx-devise), construit par _buildTxDeviseSelect depuis les pays du voyage.
+// Même pattern que editTransaction, qui réutilise déjà cet innerHTML : une seule
+// liste de devises dans l'app, aucune duplication. Repli EUR si le select du
+// budget n'est pas encore monté (aucun voyage ouvert).
+function _docDeviseOptionsHtml(selected){
+  var src=document.getElementById('tx-devise');
+  var html=(src && src.innerHTML) ? src.innerHTML : '<option value="EUR">€ Euro</option>';
+  var code=(selected||'EUR').toUpperCase();
+  // La devise déjà enregistrée doit rester sélectionnable même si le voyage ne
+  // la propose plus (document saisi puis pays du voyage modifié).
+  if(html.indexOf('value="'+code+'"')===-1){
+    var info=(typeof CURRENCY_INFO!=='undefined' && CURRENCY_INFO[code]) || {sym:code,name:code};
+    html += '<option value="'+code+'">'+info.sym+' '+info.name+'</option>';
+  }
+  // On ne peut pas se reposer sur select.value (le bloc est injecté en innerHTML,
+  // pas encore dans le document) : l'option retenue est marquée à la génération.
+  return html.replace(/ selected(=("|')selected\2)?/g,'')
+             .replace('value="'+code+'"', 'value="'+code+'" selected');
+}
 function _docsBlockHtml(cat, id){
   var o=_docFindItem(cat,id);
   if(!o) return '';
@@ -12136,7 +12412,10 @@ function _docsBlockHtml(cat, id){
         +'<span class="doc-prix-wrap">'
           +'<input type="text" class="doc-prix" value="'+(_docPrixMissing(d)?'':_docPrix(d))+'" placeholder="Prix"'
             +' onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'prix\',this.value)"/>'
-          +'<span class="doc-prix-eur">€</span>'
+          +'<select class="doc-devise" title="Devise du montant"'
+            +' onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'devise\',this.value)">'
+            +_docDeviseOptionsHtml(_docDevise(d))
+          +'</select>'
         +'</span>'
         +'<button type="button" class="doc-del" title="Retirer ce document" onclick="_docRemove(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\')">'
           +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
@@ -12156,8 +12435,14 @@ function _docsBlockHtml(cat, id){
   });
   var tot=_docsTotal(o);
   if(_docsPricedCount(o)){
+    // Le total est TOUJOURS affiché en euros (c'est ce qui part au Budget). Si
+    // une devise étrangère est en jeu, on rappelle qu'il s'agit d'une conversion.
+    var _cd=_docsCommonDevise(o);
+    var _hint = (_cd && _cd!=='EUR')
+      ? 'converti depuis '+_cd+' et reporté au Budget'
+      : (!_cd ? 'devises converties et reportées au Budget' : 'reporté automatiquement au Budget');
     h+='<div class="docs-total">Total documents <b>'+_expFmtEur(tot)+'</b>'
-      +'<span class="docs-total-hint">reporté automatiquement au Budget</span></div>';
+      +'<span class="docs-total-hint">'+_hint+'</span></div>';
   }
   h+='<button type="button" class="docs-add" onclick="_docAdd(\''+q(cat)+'\',\''+q(id)+'\')">'
       +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un document</button>'
@@ -12213,6 +12498,12 @@ function _itemDocSet(cat, id, docId, field, value){
     }
   } else if(field==='titre'){ d.titre=String(value||'').trim(); }
   else if(field==='type'){ d.type=String(value||'autre'); }
+  else if(field==='devise'){
+    // Code ISO seul. EUR (ou vide) → on ne stocke rien : « pas de devise » reste
+    // l'état par défaut, et les documents déjà enregistrés n'ont pas à changer.
+    var dc=String(value||'').trim().toUpperCase();
+    if(!dc || dc==='EUR') delete d.devise; else d.devise=dc;
+  }
   _docsAfterChange(cat,id);
 }
 
@@ -12252,9 +12543,44 @@ function _docAttach(cat, id, docId, fileInput){
   reader.readAsDataURL(file);
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// RÉFÉRENCES pdfStore PORTÉES PAR docs[] — source unique des deux scanners
+// ══════════════════════════════════════════════════════════════════════
+// Les deux collecteurs de références (_pdfIdInUse pour la purge unitaire,
+// _gcCollectRefs pour le nettoyage du stockage) ne regardaient QUE le pdfId
+// RACINE des éléments. Depuis le multi-documents (étape 5 §8.3), une pièce peut
+// n'être référencée QUE par une entrée de docs[] : elle était alors jugée
+// orpheline, donc purgée alors qu'elle est bien vivante. Les deux scanners
+// passent désormais par ce helper — un seul endroit à faire évoluer.
+function _itemDocPdfIds(it){
+  var out = [];
+  if(!it) return out;
+  var arr = (it.docs && it.docs.length) ? it.docs : null;
+  if(!arr) return out;
+  for(var i=0;i<arr.length;i++){
+    if(arr[i] && arr[i].pdfId) out.push(arr[i].pdfId);
+  }
+  return out;
+}
+// Brouillons de création : une pièce peut être attachée (blob déjà écrit dans
+// pdfStore par _docAttach) avant que l'élément n'existe. Même règle que les
+// champs cachés du DOM déjà couverts par _gcCollectRefs : on la protège.
+function _draftPdfIds(){
+  var out = [];
+  var d = (typeof _DOC_DRAFTS !== 'undefined') ? _DOC_DRAFTS : null;
+  if(!d) return out;
+  Object.keys(d).forEach(function(k){
+    out = out.concat(_itemDocPdfIds(d[k]));
+  });
+  return out;
+}
+
 function _pdfIdInUse(pdfId){
   if(!pdfId) return true;              // pas d'id → ne rien purger
   var used = false;
+  // Brouillon de création en cours : la pièce n'est pas encore sur un élément.
+  var dr = _draftPdfIds();
+  for(var k=0;k<dr.length;k++){ if(dr[k] === pdfId) return true; }
   function scan(arr){
     if(used || !arr || !arr.length) return;
     for(var i=0;i<arr.length;i++){
@@ -12262,6 +12588,9 @@ function _pdfIdInUse(pdfId){
       if(!it) continue;
       // .file = pointeur legacy des documents (voir migration file→pdfId)
       if(it.pdfId === pdfId || it.file === pdfId){ used = true; return; }
+      // docs[] : une pièce du multi-documents compte comme référence.
+      var dp = _itemDocPdfIds(it);
+      for(var j=0;j<dp.length;j++){ if(dp[j] === pdfId){ used = true; return; } }
     }
   }
   var active = (typeof currentTripId !== 'undefined') ? currentTripId : null;
@@ -12329,6 +12658,11 @@ function _gcCollectRefs(){
       if(!it) continue;
       take(it.pdfId, into);
       take(it.file, into);   // pointeur legacy des documents (file→pdfId)
+      // docs[] (multi-documents, étape 5 §8.3) : une pièce peut n'être
+      // référencée QUE là. Sans ce scan, le nettoyage la jugeait orpheline et
+      // détruisait une pièce VIVANTE — exactement ce que l'en-tête interdit.
+      var dp = _itemDocPdfIds(it);
+      for(var j=0;j<dp.length;j++) take(dp[j], into);
     }
   }
   var active = (typeof currentTripId !== 'undefined') ? currentTripId : null;
@@ -12371,6 +12705,14 @@ function _gcCollectRefs(){
     var v = (el.value || '').trim();
     if(!v) continue;
     if(v.indexOf('gpdf_') === 0) refG[v] = 1; else refT[v] = 1;
+  }
+
+  // (5) Brouillons de création : documents en cours de saisie, dont le blob est
+  // déjà écrit dans pdfStore mais qui ne vivent encore sur aucun élément. Même
+  // logique que (4), pour les pièces du multi-documents.
+  var dr = _draftPdfIds();
+  for(var q=0;q<dr.length;q++){
+    if(dr[q].indexOf('gpdf_') === 0) refG[dr[q]] = 1; else refT[dr[q]] = 1;
   }
   return { trip: refT, global: refG };
 }
@@ -13079,6 +13421,8 @@ var LU = {
   'moon-star':'<path d="M18 5h4"/><path d="M20 3v4"/><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
   // Escale — Lucide 'anchor' (exact).
   'anchor':'<path d="M12 6v16"/><path d="m19 13 2-1a9 9 0 0 1-18 0l2 1"/><path d="M9 11h6"/><circle cx="12" cy="4" r="2"/>',
+  // Parc d'attraction — Lucide 'ferris-wheel' (exact).
+  'ferris-wheel':'<circle cx="12" cy="12" r="2"/><path d="M12 2v4"/><path d="m6.8 15-3.5 2"/><path d="m20.7 7-3.5 2"/><path d="M6.8 9 3.3 7"/><path d="m20.7 17-3.5-2"/><path d="m9 22 3-8 3 8"/><path d="M8 22h8"/><path d="M18 18.7a9 9 0 1 0-12 0"/>',
 
   // ── Documents ──
   'book-user':'<path d="M15 13a3 3 0 1 0-6 0"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><circle cx="12" cy="8" r="2"/>',
@@ -13169,7 +13513,11 @@ var LIEU_CATS = [
   { label:'March\u00e9s',  c:'#2e9c54', i:'store',        kw:['marche','market'] },
   { label:'Onsen',         c:'#169c93', i:'onsen',        kw:['onsen','spa','therme','bain'] },
   { label:'Plages',        c:'#169c93', i:'umbrella',     kw:['plage','beach'] },
-  { label:'Escale',        c:'#4f8a9c', i:'anchor',       kw:['escale','port','halte'] }
+  { label:'Escale',        c:'#4f8a9c', i:'anchor',       kw:['escale','port','halte'] },
+  // Orange vif : teinte encore libre dans la palette, et volontairement
+  // distincte du vert de « Parcs » — sans entrée dédiée, « Parc d'attraction »
+  // serait apparié sur son PREMIER mot (« parc ») et rendu comme un jardin.
+  { label:'Parc d\'attraction', c:'#e2761b', i:'ferris-wheel', kw:['attraction'] }
 ];
 var _LIEU_CAT_FALLBACK = { c:'#8a93a3', i:'map-pin' };
 
@@ -13239,6 +13587,103 @@ function _fillLieuCatDatalist(){
   if(dl) dl.innerHTML=_lieuCatOptionsHtml();
 }
 document.addEventListener('DOMContentLoaded', _fillLieuCatDatalist);
+
+// ══════════════════════════════════════════════════════════════════════
+// CATÉGORIE DE LIEU — liste déroulante MAISON (.ac-wrap / .ac-list)
+// ══════════════════════════════════════════════════════════════════════
+// Le champ ne s'appuyait que sur la `datalist` NATIVE, qui n'ouvre aucune liste
+// sur mobile (support iOS quasi inexistant) : la sélection assistée était donc
+// perdue alors que les autres champs à suggestions de l'app (compagnie aérienne,
+// gares…) utilisent depuis toujours le moteur maison .ac-wrap/.ac-list. On
+// aligne la catégorie dessus — mêmes classes, mêmes jetons visuels, aucun
+// nouveau composant.
+// Source des entrées : LIEU_CATS, la MÊME table que _lieuCatOptionsHtml et que
+// la résolution couleur/icône — rien n'est dupliqué.
+var _lieuCatIdx = -1;          // entrée survolée au clavier (-1 = aucune)
+
+function _lieuCatBox(){ return document.getElementById('ac-lieu-cat'); }
+
+// Entrées proposées : toutes si la saisie est vide (ouvrir = voir la liste),
+// sinon celles qui contiennent le texte saisi. Appariement via _lieuCatNorm
+// (accents et casse ignorés), cohérent avec _lieuCatDescriptor.
+function _lieuCatHits(val){
+  var q=_lieuCatNorm(val||''), out=[];
+  for(var i=0;i<LIEU_CATS.length;i++){
+    var lbl=LIEU_CATS[i].label;
+    if(!q || _lieuCatNorm(lbl).indexOf(q)!==-1) out.push(lbl);
+  }
+  return out;
+}
+
+function _lieuCatRender(hits){
+  var box=_lieuCatBox(); if(!box) return;
+  if(!hits.length){ box.classList.remove('open'); box.innerHTML=''; return; }
+  _lieuCatIdx=-1;
+  box.innerHTML=hits.map(function(lbl){
+    var meta=_lieuCatMeta(lbl);
+    // Pastille de couleur + icône de la catégorie : le choix se fait à l'œil,
+    // et l'utilisateur voit d'avance comment le lieu sera rendu.
+    return '<div class="ac-item ac-cat-item" data-cat="'+_tlEsc(lbl)+'">'
+      +'<span class="ac-cat-dot" style="color:'+meta.color+';background:'+meta.tint+'">'+meta.svg+'</span>'
+      +_tlEsc(lbl)+'</div>';
+  }).join('');
+  box.classList.add('open');
+  box.querySelectorAll('.ac-cat-item').forEach(function(item){
+    // mousedown : se déclenche AVANT le blur de l'input, sinon la liste se
+    // referme avant que le clic n'aboutisse.
+    item.addEventListener('mousedown', function(e){
+      e.preventDefault();
+      _lieuCatPick(this.getAttribute('data-cat'));
+    });
+  });
+}
+
+function _lieuCatPick(lbl){
+  var inp=document.getElementById('lieu-categorie');
+  if(inp) inp.value=lbl;
+  var box=_lieuCatBox();
+  if(box){ box.classList.remove('open'); box.innerHTML=''; }
+  _lieuCatIdx=-1;
+}
+
+// Ouverture au focus / au tap : la liste COMPLÈTE s'affiche, sans rien saisir.
+function onLieuCatOpen(){
+  var inp=document.getElementById('lieu-categorie');
+  _lieuCatRender(_lieuCatHits(inp?inp.value:''));
+}
+function onLieuCatInput(val){ _lieuCatRender(_lieuCatHits(val)); }
+
+// Clavier : flèches pour parcourir, Entrée pour valider, Échap pour fermer.
+function onLieuCatKey(e){
+  var box=_lieuCatBox(); if(!box) return;
+  var items=box.querySelectorAll('.ac-cat-item');
+  var k=e.key;
+  if(k==='Escape'){ box.classList.remove('open'); _lieuCatIdx=-1; return; }
+  if(k==='ArrowDown' || k==='ArrowUp'){
+    if(!box.classList.contains('open')){ onLieuCatOpen(); items=box.querySelectorAll('.ac-cat-item'); }
+    if(!items.length) return;
+    e.preventDefault();
+    _lieuCatIdx += (k==='ArrowDown') ? 1 : -1;
+    if(_lieuCatIdx<0) _lieuCatIdx=items.length-1;
+    if(_lieuCatIdx>=items.length) _lieuCatIdx=0;
+    for(var i=0;i<items.length;i++) items[i].classList.toggle('focused', i===_lieuCatIdx);
+    items[_lieuCatIdx].scrollIntoView({block:'nearest'});
+    return;
+  }
+  if(k==='Enter'){
+    if(box.classList.contains('open') && _lieuCatIdx>=0 && items[_lieuCatIdx]){
+      e.preventDefault();   // ne pas soumettre le formulaire sur la validation
+      _lieuCatPick(items[_lieuCatIdx].getAttribute('data-cat'));
+    }
+  }
+}
+
+// Fermeture au clic extérieur (le texte libre saisi est conservé).
+document.addEventListener('click', function(e){
+  var box=_lieuCatBox(); if(!box || !box.classList.contains('open')) return;
+  if(e.target.id==='lieu-categorie' || box.contains(e.target)) return;
+  box.classList.remove('open'); _lieuCatIdx=-1;
+});
 
 // Couleur de l'HÉBERGEMENT — même valeur que la pastille de _pinIcon
 // (map-trip.js) et que _COLORS.hotel (timeline.js).

@@ -1813,6 +1813,19 @@ select.pays-select optgroup{font-size:11px;color:var(--ink-hint)}
 .ac-item:last-child{border-bottom:none}
 .ac-item:hover{background:var(--sakura-light);color:var(--sakura-dark)}
 .ac-item .ac-sub{font-size:11px;color:var(--ink-hint);margin-left:auto}
+/* Entrée parcourue au clavier — même surlignage que le survol souris. */
+.ac-item.focused{background:var(--sakura-light);color:var(--sakura-dark)}
+
+/* ── Liste des catégories de lieu (#ac-lieu-cat) ──────────────────────
+   Chaque entrée porte la pastille de couleur + l'icône de sa catégorie : le
+   choix se fait à l'œil et montre d'avance le rendu du lieu. Cible tactile
+   44 px, scopée à cette liste pour ne pas déplacer les autres autocomplétions. */
+#ac-lieu-cat .ac-item{ min-height:44px; }
+.ac-cat-dot{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:26px;height:26px;flex:0 0 26px;border-radius:50%;
+}
+.ac-cat-dot svg{ width:15px;height:15px; }
 
 /* ── Titre auto-généré ── */
 .vol-titre-preview{
@@ -5943,10 +5956,28 @@ body.nav-drawer-open #nav-drawer{ transform:translateX(0); }
 }
 .doc-item-r1 input{ width:100%; }
 .doc-item-r1 input:focus, .doc-item-r2 select:focus, .doc-prix:focus{ border-color:var(--sakura); }
-.doc-item-r2{ display:flex; align-items:center; gap:7px; }
+/* La rangée peut passer à la ligne : avec le sélecteur de devise en plus, les
+   quatre contrôles ne tiennent pas côte à côte à 375 px. */
+.doc-item-r2{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
 .doc-item-r2 select{ flex:1 1 auto; min-width:0; }
-.doc-prix-wrap{ position:relative; flex:0 0 96px; display:flex; align-items:center; }
-.doc-prix{ width:100%; padding-right:22px !important; text-align:right; }
+/* Prix + devise forment UN groupe : ils restent solidaires quand la rangée
+   passe à la ligne. */
+.doc-prix-wrap{
+  position:relative; display:flex; align-items:center; gap:6px;
+  flex:1 1 190px; min-width:170px;
+}
+.doc-prix{ flex:1 1 auto; min-width:0; text-align:right; }
+/* Devise du document — réutilise les jetons du select de type ci-dessus.
+   Cible tactile 44 px (le reste de la rangée est à 40 px : c'est le nouveau
+   contrôle qui est porté à 44, sans déformer les champs existants). */
+.doc-item-r2 .doc-devise{
+  flex:0 0 104px; min-height:44px;
+  font-family:'DM Sans',sans-serif; font-size:13px;
+  border:1px solid var(--border); border-radius:var(--r-sm);
+  background:var(--surface); color:var(--ink); outline:none;
+  padding:8px 8px;
+}
+.doc-item-r2 .doc-devise:focus{ border-color:var(--sakura); }
 .doc-prix-eur{
   position:absolute; right:8px; font-size:12px; color:var(--ink-hint); pointer-events:none;
 }
