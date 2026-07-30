@@ -5495,11 +5495,27 @@ body.nav-drawer-open #nav-drawer{ transform:translateX(0); }
 .tmap-jump-title{ font-size:14px; font-weight:600; color:var(--ink); margin-bottom:10px; }
 .tmap-jump-list{
   max-height:min(58vh, 460px); overflow-y:auto;
-  display:flex; flex-direction:column; gap:4px;
+  display:flex; flex-direction:column; gap:6px;
+  /* Respiration en tête et en pied : sans elle, le fond de la ligne active est
+     rasé par le bord du conteneur qui défile. */
+  padding:2px 0;
 }
+/* Espacement : une fiche empile jusqu'à 3 lignes (nom, ville, date) séparées de
+   1 px, et il ne restait que 3 px entre la date d'un élément et le nom du
+   suivant — à peine plus que l'interligne interne, d'où une liste qui se lisait
+   comme un bloc continu.
+   CAUSE : les lignes sont des éléments flex d'un conteneur en COLONNE à hauteur
+   bornée (max-height + overflow-y:auto). Avec le flex-shrink:1 par défaut,
+   elles étaient COMPRIMÉES jusqu'à leur min-height au lieu de laisser le
+   conteneur défiler — le padding vertical n'était donc jamais rendu.
+   `flex:0 0 auto` rend sa hauteur naturelle à chaque ligne (le conteneur
+   défile, ce qu'il faisait déjà) ; padding et gap deviennent alors réellement
+   visibles, et la séparation ENTRE éléments domine nettement celle qui existe
+   À L'INTÉRIEUR d'un élément. */
 .tmap-jump-row{
   display:flex; align-items:center; gap:10px; width:100%;
-  min-height:48px; padding:8px 10px;
+  flex:0 0 auto;
+  min-height:56px; padding:10px;
   border:none; border-radius:12px; background:transparent;
   font-family:'DM Sans',sans-serif; cursor:pointer; text-align:left;
   -webkit-tap-highlight-color:transparent;

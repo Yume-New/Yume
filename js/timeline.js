@@ -427,10 +427,14 @@ function _renderEvents(events){
   var _icCal   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="17" height="17"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>';
   var _icList  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="17" height="17"><line x1="8" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="8" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>';
   var _isCal = (_PL.view === 'cal');
-  // Défaut selon le format : ordinateur = calendrier, téléphone = liste.
+  // Défaut : CALENDRIER, quel que soit le format. Le Planning s'ouvrait en liste
+  // sur téléphone (le défaut dépendait d'une media query ≥1024px) ; la vue
+  // calendrier est désormais le point de départ partout.
+  // Seul l'ÉTAT INITIAL est concerné : plToggleView continue de basculer
+  // librement, et son choix tient jusqu'au changement de voyage (_plReset).
   if(_PL.view === null){
-    _isCal = !!(window.matchMedia && window.matchMedia('(min-width:1024px)').matches);
-    _PL.view = _isCal ? 'cal' : 'list';
+    _isCal = true;
+    _PL.view = 'cal';
   }
   var actions = '<div class="pl-bar-actions">'
     + '<button class="pl-ic" type="button" title="Revenir à aujourd\'hui" onclick="if(window.plToday)plToday()">'+_icToday+'</button>'

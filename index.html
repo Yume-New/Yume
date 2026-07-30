@@ -1060,9 +1060,12 @@
   <!-- Rangée de regroupement, juste sous le titre (libellé « Regrouper par »
        retiré — les 3 boutons se suffisent). -->
   <div class="section-subbar" id="lieux-group-switch" aria-label="Regrouper les lieux">
-    <button class="lgs-btn active" data-group="ville" onclick="setLieuxGroup('ville',this)">Ville</button>
+    <!-- Ordre : Jour, Ville, Catégorie — le regroupement par défaut vient en
+         premier. La classe `active` initiale suit le défaut `_lieuxGroupMode`
+         (app.js) ; renderLieux la resynchronise ensuite à chaque rendu. -->
+    <button class="lgs-btn active" data-group="jour" onclick="setLieuxGroup('jour',this)">Jour</button>
+    <button class="lgs-btn" data-group="ville" onclick="setLieuxGroup('ville',this)">Ville</button>
     <button class="lgs-btn" data-group="categorie" onclick="setLieuxGroup('categorie',this)">Catégorie</button>
-    <button class="lgs-btn" data-group="jour" onclick="setLieuxGroup('jour',this)">Jour</button>
   </div>
   <div class="add-form" id="form-lieu">
     <div class="add-form-title">Ajouter un lieu</div>

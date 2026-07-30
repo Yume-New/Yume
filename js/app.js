@@ -8397,12 +8397,16 @@ function deleteHotel(id){id=isNaN(+id)?id:+id;
 // LIEUX
 // ══════════════════════════════════════════
 // [migrated to module — see header]
-var _lieuxGroupMode = 'ville';   // 'ville' | 'categorie' | 'jour' — défaut : par ville
+var _lieuxGroupMode = 'jour';   // 'ville' | 'categorie' | 'jour' — défaut : par JOUR
+// (le regroupement par jour ouvre sur le déroulé du voyage ; le fallback de
+//  setLieuxGroup vise le même mode, il ne protège que d'un appel avec une
+//  valeur INCONNUE — jamais déclenché par les 3 boutons de l'UI.)
 
 function setLieuxGroup(mode, btn){
   // Modes conservés : 'ville' | 'categorie' | 'jour' (le mode « Liste »/'none'
-  // a été retiré). Garde-fou : toute valeur inconnue retombe sur 'ville'.
-  _lieuxGroupMode = (mode==='categorie'||mode==='jour') ? mode : 'ville';
+  // a été retiré). Garde-fou : toute valeur inconnue retombe sur le mode par
+  // DÉFAUT, 'jour' — même valeur que _lieuxGroupMode à l'initialisation.
+  _lieuxGroupMode = (mode==='categorie'||mode==='ville') ? mode : 'jour';
   // Scopé à #lieux-group-switch (la classe .lgs-btn est aussi utilisée par le
   // sélecteur de vue Documents) — ne touche que les boutons de regroupement lieux.
   document.querySelectorAll('#lieux-group-switch .lgs-btn').forEach(function(b){ b.classList.remove('active'); });
@@ -8460,7 +8464,7 @@ function renderLieux(){
   if(!grid||!empty) return;
 
   // Synchroniser l'état des boutons de regroupement avec le mode courant
-  // (utile au 1er rendu, où le défaut est « par ville »).
+  // (utile au 1er rendu, où le défaut est « par jour »).
   document.querySelectorAll('#lieux-group-switch .lgs-btn').forEach(function(b){
     b.classList.toggle('active', b.getAttribute('data-group') === _lieuxGroupMode);
   });
