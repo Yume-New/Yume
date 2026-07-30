@@ -42,7 +42,21 @@ var _userCirc     = null;   // cercle de précision GPS
 // l'ancien comportement (ajout direct) — la carte reste fonctionnelle, sans
 // regroupement. _ensureCluster est rappelé à chaque chargement de points, donc
 // le premier montage antérieur au chargement de la lib se rattrape au suivant.
+// ── REGROUPEMENT DÉSACTIVÉ (étape 3 §8.3, arbitrage 29/07/2026) ──
+// Les activités s'affichent INDIVIDUELLEMENT. La désactivation passe par le
+// repli DÉJÀ EXISTANT et déjà testé : _cluster reste null, et _addMarker /
+// _removeMarker ajoutent alors les marqueurs directement au _map.
+//
+// La librairie markercluster VENDORÉE (commit a56f1cb) RESTE EN PLACE
+// volontairement : js/vendor/leaflet.markercluster.js,
+// css/vendor/MarkerCluster.css et leurs entrées SHELL_FILES ne sont PAS
+// retirées. Ce n'est PAS du code mort — c'est un interrupteur : repasser
+// _CLUSTER_ENABLED à true réactive le regroupement sans rien réinstaller.
+// Ne pas les signaler comme orphelins dans un audit.
+var _CLUSTER_ENABLED = false;
+
 function _ensureCluster() {
+  if (!_CLUSTER_ENABLED) return;   // ← interrupteur : _cluster reste null
   if (_cluster || !_map || typeof L === 'undefined' || typeof L.markerClusterGroup !== 'function') return;
   _cluster = L.markerClusterGroup({
     maxClusterRadius:      44,     // px : agrégation tant que les pins sont proches
@@ -241,6 +255,18 @@ function _airportGps(code) {
 
 
 // ── §3 QUERIES DE GÉOCODAGE ───────────────────────────────────────────
+// GPS manuel (gpsLat/gpsLng, étape 2 §8.3) — PRIORITAIRE sur le cache de
+// géocodage (lat/lng). Défensif : app.js expose _geoPoint mais se charge APRÈS
+// map-trip.js ; on garde donc une résolution locale autonome.
+function _manualGps(o) {
+  if (!o) return null;
+  var la = parseFloat(o.gpsLat), ln = parseFloat(o.gpsLng);
+  if (isFinite(la) && isFinite(ln) && la >= -90 && la <= 90 && ln >= -180 && ln <= 180) {
+    return { lat: la, lng: ln };
+  }
+  return null;
+}
+
 function _hotelQuery(h) {
   if (h.fullAddress && h.fullAddress.trim()) return h.fullAddress;
   if (h.adresse && h.adresse.trim()) return h.adresse + (h.ville ? ', ' + h.ville : '');
@@ -709,8 +735,11 @@ function _loadTripPoints() {
                    label:'', lat:null, lng:null, geocoding:false, _idxRef:String(i) });
       return;
     }
+    var gps = _manualGps(h);
     var query = _hotelQuery(h);
-    if (!query) return;
+    // GPS seul (ni adresse ni ville) : on garde le pin — sans ce garde, un
+    // hébergement localisé uniquement à la main était SAUTÉ faute de requête.
+    if (!query && !gps) return;
     var pin = {
       id:       String(h.id),
       type:     'hotel',
@@ -720,15 +749,15 @@ function _loadTripPoints() {
       // sur sa propre ligne (_carWhen). sub reste tel quel pour le desktop.
       ville:    (h.ville || ''),
       emoji:    'H',
-      label:    query,
-      lat:      h.lat  || null,
-      lng:      h.lng  || null,
-      geocoding: !(h.lat && h.lng),
+      label:    query || h.nom || '',
+      lat:      gps ? gps.lat : (h.lat || null),
+      lng:      gps ? gps.lng : (h.lng || null),
+      geocoding: !gps && !(h.lat && h.lng),
       _idxRef:  String(i)
     };
     _pins.push(pin);
-    if (h.lat && h.lng) {
-      _placeMarker(pin);
+    if (gps || (h.lat && h.lng)) {
+      _placeMarker(pin);          // GPS manuel → aucune requête réseau
     } else {
       points.push({ pin: pin, query: query });
     }
@@ -745,8 +774,11 @@ function _loadTripPoints() {
                    emoji:l.emoji||'', label:'', lat:null, lng:null, geocoding:false, _idxRef:String(i) });
       return;
     }
+    var gpsL = _manualGps(l);
     var query = _lieuQuery(l);
-    if (!query) return;
+    // GPS seul : idem hébergements — un lieu sans ville ni adresse mais porteur
+    // de coordonnées était sauté (fragilité signalée en §8.2, corrigée ici).
+    if (!query && !gpsL) return;
     var alreadyGeocoded = !!(l.lat && l.lng);
     var pin = {
       id:       String(l.id),
@@ -757,15 +789,15 @@ function _loadTripPoints() {
       ville:    (l.ville || ''),
       visited:  !!l.visited,
       emoji:    l.emoji || '',
-      label:    query,
-      lat:      l.lat  || null,   // FIX : respecte les coords existantes
-      lng:      l.lng  || null,   // FIX : idem
-      geocoding: !alreadyGeocoded,
+      label:    query || l.nom || '',
+      lat:      gpsL ? gpsL.lat : (l.lat || null),
+      lng:      gpsL ? gpsL.lng : (l.lng || null),
+      geocoding: !gpsL && !alreadyGeocoded,
       _idxRef:  String(i)
     };
     _pins.push(pin);
-    if (alreadyGeocoded) {
-      _placeMarker(pin);
+    if (gpsL || alreadyGeocoded) {
+      _placeMarker(pin);          // GPS manuel → aucune requête réseau
     } else {
       points.push({ pin: pin, query: query });
     }
@@ -1643,6 +1675,16 @@ window.initTripMap = function (options) {
       subdomains: 'abcd',
       maxZoom: 19
     }).addTo(_map);
+
+    // Préfixe « Leaflet | » retiré de l'attribution : c'est une courtoisie de la
+    // bibliothèque (licence BSD, aucune attribution d'UI exigée), PAS une
+    // obligation. Les crédits LÉGALEMENT requis — © OSM contributors (ODbL) et
+    // © CARTO — restent affichés intégralement. Ce gain de ~50px est ce qui
+    // permet à l'attribution de tenir en bas à gauche sans être recouverte par
+    // le compteur « n / total » à 375px de large (mesuré : 191px → 141px).
+    if (_map.attributionControl && _map.attributionControl.setPrefix) {
+      _map.attributionControl.setPrefix('');
+    }
 
     // Exposer l'instance pour rail-router.js
     window._tripmapInstance = _map;

@@ -113,30 +113,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--surface-2);color:var(--in
   transition:transform .12s,background .12s
 }
 .edit-item-btn:hover{background:var(--sakura-dark);transform:scale(1.12)}
-body.emode-vols .evol .edit-item-btn,
-body.emode-trains .etrain .edit-item-btn,
-body.emode-mobilite .emobilite .edit-item-btn,
-body.emode-locations .elocations .edit-item-btn,
-body.emode-hotels .ehotel .edit-item-btn,
-body.emode-passes .epass .edit-item-btn,
-body.emode-lieux .elieu .edit-item-btn{visibility:visible;opacity:1;pointer-events:auto}
-/* Gouttière en mode édition : réserve la place de la pastille (right:8px + 28px + marge)
-   pour qu'elle ne recouvre plus heure/date/badges du coin haut-droit. Le bouton est ancré
-   au bord du padding-box → il ne bouge pas, seul le contenu se décale. Hors emode : inchangé. */
-body.emode-vols .evol,
-body.emode-trains .etrain,
-body.emode-mobilite .emobilite,
-body.emode-locations .elocations,
-body.emode-hotels .ehotel,
-body.emode-passes .epass,
-body.emode-lieux .elieu{padding-right:46px !important}
-body.emode-vols .evol,
-body.emode-trains .etrain,
-body.emode-mobilite .emobilite,
-body.emode-locations .elocations,
-body.emode-hotels .ehotel,
-body.emode-passes .epass,
-body.emode-lieux .elieu{cursor:pointer}
+/* (Correctif : mode « Modifier »/emode RETIRÉ — règles de visibilité de la
+   pastille .edit-item-btn, gouttière padding-right:46px et cursor:pointer
+   supprimées. La base .edit-item-btn ci-dessus reste visibility:hidden, donc
+   les pastilles legacy vol/train encore présentes dans leurs templates restent
+   invisibles. L'édition passe par le tap sur la carte → fiche détail → Modifier.) */
 
 /* ─ MODAL ─ */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(26,26,46,.45);z-index:1000;align-items:center;justify-content:center;padding:16px}
@@ -630,18 +611,6 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
 .tc-mode:active{ transform:scale(.96); }
 
 /* ── DÉPLACEMENTS — page unique (étape 4) : tri, groupes, badges de type ── */
-.depl-top{ align-items:center; }
-.depl-sort{
-  display:inline-flex; gap:2px; padding:3px;
-  background:var(--surface-2); border:1px solid var(--border); border-radius:12px;
-}
-.depl-sort-seg{
-  border:none; background:transparent; cursor:pointer;
-  font-family:'DM Sans',sans-serif; font-size:12.5px; font-weight:600;
-  color:var(--ink-muted); padding:6px 14px; border-radius:9px; min-height:34px;
-  -webkit-tap-highlight-color:transparent; transition:background .15s,color .15s;
-}
-.depl-sort-seg.active{ background:var(--surface); color:var(--brand); box-shadow:var(--shadow-sm); }
 .depl-group-title{
   font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
   color:var(--ink-hint); margin:16px 2px 8px;
@@ -808,10 +777,13 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
    ligne saisis (pre-wrap). Même traitement pour la note de location. */
 .mob-note-text{
   font-size:11.5px;color:var(--ink-muted);line-height:1.45;
-  margin-top:6px;padding:6px 9px;
+  margin-top:8px;padding:7px 10px;
   background:var(--surface-2);border-radius:8px;
   border-left:2px solid var(--brand);
   white-space:pre-wrap;overflow-wrap:anywhere;
+  /* Pleine largeur de la carte (étape 3) : enfant direct de .mob-item, qui est
+     en flex-wrap → la note occupe une ligne entière, comme .hotel-note. */
+  flex:1 0 100%; min-width:0;
 }
 .loc-note-text{
   font-size:11px;color:var(--ink-muted);line-height:1.45;margin-top:6px;
@@ -839,17 +811,14 @@ input:focus,select:focus{border-color:var(--sakura);background:var(--surface)}
 .nuits-inline-form input{max-width:72px;min-width:60px;flex:none}
 
 /* ─ LIEUX ─ */
-.places-controls{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
-.filter-btn{padding:6px 14px;border:1px solid var(--border);border-radius:20px;background:var(--surface);font-size:12px;font-weight:500;color:var(--ink-muted);cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif}
-.filter-btn:hover{border-color:var(--sakura);color:var(--sakura)}
-.filter-btn.active{background:var(--sakura);color:white;border-color:var(--sakura)}
+/* (.places-controls / .filter-btn retirés avec le mode « Liste » : la barre de
+   filtres par chips n'existait qu'en mode plat.) */
 .places-grid{display:flex;flex-direction:column;gap:0;margin-bottom:14px}
 .place-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);padding:14px 16px;cursor:pointer;transition:all .18s;user-select:none;position:relative;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:4px}
 .place-card:hover{border-color:var(--sakura);box-shadow:var(--shadow-md);transform:translateY(-1px)}
 .place-card.visited{background:var(--sakura-light);border-color:var(--sakura)}
 .place-card.visited .place-name{color:var(--sakura-dark)}
 .lieu-cat-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;letter-spacing:.3px;margin-top:3px;width:fit-content}
-.filter-btn.cat-btn{border-style:dashed}
 .place-name{font-size:14px;font-weight:500;color:var(--ink);margin-bottom:1px;line-height:1.3}
 .place-city{font-size:11px;color:var(--ink-muted)}
 .place-adresse{font-size:11px;color:var(--ink-muted);margin-top:2px;line-height:1.4}
@@ -1054,7 +1023,9 @@ input.addr-autofilled{animation:addrFlash 1.6s ease forwards;}
 
 /* ─ MOBILITÉ — items unifiés ─ */
 .mob-item{
-  display:flex;align-items:flex-start;gap:12px;
+  /* flex-wrap : permet à la note (enfant direct, flex-basis 100%) de passer
+     sur sa propre ligne pleine largeur sous icône/corps/horaires. */
+  display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;
   padding:14px 16px;
   background:var(--surface);
   border:1px solid var(--border);
@@ -1534,13 +1505,40 @@ input.nuits-auto{
   color:var(--ink-muted);margin-bottom:6px
 }
 .liens-list{ display:flex;flex-direction:column;gap:6px; }
-.lien-row{ display:flex;gap:6px;align-items:center; }
-.lien-row .lien-label{ flex:1;min-width:0; }
-.lien-row .lien-url{ flex:1.6;min-width:0; }
-.lien-del{
-  flex:none;background:none;border:none;cursor:pointer;color:var(--ink-hint);
-  padding:4px;border-radius:var(--r-sm);display:inline-flex;align-items:center;transition:color .14s
+/* Ligne de lien : libellé et URL EMPILÉS sur deux lignes. Côte à côte, le
+   placeholder du libellé (« Libellé affiché (ex. Réservation) ») était coupé
+   net dès 375px — l'empilement lui rend toute la largeur. La ligne est
+   encadrée pour se lire comme UNE entité « lien ». */
+.lien-row{
+  display:flex; flex-wrap:wrap; gap:6px; align-items:center;
+  padding:8px; margin-bottom:8px;
+  background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--r-sm);
 }
+/* Rangée 1 : libellé sur TOUTE la largeur (plus de troncature).
+   Rangée 2 : URL + croix. Cet ordre suit l'ordre du DOM (libellé → URL → croix),
+   donc la tabulation reste naturelle — pas de propriété `order` qui
+   désynchroniserait le visuel et le clavier. */
+.lien-row .lien-label{ flex:1 1 100%; min-width:0; }
+.lien-row .lien-url{
+  flex:1 1 0; min-width:0;
+  /* La règle globale des champs ne liste pas input[type=url] : ce champ
+     héritait du style NATIF du navigateur (bordure noire à angles droits),
+     visuellement étranger au reste du formulaire. On l'aligne explicitement. */
+  padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;
+  border:1px solid var(--border); border-radius:var(--r-sm);
+  background:var(--surface-2); color:var(--ink); outline:none;
+  transition:border-color .15s; box-sizing:border-box;
+}
+.lien-row .lien-url:focus{ border-color:var(--sakura); background:var(--surface); }
+.lien-del{
+  flex:0 0 auto; width:44px; height:44px;      /* cible tactile conservée */
+  background:none;border:1px solid var(--border);cursor:pointer;color:var(--ink-hint);
+  border-radius:var(--r-sm);display:inline-flex;align-items:center;justify-content:center;
+  transition:color .14s,border-color .14s;
+  -webkit-tap-highlight-color:transparent;
+}
+.lien-del:hover{ border-color:#c0392b }
 .lien-del:hover{ color:#c0392b }
 .btn-add-lien{
   margin-top:8px;padding:6px 14px;background:transparent;
@@ -2150,7 +2148,7 @@ body { background: var(--body-bg) !important; }
 body, .app-header, .card, .add-form, .modal,
 .place-card, .loc-card, .mob-item, .hotel-item, .pass-card,
 .section, .btn-primary, .btn-ghost, .btn-edit-mode,
-.vsn-item, .filter-btn, .badge,
+.vsn-item, .badge,
 input, select, textarea {
   transition: background-color .25s ease, color .18s ease, border-color .18s ease !important;
 }
@@ -4329,17 +4327,106 @@ body::-webkit-scrollbar,
 }
 /* ══════════════ FIN PHASE H — SHELL DESKTOP ══════════════ */
 
-/* ══ LIEUX — sélecteur de regroupement + vue groupée ══ */
-.lieux-group-switch{
+/* Puce « Résa » en consultation (étape 2 §8.3) — même gabarit que .mob-tag,
+   teinte neutre : c'est une donnée de référence, pas un état à signaler.
+   .copyable imbriqué garde son propre style (tap = copier). */
+.mob-tag.resa-tag{
+  background:var(--surface-2); color:var(--ink-muted); border-color:var(--border);
+  font-variant-numeric:tabular-nums;
+}
+.mob-tag.resa-tag .copyable{ font-weight:600; color:var(--ink); }
+
+/* ══ STATUT DE RÉSERVATION — badge partagé transport + hébergement (étape 2) ══
+   .statut-ok / .statut-att préexistent (cartes transport). .statut-none est le
+   nouvel état « Sans réservation » : volontairement NEUTRE et non alarmant —
+   c'est un choix assumé, pas une anomalie. .hotel-statut est le porteur sur la
+   carte d'hébergement (les cartes transport réutilisent .mob-meta). */
+/* Spécificité alignée sur .mob-tag.statut-ok / .statut-att (0,2,0) — une règle
+   à 0,1,0 serait dominée par les styles de base de .mob-tag. */
+.mob-tag.statut-none{
+  background:var(--surface-2); color:var(--ink-muted); border-color:var(--border);
+}
+.hotel-statut{ margin-top:6px; display:flex; }
+
+/* ══ GROUPE LOCALISATION — parseur + adresse + GPS d'un seul tenant ══
+   Le parseur « Coller l'adresse complète » alimente pays/ville/CP/rue du bloc
+   Adresse : les deux doivent se lire comme UN seul groupe, sans coupure. Un
+   liseré gauche commun et le resserrement des marges internes matérialisent le
+   regroupement ; aucun champ n'est ajouté ni retiré, aucune logique modifiée. */
+.loc-group{
+  margin-top:10px;
+  padding-left:9px;
+  border-left:2px solid var(--border);
+}
+/* Marges internes resserrées : les deux blocs se touchent visuellement. */
+.loc-group > .magic-addr-wrap{ margin-bottom:6px; }
+.loc-group > .addr-block{ margin-top:0; }
+
+/* ══ GÉOLOCALISATION VOIE 2 — GPS manuel (étape 2 §8.3) ══
+   Bloc facultatif logé dans le bloc Adresse. Fond opaque (§5.4), couleurs de
+   thème uniquement, icône SVG filaire. Les champs sont en type=text (pas de
+   inputmode=decimal : le pavé décimal iOS n'a pas de signe moins, indispensable
+   pour les latitudes/longitudes négatives) → ils héritent du 16px mobile qui
+   empêche le zoom au focus. */
+.gps-block{
+  margin-top:10px; padding:10px;
+  background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--r-sm);
+}
+.gps-block-head{ display:flex; align-items:center; gap:6px; margin-bottom:8px; color:var(--brand); }
+.gps-block-label{
+  font-size:11px; font-weight:600; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ink-muted);
+}
+.gps-block-opt{
+  font-size:10px; font-weight:500; color:var(--ink-hint);
+  border:1px solid var(--border); border-radius:20px;
+  padding:1px 7px; background:var(--surface); text-transform:none; letter-spacing:0;
+}
+.gps-grid{ display:flex; gap:8px; flex-wrap:wrap; }
+.gps-field{ display:flex; flex-direction:column; gap:3px; flex:1 1 120px; min-width:0; }
+.gps-field label{ font-size:10.5px; font-weight:500; color:var(--ink-hint); text-transform:uppercase; letter-spacing:.05em; }
+.gps-field input{
+  width:100%; padding:7px 10px; font-size:13px; font-family:'DM Sans',sans-serif;
+  border:1px solid var(--border); border-radius:var(--r-sm);
+  background:var(--surface); color:var(--ink); outline:none; transition:border-color .15s;
+}
+.gps-field input:focus{ border-color:var(--sakura); }
+.gps-row-actions{ display:flex; align-items:flex-start; gap:8px; margin-top:7px; flex-wrap:wrap; }
+.btn-gps-clear{
+  flex:none; padding:5px 11px; border-radius:20px; cursor:pointer;
+  border:1px solid var(--border); background:var(--surface);
+  color:var(--ink-muted); font-family:'DM Sans',sans-serif; font-size:11.5px; font-weight:500;
+  transition:border-color .15s,color .15s;
+}
+.btn-gps-clear:hover{ border-color:var(--sakura); color:var(--ink); }
+.gps-hint{ flex:1 1 160px; min-width:0; font-size:10.5px; line-height:1.45; color:var(--ink-hint); }
+/* Vert/rouge sémantiques en hex fixe, alignés sur .addr-result-badge.ok/.ko :
+   --teal et --gold sont tous deux aliasés sur --sakura dans les thèmes, ils ne
+   distingueraient donc pas valide / invalide. */
+.gps-hint.ok{ color:#2e7d32; font-weight:500; }
+.gps-hint.ko{ color:#c62828; font-weight:500; }
+
+/* ══ BARRE DE SOUS-SECTION (patron partagé — étape 1 §8.3) ══
+   Rangée 1 : titre + « Ajouter ».  Rangée 2 : boutons de regroupement/tri,
+   collés sous le titre.  La rangée porte .section-subbar (nom neutre : elle
+   sert Déplacements #depl-sort, Lieux #lieux-group-switch et Documents
+   #doc-view-switch — l'ancien .lieux-group-switch était trompeur).
+   .section-top-tight resserre l'écart entre les deux rangées ; il doit rester
+   APRÈS la 2e définition de .section-top (~l.2889) pour l'emporter. */
+.section-top-tight{ margin-bottom:8px; }
+
+/* ══ LIEUX — vue groupée ══ */
+.section-subbar{
   display:flex; align-items:center; gap:8px; flex-wrap:wrap;
   margin-bottom:14px;
 }
-.lieux-group-switch .lgs-label{
-  font-size:11px; font-weight:600; letter-spacing:.06em;
-  text-transform:uppercase; color:var(--ink-hint);
-  margin-right:2px;
-}
 .lgs-btn{
+  /* Cible tactile 44px (standard appliqué dans le reste de l'app). La hauteur
+     VISUELLE reste compacte : le padding vertical est modeste et c'est
+     min-height qui porte la zone tappable, donc la rangée ne grossit pas
+     au-delà de 44px. */
+  min-height:44px; display:inline-flex; align-items:center;
   padding:6px 14px; border-radius:8px;
   border:1px solid var(--border); background:var(--surface);
   color:var(--ink-muted); font-family:'DM Sans',sans-serif;
@@ -5358,12 +5445,9 @@ body.nav-drawer-open #nav-drawer{ transform:translateX(0); }
 #tab-lieux .place-city{ font-size:12px; color:var(--ink-muted); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #tab-lieux .lieu-cat-badge{ flex:none; margin-top:0; }
 
-/* Tri par glisser — lieux */
+/* (Tri par glisser des lieux retiré avec le mode « Liste » : .drag-handle /
+   .drag-insert-line supprimés.) */
 #tab-lieux .places-grid{position:relative}
-.drag-handle{display:flex;align-items:center;padding:0 8px 0 0;cursor:grab;color:var(--ink-hint);flex-shrink:0;touch-action:none;-webkit-user-select:none;user-select:none}
-.drag-handle:active{cursor:grabbing}
-.drag-insert-line{position:absolute;left:8px;right:8px;height:2px;background:var(--sakura);border-radius:2px;pointer-events:none;display:none;z-index:10}
-#tab-lieux .places-grid.is-grouped .drag-handle{display:none}
 
 /* ══════════════════════════════════════════════════════════════════
    CARTE mobile — vue normale : la carte remplit le haut, la liste des
@@ -5497,9 +5581,19 @@ body.nav-drawer-open #nav-drawer{ transform:translateX(0); }
     z-index:650;
     transition:none;
   }
-  /* Le carrousel commence à 10px du bas + sa hauteur → l'attribution se
-     cale 4px au-dessus de son bord haut. */
-  #tripmap-wrap .leaflet-bottom{ bottom:calc(var(--tmap-car-h, 140px) + 14px); }
+  /* Attribution OSM/CARTO — OBLIGATION LÉGALE : déplacée, JAMAIS masquée.
+     Elle descend sur la rangée du compteur (même bottom que les contrôles),
+     calée à GAUCHE : donc sous les fiches d'activités et à gauche du
+     « n / total » qui reste centré. right:auto annule le coin bas-droite par
+     défaut de Leaflet, où elle aurait heurté les 3 boutons de contrôle. */
+  #tripmap-wrap .leaflet-bottom{
+    bottom:14px;
+    right:auto; left:8px;
+  }
+  #tripmap-wrap .leaflet-bottom .leaflet-control-attribution{
+    margin:0;
+    border-radius:6px;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -5663,3 +5757,462 @@ body.nav-drawer-open #nav-drawer{ transform:translateX(0); }
 .gdoc-toggle.open .gdoc-toggle-chev{ transform:rotate(90deg); }
 .gdoc-panel{ margin-top:10px; }
 .gdoc-panel[hidden]{ display:none; }
+
+/* ══════════════════════════════════════════════════════════════════
+   ACCUEIL MOBILE (étape 4 §8.3) — maquette 4a
+   Bloc mobile-only. Les blocs historiques de l'accueil sont masqués sous
+   768px ; le desktop (≥768px) les conserve intacts et ignore ce bloc.
+   Fonds opaques, aucun backdrop-filter (§5.4). Cibles tactiles ≥ 44px.
+   ══════════════════════════════════════════════════════════════════ */
+#home-mobile{ display:none; }
+@media (max-width:767.98px){
+  /* Anciens blocs de l'accueil : remplacés par #home-mobile. Ils restent dans
+     le DOM (rendus par renderHomeHero/renderHomeStats, encore utilisés par le
+     desktop) mais ne s'affichent plus en mobile — fin des deux blocs sakura
+     empilés et des stats en double signalés au §8.3. */
+  #home-hero, #home-stats-grid, #home-mini-stats,
+  #btn-new-voyage, #page-home .home-section-row, #trips-list-container{
+    display:none !important;
+  }
+  #home-mobile{ display:block; padding:14px 16px 0; }
+  /* Place réservée au bouton flottant + safe-area iOS, pour que la dernière
+     carte de la liste ne finisse jamais dessous. */
+  #home-scroll{ padding-bottom:calc(96px + env(safe-area-inset-bottom,0px)); }
+
+  /* ── ÉTAT VIDE : tout est centré, une seule action ── */
+  #hm-empty{
+    min-height:62vh;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:8px 6px 24px; gap:0;
+  }
+  .hm-empty-ico{
+    width:96px; height:96px; border-radius:26px;
+    background:var(--surface); border:1px solid var(--border);
+    box-shadow:var(--shadow-md);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--brand); margin-bottom:26px;
+  }
+  .hm-empty-title{
+    font-family:'Noto Serif JP',serif; font-size:24px; line-height:1.28;
+    font-weight:600; color:var(--ink); margin:0 0 12px;
+  }
+  .hm-empty-sub{
+    font-size:13.5px; line-height:1.55; color:var(--ink-muted);
+    margin:0 0 26px; max-width:19em;
+  }
+  .hm-empty-cta{
+    display:inline-flex; align-items:center; justify-content:center; gap:9px;
+    min-height:52px; padding:14px 26px; border:none; border-radius:26px;
+    background:var(--brand); color:var(--on-brand);
+    font-family:'DM Sans',sans-serif; font-size:15px; font-weight:600;
+    cursor:pointer; box-shadow:var(--shadow-md);
+    -webkit-tap-highlight-color:transparent;
+  }
+  .hm-empty-cta:active{ transform:scale(.97); }
+
+  /* ── ÉTAT PLEIN ── */
+  .hm-stats{ display:flex; gap:10px; margin-bottom:20px; }
+  .hm-stat{
+    flex:1 1 0; min-width:0; padding:13px 12px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--r-md); box-shadow:var(--shadow-sm);
+  }
+  .hm-stat-v{ font-size:25px; font-weight:700; line-height:1.05; color:var(--ink); }
+  .hm-stat-l{ font-size:11.5px; color:var(--ink-muted); margin-top:3px; }
+
+  .hm-grp-label{
+    font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--ink-hint); margin:0 2px 9px;
+  }
+  #hm-featured{ margin-bottom:22px; }
+
+  /* Carte « Prochain départ » */
+  .hm-feat{
+    display:block; width:100%; text-align:left;
+    padding:15px 16px 14px; border:1px solid var(--border); border-radius:var(--r-md);
+    background:var(--surface); box-shadow:var(--shadow-sm);
+    font-family:'DM Sans',sans-serif; cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .hm-feat:active{ transform:scale(.99); }
+  .hm-feat-top{ display:flex; align-items:center; gap:10px; }
+  .hm-feat-name{
+    flex:1; min-width:0; font-size:17px; font-weight:600; color:var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .hm-feat-pill{
+    flex:none; padding:4px 10px; border-radius:14px;
+    font-size:11.5px; font-weight:600; white-space:nowrap;
+  }
+  /* Vert / ambre / neutre en hex fixe : couleurs SÉMANTIQUES, comme
+     .addr-result-badge — --teal et --gold sont aliasés sur --sakura. */
+  .hm-feat-pill.upcoming{ background:#e8f5ee; color:#2e7d32; }
+  .hm-feat-pill.ongoing { background:#fdf3df; color:#a8761a; }
+  .hm-feat-pill.past    { background:var(--surface-2); color:var(--ink-muted); }
+  .hm-feat-sub{ font-size:13px; color:var(--ink-muted); margin-top:5px; }
+  .hm-feat-bar{
+    height:6px; border-radius:3px; background:var(--surface-2);
+    overflow:hidden; margin-top:13px;
+  }
+  .hm-feat-bar > span{ display:block; height:100%; background:var(--brand); border-radius:3px; }
+  .hm-feat-pct{ font-size:11.5px; color:var(--ink-muted); margin-top:7px; }
+
+  /* Lignes de voyage — les PASSÉS ont exactement le même rendu (aucun grisé) */
+  .hm-row{
+    display:flex; align-items:center; gap:12px; width:100%;
+    min-height:64px; padding:11px 13px; margin-bottom:9px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--r-md); box-shadow:var(--shadow-sm);
+    font-family:'DM Sans',sans-serif; text-align:left; cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .hm-row:active{ transform:scale(.99); }
+  .hm-row-ico{
+    flex:none; width:38px; height:38px; border-radius:12px;
+    background:var(--sakura-light); color:var(--brand);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .hm-row-txt{ flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .hm-row-name{
+    font-size:14.5px; font-weight:600; color:var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .hm-row-sub{ font-size:12px; color:var(--ink-muted); }
+  .hm-row-chev{ flex:none; color:var(--ink-hint); }
+
+  /* ── Bouton flottant ── collé au bas, au-dessus du contenu qui défile.
+     Le voile est un DÉGRADÉ (pas de flou) pour ne pas couper la liste net. */
+  #hm-fab-wrap{
+    position:fixed; left:0; right:0;
+    bottom:0; z-index:320;
+    padding:18px 16px calc(14px + env(safe-area-inset-bottom,0px));
+    background:linear-gradient(to top, var(--bg) 62%, rgba(0,0,0,0));
+    pointer-events:none;
+  }
+  #hm-fab{
+    pointer-events:auto;
+    display:flex; align-items:center; justify-content:center; gap:9px;
+    width:100%; min-height:52px; padding:14px 20px;
+    border:none; border-radius:26px;
+    background:var(--brand); color:var(--on-brand);
+    font-family:'DM Sans',sans-serif; font-size:15px; font-weight:600;
+    cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,.18);
+    -webkit-tap-highlight-color:transparent;
+  }
+  #hm-fab:active{ transform:scale(.98); }
+  /* Pas de garde de page nécessaire : #hm-fab-wrap est un ENFANT de #page-home,
+     et .spa-page est en display:none quand la page n'est pas active — un enfant
+     position:fixed d'un parent non rendu ne s'affiche pas. Vérifié en preview
+     sur Voyage / Profil. */
+}
+@media (min-width:768px){
+  /* Garde-fou : le bloc mobile et son flottant n'existent pas en desktop. */
+  #home-mobile, #hm-fab-wrap{ display:none !important; }
+}
+
+/* ══ MULTI-DOCUMENTS PAR ÉLÉMENT (étape 5 §8.3) ══════════════════════
+   Bloc rendu dans la fiche détail. Fonds opaques, couleurs de thème,
+   icônes SVG filaires. Cibles tactiles ≥ 44px sur les contrôles. */
+.docs-block{
+  /* Encadré beige RETIRÉ : le bloc n'est plus qu'un bouton d'accordéon suivi de
+     son panneau, comme Localisation et Liens. Les marges restent (le bloc était
+     collé au bouton Ajouter/Enregistrer qui suit). */
+  margin-top:14px; margin-bottom:14px;
+}
+.docs-head{ display:flex; align-items:center; gap:7px; margin-bottom:9px; }
+.docs-title{
+  font-size:11px; font-weight:600; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--ink-muted);
+}
+.docs-count{
+  font-size:10.5px; font-weight:600; color:var(--ink-muted);
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:20px; padding:1px 7px;
+}
+.docs-empty{ font-size:12px; color:var(--ink-hint); line-height:1.5; margin-bottom:10px; }
+.doc-item{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r-sm); padding:9px 10px; margin-bottom:8px;
+  display:flex; flex-direction:column; gap:7px;
+}
+.doc-item-r1 input, .doc-item-r2 select, .doc-item-r2 .doc-prix{
+  font-family:'DM Sans',sans-serif; font-size:13px;
+  border:1px solid var(--border); border-radius:var(--r-sm);
+  background:var(--surface); color:var(--ink); outline:none;
+  padding:8px 10px; min-height:40px;
+}
+.doc-item-r1 input{ width:100%; }
+.doc-item-r1 input:focus, .doc-item-r2 select:focus, .doc-prix:focus{ border-color:var(--sakura); }
+.doc-item-r2{ display:flex; align-items:center; gap:7px; }
+.doc-item-r2 select{ flex:1 1 auto; min-width:0; }
+.doc-prix-wrap{ position:relative; flex:0 0 96px; display:flex; align-items:center; }
+.doc-prix{ width:100%; padding-right:22px !important; text-align:right; }
+.doc-prix-eur{
+  position:absolute; right:8px; font-size:12px; color:var(--ink-hint); pointer-events:none;
+}
+.doc-del{
+  flex:none; width:40px; height:40px; border-radius:var(--r-sm);
+  border:1px solid var(--border); background:var(--surface);
+  color:var(--ink-muted); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.doc-del:hover{ border-color:var(--sakura); color:var(--sakura); }
+.doc-item-r3{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.doc-nofile{ font-size:11.5px; color:var(--ink-hint); }
+.doc-file-btn{ min-height:36px; display:inline-flex; align-items:center; cursor:pointer; }
+.docs-total{
+  display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+  font-size:12.5px; color:var(--ink); padding:8px 2px 2px;
+  border-top:1px dashed var(--border); margin-top:2px;
+}
+.docs-total b{ font-size:14px; }
+.docs-total-hint{ font-size:11px; color:var(--ink-hint); }
+.docs-add{
+  /* Mêmes jetons visuels que .loc-reveal (« Ajouter une localisation ») :
+     pointillés sakura, rayon 22px, 44px de haut, 13px/600, gap 8px — mais
+     gabarit RESSERRÉ : inline-flex et largeur ajustée au libellé, au lieu
+     d'occuper toute la largeur de la carte. */
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  width:auto; min-height:44px; margin-top:9px;
+  padding:12px 16px; border-radius:22px; box-sizing:border-box;
+  border:1px dashed var(--sakura); background:var(--surface);
+  color:var(--brand); font-family:'DM Sans',sans-serif;
+  font-size:13px; font-weight:600; cursor:pointer;
+  white-space:nowrap;                 /* libellé jamais coupé sur 2 lignes */
+  -webkit-tap-highlight-color:transparent;
+}
+.docs-add:active{ transform:scale(.98); }
+
+/* ══ DÉPENSE AUTOMATIQUE issue des documents (étape 5 §8.3) ══════════
+   Distinguée d'une saisie manuelle par un liseré et un badge de source. */
+.tx-item.tx-auto{ border-left:3px solid var(--brand); padding-left:9px; }
+.tx-src{
+  display:inline-flex; align-items:center; gap:4px; margin-left:7px;
+  padding:2px 8px; border-radius:12px; cursor:pointer;
+  border:1px solid var(--border); background:var(--surface-2);
+  color:var(--ink-muted); font-family:'DM Sans',sans-serif;
+  font-size:10.5px; font-weight:600;
+}
+.tx-src:hover{ border-color:var(--sakura); color:var(--brand); }
+.tx-docs{ display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+.tx-doc-chip{
+  display:inline-flex; align-items:center; max-width:100%;
+  padding:3px 9px; border-radius:12px; cursor:pointer;
+  background:var(--sakura-light); color:var(--brand);
+  font-size:10.5px; font-weight:500; line-height:1.4;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.tx-doc-chip.nofile{
+  background:var(--surface-2); color:var(--ink-hint); cursor:default;
+}
+
+/* ══ EXPORT : filtre par TYPE de document (étape 5 §8.3) ══════════════
+   Dimension AJOUTÉE à l'écran existant, qui se combine avec les filtres par
+   catégorie et par pièce. Pastilles actives par défaut (tout inclus). */
+.exp-types{ padding:10px 2px 4px; border-bottom:1px solid var(--border); margin-bottom:8px; }
+.exp-types-lbl{
+  font-size:10.5px; font-weight:600; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--ink-hint); margin-bottom:7px;
+}
+.exp-types-row{ display:flex; flex-wrap:wrap; gap:6px; }
+.exp-type-chip{
+  display:inline-flex; align-items:center; gap:5px;
+  min-height:36px; padding:7px 12px; border-radius:18px; cursor:pointer;
+  border:1px solid var(--border); background:var(--surface);
+  color:var(--ink-muted); font-family:'DM Sans',sans-serif;
+  font-size:12px; font-weight:500;
+}
+.exp-type-chip.active{
+  background:var(--sakura); border-color:var(--sakura); color:#fff; font-weight:600;
+}
+.exp-type-n{
+  font-size:10px; font-weight:700; padding:0 5px; border-radius:9px;
+  background:rgba(255,255,255,.28);
+}
+.exp-type-chip:not(.active) .exp-type-n{ background:var(--surface-2); color:var(--ink-hint); }
+
+/* ══ Bouton « Ajouter une localisation » (création) ══════════════════
+   Révèle le bloc adresse/GPS, masqué par défaut sur les formulaires de
+   création. Cible tactile 44px, icône SVG filaire, couleurs de thème. */
+.loc-reveal{
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  width:100%; min-height:44px; margin-top:10px;
+  /* box-sizing hérité : on fixe aussi le padding pour que la hauteur RENDUE
+     atteigne bien 44px (mesurée à 43px avec 11px de padding). */
+  padding:12px 16px; border-radius:22px; box-sizing:border-box;
+  border:1px dashed var(--sakura); background:var(--surface);
+  color:var(--brand); font-family:'DM Sans',sans-serif;
+  font-size:13px; font-weight:600; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.loc-reveal:active{ transform:scale(.98); }
+/* Marge sous le bouton : il était collé au champ suivant. */
+.loc-reveal{ margin-bottom:12px; }
+/* Chevron d'état : vers le bas replié, vers le haut déployé. */
+.loc-reveal-chev{ transition:transform .18s ease; }
+.loc-reveal.is-open .loc-reveal-chev{ transform:rotate(180deg); }
+/* Déployé, le bouton devient discret : c'est une commande de repli, plus un
+   appel à l'action. */
+.loc-reveal.is-open{
+  border-style:solid; border-color:var(--border);
+  color:var(--ink-muted); background:var(--surface-2);
+}
+
+/* ══ PAIRES DE CHAMPS CÔTE À CÔTE (.fr-pair) ═════════════════════════
+   En mobile, une règle générale met .form-row en colonne et force chaque
+   enfant à flex:1 1 100%!important — d'où un champ par ligne partout. Ce
+   modificateur, OPT-IN ligne par ligne, rétablit la disposition en ligne pour
+   les paires validées à 375px. Spécificité (0,2,0) > (0,1,0) de la règle
+   générale, et !important des deux côtés → celle-ci gagne. */
+@media (max-width:767.98px){
+  .form-row.fr-pair{ flex-direction:row !important; flex-wrap:nowrap; gap:8px; align-items:flex-end; }
+  .form-row.fr-pair > *{
+    flex:1 1 0 !important; width:auto !important;
+    min-width:0 !important; max-width:none !important;
+  }
+  /* Un champ marqué étroit garde une largeur réduite dans la paire. */
+  .form-row.fr-pair > .fr-narrow{ flex:0 0 108px !important; }
+  /* Un enfant ENVELOPPÉ (.ac-wrap pour l'autocomplétion) doit contraindre son
+     input : sans width:100%, l'input hérite de flex:1 de la règle globale, se
+     dimensionne sur son placeholder et débordait de sa colonne — le champ voisin
+     passait dessous et son texte était rogné (constaté sur Ville / Catégorie). */
+  .form-row.fr-pair > .ac-wrap{ min-width:0 !important; }
+  .form-row.fr-pair > .ac-wrap > input,
+  .form-row.fr-pair > div > input,
+  .form-row.fr-pair > div > select{ width:100% !important; min-width:0 !important; box-sizing:border-box; }
+}
+
+/* ══ Marge sous le bloc localisation déployé ══════════════════════════
+   Le bloc était collé au champ Note qui le suit (écart mesuré : 0px). */
+.loc-group{ margin-bottom:14px; }
+
+/* ══ Textareas de note RÉELLEMENT redimensionnables ══════════════════
+   resize:vertical était bien déclaré (inline) sur les 8 champs de note, mais
+   tirer la poignée ne produisait AUCUN effet : en mobile, .form-row passe en
+   flex-direction:column, et la règle générale impose flex:1 1 100%!important à
+   ses enfants. Dans un conteneur en colonne, l'axe principal est la VERTICALE :
+   flex-basis pilote donc la hauteur et écrasait celle posée par la poignée
+   (vérifié — forcer height:320px ne changeait rien).
+   flex:0 0 auto rend la main à height, donc à la poignée. La hauteur de départ
+   est préservée par rows=2 (52-54px, inchangée). */
+@media (max-width:767.98px){
+  .form-row > textarea,
+  .modal-row > textarea,
+  .modal-field > textarea{      /* modales d'édition : mTextarea est enveloppé
+                                   par modalField → parent .modal-field, lui
+                                   aussi en flex column (flex-basis:0% pinnait
+                                   la hauteur, vérifié). */
+    flex:0 0 auto !important;
+    width:100% !important;
+    max-width:100% !important;   /* jamais plus large que la carte */
+    box-sizing:border-box;
+    resize:vertical;
+  }
+}
+/* Desktop : hauteur rendue à la poignée + garantie de non-débordement. */
+.form-row > textarea, .modal-row > textarea, .modal-field > textarea{
+  flex:0 0 auto; max-width:100%; box-sizing:border-box;
+}
+
+/* ══ ACCORDÉONS Liens / Documents — même patron que la localisation ═══
+   Les 3 boutons partagent la classe .loc-reveal : le style est donc unique par
+   construction, rien à resynchroniser. Le libellé « LIENS » en petit gris est
+   supprimé (le bouton porte l'intitulé) → .liens-block-label n'a plus de
+   porteur, signalé plus bas. */
+.acc-panel{ margin-top:10px; }
+/* Le bouton « Ajouter une autre ligne », à l'intérieur du panneau, reste
+   secondaire : il ne concurrence pas visuellement le bouton d'accordéon. */
+.acc-panel .btn-add-lien{ width:100%; justify-content:center; }
+/* Le bloc Liens n'a plus de titre : on lui rend l'espacement d'un bloc simple. */
+.liens-block{ margin-top:0; }
+
+/* Le bouton d'ajout interne au panneau Documents reste secondaire, comme
+   « Ajouter une autre ligne » côté Liens : le bouton d'accordéon est le repère
+   principal. */
+.acc-panel .docs-add{ width:100%; justify-content:center; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   ACCORDÉONS FUSIONNÉS — en-tête + contenu = UNE case continue
+   ══════════════════════════════════════════════════════════════════════
+   Gabarit calqué sur .mob-group (« Vol avec escale ») : fond var(--surface-2),
+   bordure 1px var(--border), rayon var(--r-md).
+   Fermé  : la case ne contient que l'en-tête → pilule compacte, rayon complet.
+   Ouvert : la MÊME case s'étire ; l'en-tête perd ses coins bas et sa bordure
+            basse, le panneau perd ses coins hauts et sa bordure haute → aucune
+            séparation visible entre les deux, ni marge blanche.
+   Aucune logique touchée : _accSetState/_accToggle continuent de piloter le seul
+   display du panneau et la classe .is-open du bouton. */
+
+/* ── En-tête (les 3 accordéons partagent .loc-reveal) ── */
+.loc-reveal{
+  /* Plus de pointillé rouge : fermé et ouvert sont la même case, seulement
+     redimensionnée — donc le même fond beige neutre dans les deux états. */
+  border:1px solid var(--border) !important;
+  border-style:solid !important;
+  background:var(--surface-2) !important;
+  color:var(--ink) !important;
+  border-radius:var(--r-md) !important;
+  justify-content:center;
+  /* La cible tactile reste 44px : min-height inchangé, on ne touche qu'au
+     décor. */
+}
+.loc-reveal .loc-reveal-lbl{ font-weight:600; }
+/* L'icône de tête garde l'accent de la marque, pour rester repérable. */
+.loc-reveal > svg:first-child{ color:var(--brand); }
+
+/* Ouvert : soudure avec le panneau qui suit. */
+.loc-reveal.is-open{
+  border-radius:var(--r-md) var(--r-md) 0 0 !important;
+  border-bottom-color:transparent !important;
+  margin-bottom:0 !important;
+}
+
+/* ── Panneau (contenu) des 3 accordéons ── */
+.acc-panel, .loc-group{
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-top:none;
+  border-radius:0 0 var(--r-md) var(--r-md);
+  margin-top:0 !important;
+  padding:12px 14px;
+  overflow:hidden;          /* rien ne dépasse des coins arrondis */
+}
+/* Le liseré gauche et le décalage du bloc localisation n'ont plus de raison
+   d'être : la case porte désormais elle-même le cadre. */
+.loc-group{ padding-left:14px; border-left:1px solid var(--border); }
+
+/* Dans les blocs Liens et Documents, l'en-tête est le premier enfant : c'est
+   le conteneur qui porte l'espacement externe, pas le bouton. */
+.liens-block > .loc-reveal, .docs-block > .loc-reveal{ margin-top:0 !important; }
+.liens-block, .docs-block{ margin-top:12px; }
+/* Dernier champ du panneau : plus de marge basse qui creuserait un vide sous
+   le fond beige. */
+.acc-panel > *:last-child, .loc-group > *:last-child{ margin-bottom:0; }
+
+/* ══ BLOC LIENS — style interne aligné sur le bloc DOCUMENTS ══════════
+   Portée volontairement limitée à .acc-panel du bloc Liens : les blocs
+   Documents et Localisation ne sont pas touchés. */
+
+/* 1) La carte d'une ligne de lien passe en BLANC, comme .doc-item. */
+.liens-block .acc-panel .lien-row{
+  background:var(--surface);
+}
+
+/* 2) « Ajouter une autre ligne » reprend EXACTEMENT les jetons de .docs-add :
+      pointillé sakura 1px sur fond blanc, rayon 22px, 44px de haut, 13px/600,
+      gap 8px, largeur ajustée au libellé. Écrase les valeurs de .btn-add-lien
+      (pointillé 1.5px gris, fond transparent, 12px, pleine largeur). */
+.liens-block .acc-panel .btn-add-lien{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  width:auto; min-height:44px; margin-top:9px;
+  padding:12px 16px; border-radius:22px; box-sizing:border-box;
+  border:1px dashed var(--sakura); background:var(--surface);
+  color:var(--brand); font-family:'DM Sans',sans-serif;
+  font-size:13px; font-weight:600; cursor:pointer;
+  white-space:nowrap;
+  -webkit-tap-highlight-color:transparent;
+}
+.liens-block .acc-panel .btn-add-lien:hover{
+  border-color:var(--sakura); color:var(--brand); background:var(--surface);
+}
+.liens-block .acc-panel .btn-add-lien:active{ transform:scale(.98); }

@@ -109,7 +109,7 @@
     </div>
 
     <button id="btn-new-voyage" onclick="openCreateModal()">
-      <span class="bv-plus">＋</span><span>Nouveau voyage</span>
+      <span class="bv-plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" width="15" height="15" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span><span>Nouveau voyage</span>
     </button>
     <div class="home-section-row">
       <div class="home-section-label">Mes voyages</div>
@@ -117,7 +117,30 @@
     </div>
     <div id="trips-list-container"></div>
 
-
+    <!-- ══ ACCUEIL MOBILE (étape 4 §8.3) — maquette 4a ══════════════════
+         Bloc NEUF, rendu par renderHomeMobile(). Deux états exclusifs :
+         #hm-empty (aucun voyage) et #hm-full (au moins un). Les blocs
+         historiques ci-dessus (#home-hero, #home-stats-grid, #home-mini-stats,
+         #btn-new-voyage, .home-section-row, #trips-list-container) sont
+         MASQUÉS sous 768px par CSS — le desktop les garde intacts. -->
+    <div id="home-mobile">
+      <div id="hm-empty" style="display:none"></div>
+      <div id="hm-full" style="display:none">
+        <div id="hm-stats" class="hm-stats"></div>
+        <div id="hm-featured"></div>
+        <div id="hm-groups"></div>
+      </div>
+    </div>
+  </div>
+  <!-- Bouton flottant « Nouveau voyage » — collé au bas de l'écran, au-dessus
+       du contenu qui défile. Affiché en état PLEIN seulement (en état vide
+       l'unique action est déjà au centre). Voile dégradé au-dessus pour ne pas
+       couper la liste net (dégradé, PAS de backdrop-filter — §5.4). -->
+  <div id="hm-fab-wrap" style="display:none">
+    <button id="hm-fab" type="button" onclick="openCreateModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" width="17" height="17" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Nouveau voyage</span>
+    </button>
   </div>
   <!-- Compat IDs -->
   <div id="home-bg" style="display:none"></div>
@@ -376,17 +399,18 @@
 <section class="section active" id="tab-mobilite">
   <!-- DÉPLACEMENTS — page unique (étape 4). Sélecteur de tri (Date/Catégorie)
        + bouton Ajouter unique (feuille type→mode). Les 3 types cohabitent. -->
-  <div class="section-top depl-top">
-    <div id="depl-sort" class="depl-sort" role="tablist" aria-label="Trier les déplacements">
-      <button type="button" class="depl-sort-seg active" data-sort="date" onclick="setDeplSort('date')">Date</button>
-      <button type="button" class="depl-sort-seg" data-sort="categorie" onclick="setDeplSort('categorie')">Catégorie</button>
-    </div>
+  <div class="section-top section-top-tight">
+    <div class="section-top-title">Mes déplacements</div>
     <div class="section-top-actions">
       <button class="btn-add-top" onclick="showAddDeplacement()" title="Ajouter un déplacement"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter</button>
-      <button class="btn-edit-mode" id="bedit-depl" onclick="toggleDeplEmode()">Modifier</button>
     </div>
   </div>
-  <div class="edit-banner" id="ebanner-depl">Mode édition — cliquez sur l'icône d'un déplacement pour le modifier ou le supprimer</div>
+  <!-- Rangée de tri, juste sous le titre — même composant que les boutons de
+       regroupement de Lieux et de Documents (.section-subbar / .lgs-btn). -->
+  <div class="section-subbar" id="depl-sort" aria-label="Trier les déplacements">
+    <button type="button" class="lgs-btn active" data-sort="date" onclick="setDeplSort('date')">Date</button>
+    <button type="button" class="lgs-btn" data-sort="categorie" onclick="setDeplSort('categorie')">Catégorie</button>
+  </div>
 
   <!-- Liste unifiée des déplacements (transports + pass + locations) -->
   <div id="mobilite-list"></div>
@@ -410,11 +434,11 @@
 
     <!-- ── Statut + Preview (masqué pour Pass) ── -->
     <div class="form-row" id="mob-statut-row" style="align-items:center;gap:8px;margin-top:2px">
-      <select id="mob-statut" style="max-width:155px;flex:none">
+      <!-- Jeu de valeurs UNIQUE partagé transport + hébergement (STATUT_VALUES) -->
+      <select id="mob-statut" style="max-width:175px;flex:none">
         <option>Confirmé</option>
         <option>À confirmer</option>
-        <option>Réservé</option>
-        <option>À réserver</option>
+        <option>Sans réservation</option>
       </select>
       <span id="mob-route-preview" class="vol-titre-preview" style="font-size:13px"></span>
     </div>
@@ -448,8 +472,10 @@
         </div>
       </div>
 
-      <!-- Horaires d'extrémité + Date + Durée — TOUJOURS visibles (source unique) -->
-      <div class="form-row">
+      <!-- Horaires d'extrémité + Date + Durée — TOUJOURS visibles (source unique).
+           Décollage/Atterrissage en paire, Durée appariée à la Date : 2 lignes
+           au lieu de 4 en mobile. -->
+      <div class="form-row fr-pair">
         <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
           <label class="mob-lbl" id="mob-hdep-label">Décollage</label>
           <input type="time" id="mob-heure-dep" class="vol-time-input" oninput="if(typeof _mobPropagateEndTimes==='function')_mobPropagateEndTimes()"/>
@@ -458,30 +484,34 @@
           <label class="mob-lbl" id="mob-harr-label">Atterrissage</label>
           <input type="time" id="mob-heure-arr" class="vol-time-input" oninput="if(typeof _mobPropagateEndTimes==='function')_mobPropagateEndTimes()"/>
         </div>
-        <div style="display:flex;flex-direction:column;gap:3px;flex:none">
-          <label class="mob-lbl">Durée totale <span style="color:var(--sakura)">*</span></label>
-          <input type="text" id="mob-duree" class="vol-time-input" placeholder="ex: 14h30" style="max-width:100px;text-align:center" title="Durée réelle du billet (saisie manuelle — diffère des horaires à cause du décalage horaire)"/>
-        </div>
       </div>
-      <div class="form-row">
+      <div class="form-row fr-pair">
         <div style="display:flex;flex-direction:column;gap:3px;flex:1.2;min-width:120px">
           <label class="mob-lbl">Date</label>
           <input class="vol-date-input" type="text" id="mob-date" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('mob-date')"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
+          <label class="mob-lbl">Durée totale <span style="color:var(--sakura)">*</span></label>
+          <input type="text" id="mob-duree" class="vol-time-input" placeholder="ex: 14h30" style="text-align:center" title="Durée réelle du billet (saisie manuelle — diffère des horaires à cause du décalage horaire)"/>
         </div>
       </div>
 
       <!-- Détails du vol direct (compagnie, n°, siège…) — masqués en mode escale (repris par segment) -->
       <div id="mob-direct-details">
-        <div class="form-row">
-          <div class="ac-wrap" style="flex:2;position:relative"><input type="text" id="mob-compagnie" placeholder="Compagnie (ex: Air France)" autocomplete="off" oninput="onCompagnieInput(this.value)" style="width:100%"/><div class="ac-list" id="ac-compagnie"></div></div>
-          <input type="text" id="mob-numero"    placeholder="N° vol (AF275)" style="flex:1;min-width:80px"/>
-          <input type="text" id="mob-siege"     placeholder="Siège (24A)" style="max-width:76px;flex:none"/>
+        <div class="form-row fr-pair">
+          <div class="ac-wrap" style="flex:2;position:relative"><input type="text" id="mob-compagnie" placeholder="Compagnie" autocomplete="off" oninput="onCompagnieInput(this.value)" style="width:100%"/><div class="ac-list" id="ac-compagnie"></div></div>
+          <input type="text" id="mob-numero"    placeholder="N° vol"/>
+        </div>
+        <div class="form-row fr-pair">
+          <input type="text" id="mob-siege"     placeholder="Siège"/>
+          <input type="text" id="mob-terminal"  placeholder="Terminal"/>
+        </div>
+        <div class="form-row fr-pair">
+          <input type="text" id="mob-porte"     placeholder="Porte"/>
+          <input type="text" id="mob-resa-vol"  placeholder="N° réservation"/>
         </div>
         <div class="form-row">
-          <input type="text" id="mob-terminal"  placeholder="Terminal (ex: T2E)" style="max-width:110px;flex:none"/>
-          <input type="text" id="mob-porte"     placeholder="Porte (ex: K42)" style="max-width:100px;flex:none"/>
-          <input type="text" id="mob-resa-vol"  placeholder="N° réservation (PNR)"/>
-          <input type="text" id="mob-bagages"   placeholder="Bagage (ex: 23kg + cabine)" style="flex:1.5"/>
+          <input type="text" id="mob-bagages"   placeholder="Bagage (ex: 23kg + cabine)"/>
         </div>
       </div>
 
@@ -512,11 +542,15 @@
           <div class="ac-wrap" style="position:relative"><input type="text" id="mob-arr" placeholder="Lyon Part-Dieu" autocomplete="off" oninput="updateMobPreview();onTrainVilleInput('arr',this.value)" style="width:100%"/><div class="ac-list" id="ac-tr-arr"></div></div>
         </div>
       </div>
+      <!-- Date seule, puis Départ/Arrivée en paire et Durée appariée :
+           2 lignes gagnées en mobile. -->
       <div class="form-row">
         <div style="display:flex;flex-direction:column;gap:3px;flex:1.2;min-width:120px">
           <label class="mob-lbl">Date</label>
           <input class="vol-date-input" type="text" id="mob-date" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('mob-date')"/>
         </div>
+      </div>
+      <div class="form-row fr-pair">
         <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
           <label class="mob-lbl">Départ</label>
           <input type="time" id="mob-heure-dep" class="vol-time-input"/>
@@ -525,18 +559,22 @@
           <label class="mob-lbl">Arrivée</label>
           <input type="time" id="mob-heure-arr" class="vol-time-input"/>
         </div>
-        <div style="display:flex;flex-direction:column;gap:3px;flex:none">
+      </div>
+      <div class="form-row">
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1">
           <label class="mob-lbl">Durée totale</label>
-          <input type="text" id="mob-duree" class="vol-time-input" placeholder="ex: 3h20" style="max-width:92px;text-align:center"/>
+          <input type="text" id="mob-duree" class="vol-time-input" placeholder="ex: 3h20" style="text-align:center"/>
         </div>
       </div>
-      <div class="form-row">
-        <input type="text" id="mob-compagnie" placeholder="Opérateur (SNCF, Eurostar…)" style="flex:2"/>
-        <input type="text" id="mob-numero"    placeholder="N° train (TGV 6201)" style="flex:1.5"/>
+      <div class="form-row fr-pair">
+        <input type="text" id="mob-compagnie" placeholder="Opérateur" style="flex:2"/>
+        <input type="text" id="mob-numero"    placeholder="N° train" style="flex:1.5"/>
+      </div>
+      <div class="form-row fr-pair">
+        <input type="text" id="mob-siege"   placeholder="Siège"/>
+        <input type="text" id="mob-voiture" placeholder="Voiture"/>
       </div>
       <div class="form-row">
-        <input type="text" id="mob-siege"   placeholder="Siège (ex: 22A)" style="max-width:100px;flex:none"/>
-        <input type="text" id="mob-voiture" placeholder="Voiture (ex: 4)" style="max-width:100px;flex:none"/>
         <input type="text" id="mob-resa-vol" placeholder="N° réservation"/>
       </div>
     </div>
@@ -561,6 +599,9 @@
           <label class="mob-lbl">Date</label>
           <input class="vol-date-input" type="text" id="mob-date" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('mob-date')"/>
         </div>
+      </div>
+      <!-- Départ / Arrivée appariés, même traitement que Vol et Train. -->
+      <div class="form-row fr-pair">
         <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
           <label class="mob-lbl">Départ</label>
           <input type="time" id="mob-heure-dep" class="vol-time-input"/>
@@ -570,13 +611,15 @@
           <input type="time" id="mob-heure-arr" class="vol-time-input"/>
         </div>
       </div>
-      <div class="form-row">
-        <input type="text" id="mob-compagnie" placeholder="Compagnie (ex: Corsica Ferries)" style="flex:2"/>
+      <div class="form-row fr-pair">
+        <input type="text" id="mob-compagnie" placeholder="Compagnie"/>
         <input type="text" id="mob-numero"    placeholder="N° traversée"/>
       </div>
+      <div class="form-row fr-pair">
+        <input type="text" id="mob-cabine"  placeholder="Cabine"/>
+        <input type="text" id="mob-pont"    placeholder="Pont"/>
+      </div>
       <div class="form-row">
-        <input type="text" id="mob-cabine"  placeholder="Cabine (ex: C-214)" style="flex:1"/>
-        <input type="text" id="mob-pont"    placeholder="Pont (ex: Pont 7)" style="flex:1"/>
         <input type="text" id="mob-resa-vol" placeholder="N° réservation"/>
       </div>
     </div>
@@ -601,6 +644,9 @@
           <label class="mob-lbl">Date</label>
           <input class="vol-date-input" type="text" id="mob-date" placeholder="JJ/MM/AAAA" readonly onclick="openCalendar('mob-date')"/>
         </div>
+      </div>
+      <!-- Départ / Arrivée appariés, même traitement que Vol et Train. -->
+      <div class="form-row fr-pair">
         <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px">
           <label class="mob-lbl">Départ</label>
           <input type="time" id="mob-heure-dep" class="vol-time-input"/>
@@ -610,9 +656,9 @@
           <input type="time" id="mob-heure-arr" class="vol-time-input"/>
         </div>
       </div>
-      <div class="form-row">
-        <input type="text" id="mob-compagnie" placeholder="Opérateur / Conducteur" style="flex:2"/>
-        <input type="text" id="mob-numero"    placeholder="N° ligne / réservation"/>
+      <div class="form-row fr-pair">
+        <input type="text" id="mob-compagnie" placeholder="Opérateur"/>
+        <input type="text" id="mob-numero"    placeholder="N° ligne"/>
       </div>
     </div>
 
@@ -671,11 +717,27 @@
     </div>
     <!-- ── Liens (masqué pour pass via mob-group) ── -->
     <div class="liens-block" id="mob-liens-block">
-      <div class="liens-block-label">Liens</div>
+      <!-- Bouton accordéon : même classe .loc-reveal que « Ajouter une
+           localisation » → style et comportement identiques. -->
+      <button type="button" class="loc-reveal" id="mob-liens-reveal" onclick="_liensToggle('mob')" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+        <span class="loc-reveal-lbl">Ajouter un lien</span>
+        <svg class="loc-reveal-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="acc-panel" id="mob-liens-panel" style="display:none">
       <div id="mob-liens-list" class="liens-list"></div>
-      <button type="button" class="btn-add-lien" onclick="_lienAddRow('mob')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un lien</button>
+      <button type="button" class="btn-add-lien" onclick="_lienAddRow('mob')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter une autre ligne</button>
+      </div><!-- /.acc-panel -->
     </div>
     <!-- ── Actions (toujours visibles) ── -->
+    <!-- Multi-documents (étape 5) : MÊME composant qu'en édition, alimenté par
+         un brouillon versé sur l'élément à l'enregistrement. Remplace l'ancien
+         bloc mono-fichier ; le champ caché est gardé pour compatibilité. -->
+    <div id="mob-docs-slot"></div>
+    <div id="mob-pdf-badge" class="pdf-action-row" style="display:none"></div>
+    <input type="hidden" id="mob-pdf" value=""/>
+    <!-- Actions en TOUTE FIN de formulaire : dernier bloc, donc derniers
+         éléments focusables au clavier (aucun tabindex, l'ordre Tab suit le DOM). -->
     <div class="form-row" id="mob-action-row" style="align-items:center;margin-top:6px;justify-content:flex-end">
       <!-- Suppression : visible UNIQUEMENT en mode édition d'un vol (_mobEditId
            posé). margin-right:auto → calé à gauche, comme le delBtn de
@@ -683,13 +745,6 @@
       <button class="btn-danger" id="mob-delete-btn" onclick="_mobDeleteCurrent()" style="display:none;margin-right:auto">Supprimer</button>
       <button class="btn-primary" id="mob-submit-btn" onclick="addMobilite()">+ Ajouter</button>
       <button class="btn-ghost"   onclick="_mobCloseForm()">Annuler</button>
-    </div>
-    <div class="form-row" style="align-items:center">
-      <label class="pdf-btn">Billet / Document
-        <input type="file" accept=".pdf,application/pdf" onchange="attachPdfToForm('mob-pdf',this)"/>
-      </label>
-      <div id="mob-pdf-badge" class="pdf-action-row"></div>
-      <input type="hidden" id="mob-pdf" value=""/>
     </div>
   </div>
   <!-- bouton bas supprimé : ajout via « + Ajouter » en tête de section -->
@@ -733,10 +788,8 @@
     <div class="section-top-title">Pass &amp; Abonnements</div>
     <div class="section-top-actions">
       <button class="btn-add-top" onclick="pickTransport('pass')" title="Ajouter un pass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter</button>
-      <button class="btn-edit-mode" id="bedit-passes" onclick="toggleEmode('passes')">Modifier</button>
     </div>
   </div>
-  <div class="edit-banner" id="ebanner-passes">Mode édition — cliquez sur l'icône d'un pass pour le modifier ou le supprimer</div>
   <div id="passes-list"></div>
 </section>
 <section class="section" id="tab-locations">
@@ -744,10 +797,8 @@
     <div class="section-top-title">Locations</div>
     <div class="section-top-actions">
       <button class="btn-add-top" onclick="openAddTop('form-location')" title="Ajouter une location"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter</button>
-      <button class="btn-edit-mode" id="bedit-locations" onclick="toggleEmode('locations')">Modifier</button>
     </div>
   </div>
-  <div class="edit-banner" id="ebanner-locations">Mode édition — cliquez sur Modifier pour éditer ou supprimer</div>
   <div id="locations-list"></div>
   <div class="add-form" id="form-location">
     <div class="add-form-title">Ajouter une location</div>
@@ -798,13 +849,17 @@
       <textarea id="loc-note" rows="2" placeholder="Note (assurance, plein, etc.)" style="flex:2;resize:vertical;font-family:DM Sans,sans-serif"></textarea>
     </div>
     <div class="form-row" style="align-items:center">
-      <button class="btn-primary" onclick="addLocation()">Ajouter la location</button>
-      <button class="btn-ghost"   onclick="_resetFormLocation();toggleForm('form-location')">Annuler</button>
-      <label class="pdf-btn" style="margin-left:auto">Contrat / Bon
+      <label class="pdf-btn">Contrat / Bon
         <input type="file" accept=".pdf,application/pdf" onchange="attachPdfToForm('loc-pdf',this)"/>
       </label>
       <div id="loc-pdf-badge" class="pdf-action-row"></div>
       <input type="hidden" id="loc-pdf" value=""/>
+    </div>
+    <!-- Actions en TOUTE FIN de formulaire : dernier bloc, donc derniers
+         éléments focusables au clavier (aucun tabindex, l'ordre Tab suit le DOM). -->
+    <div class="form-row form-actions" style="align-items:center">
+      <button class="btn-primary" onclick="addLocation()">Ajouter la location</button>
+      <button class="btn-ghost"   onclick="_resetFormLocation();toggleForm('form-location')">Annuler</button>
     </div>
   </div>
   <!-- bouton bas supprimé : ajout via « + Ajouter » en tête de section -->
@@ -814,10 +869,8 @@
     <div class="section-top-title">Mes hébergements</div>
     <div class="section-top-actions">
       <button class="btn-add-top" onclick="openAddTop('form-hotel')" title="Ajouter un hébergement"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter</button>
-      <button class="btn-edit-mode" id="bedit-hotels" onclick="toggleEmode('hotels')">Modifier</button>
     </div>
   </div>
-  <div class="edit-banner" id="ebanner-hotels">Mode édition — cliquez sur l'icône d'un hébergement pour le modifier ou le supprimer</div>
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
       <div class="nights-card-title">Répartition des nuitées</div>
@@ -838,18 +891,15 @@
   <div id="hotels-list"></div>
   <div class="add-form" id="form-hotel">
     <div class="add-form-title">Ajouter un hébergement</div>
-    <div class="magic-addr-wrap">
-      <div class="magic-addr-label">Coller l'adresse complète <span style="font-weight:400;text-transform:none;letter-spacing:0">(ex: Google Maps)</span></div>
-      <div class="magic-addr-row">
-        <input type="text" id="ht-magic-input" class="magic-addr-input" placeholder="ex: Keio Plaza Hotel, 2-2-1 Nishishinjuku, Shinjuku, Tokyo"/>
-        <button class="magic-addr-btn" id="ht-magic-btn" type="button" onclick="parseMagicAddress('hotel')">Parser</button>
-      </div>
-      <div class="magic-addr-result" id="ht-magic-result"></div>
-    </div>
     <div class="form-row">
       <input type="text" id="ht-nom" placeholder="Nom de l'hébergement (ex: Hôtel Keio)" style="flex:1"/>
     </div>
-    <div class="form-row">
+    <!-- Ligne 1 : Check-in + Heure d'arrivée · Ligne 2 : Check-out + Heure de
+         départ. Les heures rejoignent leur date (elles étaient 60 lignes plus
+         bas) : 4 lignes → 2. Les champs d'heure prennent la classe
+         .vol-time-input, celle de Décollage/Atterrissage, pour un encadré et une
+         icône horloge identiques. -->
+    <div class="form-row fr-pair">
       <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px">
         <label style="font-size:12px;color:var(--ink-muted)">Check-in <span style="font-weight:400;color:var(--ink-hint)">(JJ/MM/AAAA)</span></label>
         <input type="text" id="ht-ci" placeholder="JJ/MM/AAAA" style="flex:1" class="cal-trigger" readonly onclick="openCalendar('ht-ci')" oninput="autoHotel('ci')"/>
@@ -858,6 +908,12 @@
         <select id="ht-ci-jour" style="display:none"></select>
         <select id="ht-ci-mois" style="display:none"></select>
       </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:110px">
+        <label style="font-size:12px;color:var(--ink-muted)">Heure d'arrivée</label>
+        <input type="time" id="ht-heure-arr" class="vol-time-input"/>
+      </div>
+    </div>
+    <div class="form-row fr-pair">
       <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px">
         <label style="font-size:12px;color:var(--ink-muted)">Check-out <span style="font-weight:400;color:var(--ink-hint)">(JJ/MM/AAAA)</span></label>
         <input type="text" id="ht-co" placeholder="JJ/MM/AAAA" style="flex:1" class="cal-trigger" readonly onclick="openCalendar('ht-co')" oninput="autoHotel('co')"/>
@@ -865,19 +921,50 @@
         <select id="ht-co-jour" style="display:none"></select>
         <select id="ht-co-mois" style="display:none"></select>
       </div>
-      <div style="display:flex;flex-direction:column;gap:4px;flex:none">
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:110px">
+        <label style="font-size:12px;color:var(--ink-muted)">Heure de départ</label>
+        <input type="time" id="ht-heure-dep" class="vol-time-input"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1">
         <label style="font-size:12px;color:var(--ink-muted)">Nuits <span style="font-weight:400;color:var(--ink-hint)">(auto)</span></label>
         <input type="number" id="ht-nuits" class="nuits-auto" placeholder="—" style="max-width:70px;min-width:60px;flex:none" readonly tabindex="-1" aria-readonly="true" title="Calculé automatiquement depuis les dates"/>
         <span class="auto-hint" id="hint-ht-nuits">Calculé</span>
       </div>
     </div>
-    <div class="form-row">
-      <input type="text" id="ht-type" placeholder="Type (ex: Chambre double)"/>
-      <input type="text" id="ht-resa" placeholder="N° de réservation"/>
-      <button class="btn-primary" onclick="addHotel()">Ajouter</button>
-      <button class="btn-ghost" onclick="toggleForm('form-hotel')">Annuler</button>
+    <div class="form-row fr-pair">
+      <input type="text" id="ht-type" placeholder="Type de chambre"/>
+      <input type="text" id="ht-resa" placeholder="N° réservation"/>
     </div>
-    <!-- ── Bloc Adresse structuré ── -->
+    <div class="form-row">
+      <!-- Statut : MÊME jeu de valeurs que les transports (STATUT_VALUES) -->
+      <select id="ht-statut" style="flex:1">
+        <option>Confirmé</option>
+        <option>À confirmer</option>
+        <option>Sans réservation</option>
+      </select>
+    </div>
+    <!-- ══ GROUPE LOCALISATION — parseur + adresse structurée + GPS ══
+         Le parseur reste COLLÉ au bloc qu'il remplit (il alimente pays/ville/
+         CP/rue) : les séparer obligeait à remonter le formulaire après collage.
+         Ordre : infos de l'hébergement d'abord, localisation ensuite. -->
+    <!-- Localisation repliée par défaut à la CRÉATION : le bloc adresse/GPS
+         ci-dessous est INCHANGÉ, il est seulement masqué jusqu'au clic. -->
+    <button type="button" class="loc-reveal" id="ht-loc-reveal" onclick="_locToggle('ht')" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.4-7-11a7 7 0 0 1 14 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+      <span class="loc-reveal-lbl">Ajouter une localisation</span>
+      <svg class="loc-reveal-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="loc-group" id="ht-loc-group">
+      <div class="magic-addr-wrap">
+        <div class="magic-addr-label">Coller l'adresse complète <span style="font-weight:400;text-transform:none;letter-spacing:0">(ex: Google Maps)</span></div>
+        <div class="magic-addr-row">
+          <input type="text" id="ht-magic-input" class="magic-addr-input" placeholder="ex: Keio Plaza Hotel, 2-2-1 Nishishinjuku, Shinjuku, Tokyo"/>
+          <button class="magic-addr-btn" id="ht-magic-btn" type="button" onclick="parseMagicAddress('hotel')">Parser</button>
+        </div>
+        <div class="magic-addr-result" id="ht-magic-result"></div>
+      </div>
     <div class="addr-block" id="ht-addr-block">
       <div class="addr-block-header">
         <span class="addr-block-label">Adresse</span>
@@ -925,75 +1012,66 @@
         Vérifier l'adresse
       </button>
       <div class="addr-result-badge" id="ht-addr-result"></div>
+      <!-- Voie 2 : GPS manuel (rempli par _gpsBlockHtml, source unique) -->
+      <div id="ht-gps-slot"></div>
     </div>
-    <!-- Coords cachées -->
+    </div><!-- /.loc-group -->
+    <!-- Coords cachées (voie 1 : résultat du géocodage) -->
     <input type="hidden" id="ht-adresse-lat" value=""/>
     <input type="hidden" id="ht-adresse-lng" value=""/>
     <!-- Champ ville principal (maintenu pour compatibilité addHotel) -->
     <input type="hidden" id="ht-ville" value=""/>
     <div class="form-row">
-      <div style="flex:1">
-        <label style="font-size:12px;color:var(--ink-muted)">Heure d'arrivée</label>
-        <input type="time" id="ht-heure-arr" style="width:100%"/>
-      </div>
-      <div style="flex:1">
-        <label style="font-size:12px;color:var(--ink-muted)">Heure de départ</label>
-        <input type="time" id="ht-heure-dep" style="width:100%"/>
-      </div>
-    </div>
-    <div class="form-row">
       <textarea id="ht-note" rows="2" placeholder="Note libre (petit-déj inclus, code wifi, étage…)" style="width:100%;resize:vertical;font-family:DM Sans,sans-serif"></textarea>
     </div>
     <div class="liens-block">
-      <div class="liens-block-label">Liens</div>
+      <!-- Bouton accordéon : même classe .loc-reveal que « Ajouter une
+           localisation » → style et comportement identiques. -->
+      <button type="button" class="loc-reveal" id="ht-liens-reveal" onclick="_liensToggle('ht')" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+        <span class="loc-reveal-lbl">Ajouter un lien</span>
+        <svg class="loc-reveal-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="acc-panel" id="ht-liens-panel" style="display:none">
       <div id="ht-liens-list" class="liens-list"></div>
-      <button type="button" class="btn-add-lien" onclick="_lienAddRow('ht')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un lien</button>
+      <button type="button" class="btn-add-lien" onclick="_lienAddRow('ht')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter une autre ligne</button>
+      </div><!-- /.acc-panel -->
     </div>
-    <div class="form-row" style="align-items:center">
-      <label class="pdf-btn">Confirmation / Bon
-        <input type="file" accept=".pdf,application/pdf" onchange="attachPdfToForm('hotel-pdf',this)"/>
-      </label>
-      <span id="hotel-pdf-badge"></span>
-      <input type="hidden" id="hotel-pdf" value=""/>
+    <!-- Multi-documents (étape 5) — voir mob-docs-slot. -->
+    <div id="ht-docs-slot"></div>
+    <span id="hotel-pdf-badge" style="display:none"></span>
+    <input type="hidden" id="hotel-pdf" value=""/>
+    <!-- Actions en TOUTE FIN de formulaire : dernier bloc, donc derniers
+         éléments focusables au clavier (aucun tabindex, l'ordre Tab suit le DOM). -->
+    <div class="form-row form-actions" style="align-items:center">
+      <button class="btn-primary" onclick="addHotel()">Ajouter</button>
+      <button class="btn-ghost" onclick="toggleForm('form-hotel')">Annuler</button>
     </div>
   </div>
   <!-- bouton bas supprimé : ajout via « + Ajouter » en tête de section -->
 </section>
 <section class="section" id="tab-lieux">
-  <div class="section-top">
+  <div class="section-top section-top-tight">
     <div class="section-top-title">Lieux à visiter</div>
     <div class="section-top-actions">
       <button class="btn-add-top" onclick="openAddTop('form-lieu')" title="Ajouter un lieu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter</button>
-      <button class="btn-edit-mode" id="bedit-lieux" onclick="toggleEmode('lieux')">Modifier</button>
     </div>
   </div>
-  <div class="edit-banner" id="ebanner-lieux">Mode édition — cliquez sur l'icône d'une carte pour modifier ou supprimer ce lieu</div>
-  <div class="lieux-group-switch" id="lieux-group-switch">
-    <span class="lgs-label">Regrouper par</span>
-    <button class="lgs-btn active" data-group="none" onclick="setLieuxGroup('none',this)">Liste</button>
-    <button class="lgs-btn" data-group="ville" onclick="setLieuxGroup('ville',this)">Ville</button>
+  <!-- Rangée de regroupement, juste sous le titre (libellé « Regrouper par »
+       retiré — les 3 boutons se suffisent). -->
+  <div class="section-subbar" id="lieux-group-switch" aria-label="Regrouper les lieux">
+    <button class="lgs-btn active" data-group="ville" onclick="setLieuxGroup('ville',this)">Ville</button>
     <button class="lgs-btn" data-group="categorie" onclick="setLieuxGroup('categorie',this)">Catégorie</button>
     <button class="lgs-btn" data-group="jour" onclick="setLieuxGroup('jour',this)">Jour</button>
   </div>
-  <div class="places-controls" id="places-filter-bar">
-    <button class="filter-btn active" onclick="filterPlaces('Tous',this)">Tous</button>
-  </div>
   <div class="add-form" id="form-lieu">
     <div class="add-form-title">Ajouter un lieu</div>
-    <div class="magic-addr-wrap">
-      <div class="magic-addr-label">Coller l'adresse complète <span style="font-weight:400;text-transform:none;letter-spacing:0">(ex: Google Maps)</span></div>
-      <div class="magic-addr-row">
-        <input type="text" id="lieu-magic-input" class="magic-addr-input" placeholder="ex: Fushimi Inari-taisha, 68 Fukakusa Yabunouchicho, Fushimi, Kyoto"/>
-        <button class="magic-addr-btn" id="lieu-magic-btn" type="button" onclick="parseMagicAddress('lieu')">Parser</button>
-      </div>
-      <div class="magic-addr-result" id="lieu-magic-result"></div>
-    </div>
     <div class="form-row">
       <input type="text" id="lieu-nom" placeholder="Nom du lieu"/>
     </div>
-    <div class="form-row">
+    <div class="form-row fr-pair">
       <div class="ac-wrap" style="flex:1;position:relative">
-        <input type="text" id="lieu-ville" placeholder="Ville (ex: Tokyo, Kyoto…)"
+        <input type="text" id="lieu-ville" placeholder="Ville"
           autocomplete="off" list="lieu-ville-datalist"
           oninput="onLieuVilleInput(this.value)"/>
         <datalist id="lieu-ville-datalist"></datalist>
@@ -1004,7 +1082,12 @@
            chargement — source unique, plus de liste figée à maintenir ici. -->
       <datalist id="lieu-cat-datalist"></datalist>
     </div>
+    <!-- Date de visite remontée juste au-dessus des horaires d'ouverture :
+         c'est la même famille d'information (quand y aller). Ordre DOM seul. -->
     <div class="form-row">
+      <input type="text" id="lieu-date" class="cal-trigger" placeholder="Date de visite (optionnel) — JJ/MM/AAAA" style="flex:1" title="Date de visite (optionnel)" readonly onclick="openCalendar('lieu-date')"/>
+    </div>
+    <div class="form-row fr-pair">
       <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px">
         <label style="font-size:11px;color:var(--ink-muted)">Ouverture</label>
         <input type="text" id="lieu-ouverture" placeholder="09h00"
@@ -1018,7 +1101,25 @@
           onclick="openTimePicker('lieu-fermeture','Heure de fermeture')"/>
       </div>
     </div>
-    <!-- ── Bloc Adresse structuré ── -->
+    <!-- ══ GROUPE LOCALISATION — parseur + adresse structurée + GPS ══
+         Même patron que le formulaire hébergement : le parseur reste collé au
+         bloc qu'il remplit. Infos du lieu d'abord, localisation ensuite. -->
+    <!-- Localisation repliée par défaut à la CRÉATION : le bloc adresse/GPS
+         ci-dessous est INCHANGÉ, il est seulement masqué jusqu'au clic. -->
+    <button type="button" class="loc-reveal" id="lieu-loc-reveal" onclick="_locToggle('lieu')" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.4-7-11a7 7 0 0 1 14 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+      <span class="loc-reveal-lbl">Ajouter une localisation</span>
+      <svg class="loc-reveal-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="loc-group" id="lieu-loc-group">
+      <div class="magic-addr-wrap">
+        <div class="magic-addr-label">Coller l'adresse complète <span style="font-weight:400;text-transform:none;letter-spacing:0">(ex: Google Maps)</span></div>
+        <div class="magic-addr-row">
+          <input type="text" id="lieu-magic-input" class="magic-addr-input" placeholder="ex: Fushimi Inari-taisha, 68 Fukakusa Yabunouchicho, Fushimi, Kyoto"/>
+          <button class="magic-addr-btn" id="lieu-magic-btn" type="button" onclick="parseMagicAddress('lieu')">Parser</button>
+        </div>
+        <div class="magic-addr-result" id="lieu-magic-result"></div>
+      </div>
     <div class="addr-block" id="lieu-addr-block">
       <div class="addr-block-header">
         <span class="addr-block-label">Adresse <span style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink-hint)">(optionnel)</span></span>
@@ -1050,28 +1151,38 @@
         Vérifier l'adresse
       </button>
       <div class="addr-result-badge" id="lieu-addr-result"></div>
+      <!-- Voie 2 : GPS manuel (rempli par _gpsBlockHtml, source unique) -->
+      <div id="lieu-gps-slot"></div>
     </div>
+    </div><!-- /.loc-group -->
+    <!-- Coords cachées (voie 1 : résultat du géocodage) -->
     <input type="hidden" id="lieu-adresse-lat" value=""/>
     <input type="hidden" id="lieu-adresse-lng" value=""/>
     <div class="form-row">
       <textarea id="lieu-note" rows="2" placeholder="Note / conseil (optionnel)" style="flex:1;resize:vertical;font-family:DM Sans,sans-serif"></textarea>
     </div>
     <div class="liens-block">
-      <div class="liens-block-label">Liens</div>
+      <!-- Bouton accordéon : même classe .loc-reveal que « Ajouter une
+           localisation » → style et comportement identiques. -->
+      <button type="button" class="loc-reveal" id="lieu-liens-reveal" onclick="_liensToggle('lieu')" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+        <span class="loc-reveal-lbl">Ajouter un lien</span>
+        <svg class="loc-reveal-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="acc-panel" id="lieu-liens-panel" style="display:none">
       <div id="lieu-liens-list" class="liens-list"></div>
-      <button type="button" class="btn-add-lien" onclick="_lienAddRow('lieu')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un lien</button>
+      <button type="button" class="btn-add-lien" onclick="_lienAddRow('lieu')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter une autre ligne</button>
+      </div><!-- /.acc-panel -->
     </div>
-    <div class="form-row">
-      <input type="text" id="lieu-date" class="cal-trigger" placeholder="Date de visite (optionnel) — JJ/MM/AAAA" style="flex:1" title="Date de visite (optionnel)" readonly onclick="openCalendar('lieu-date')"/>
-    </div>
-    <div class="form-row" style="align-items:center">
+    <!-- Multi-documents (étape 5) — voir mob-docs-slot. -->
+    <div id="lieu-docs-slot"></div>
+    <span id="lieu-pdf-badge" style="display:none"></span>
+    <input type="hidden" id="lieu-pdf" value=""/>
+    <!-- Actions en TOUTE FIN de formulaire : dernier bloc, donc derniers
+         éléments focusables au clavier (aucun tabindex, l'ordre Tab suit le DOM). -->
+    <div class="form-row form-actions" style="align-items:center">
       <button class="btn-primary" onclick="addLieu()">Ajouter</button>
       <button class="btn-ghost" onclick="toggleForm('form-lieu')">Annuler</button>
-      <label class="pdf-btn" style="margin-left:auto">PDF
-        <input type="file" accept=".pdf,application/pdf" onchange="attachPdfToForm('lieu-pdf',this)"/>
-      </label>
-      <span id="lieu-pdf-badge"></span>
-      <input type="hidden" id="lieu-pdf" value=""/>
     </div>
   </div>
   <div class="places-grid" id="places-grid"></div>
@@ -1079,16 +1190,16 @@
   <!-- bouton bas supprimé : ajout via « + Ajouter » en tête de section -->
 </section>
 <section class="section" id="tab-documents">
-  <div class="section-top">
+  <div class="section-top section-top-tight">
     <div class="section-top-title">Documents</div>
     <div class="section-top-actions">
       <button class="btn-add-top" onclick="openDocAdd()" title="Ajouter un document"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter</button>
     </div>
   </div>
 
-  <!-- Bascule Liste / Catégories -->
-  <div class="lieux-group-switch" id="doc-view-switch">
-    <span class="lgs-label">Affichage</span>
+  <!-- Bascule Catégories / Liste, juste sous le titre (libellé « Affichage »
+       retiré — mêmes patron et design que Déplacements et Lieux). -->
+  <div class="section-subbar" id="doc-view-switch" aria-label="Affichage des documents">
     <button class="lgs-btn active" data-docview="cat" onclick="setDocView('cat',this)">Catégories</button>
     <button class="lgs-btn" data-docview="liste" onclick="setDocView('liste',this)">Liste</button>
   </div>
@@ -1115,7 +1226,9 @@
       <label class="doc-field-lbl">Expiration</label>
       <input type="month" id="doc-expiry" class="doc-month"/>
     </div>
-    <div id="doc-pdf-slot"></div>
+    <div id="doc-pdf-slot" style="display:none"></div>
+    <!-- Multi-documents (étape 5) — voir mob-docs-slot. -->
+    <div id="doc-docs-slot"></div>
     <div class="form-row" style="align-items:center">
       <button class="btn-primary" onclick="saveDoc()">Enregistrer</button>
       <button class="btn-ghost" onclick="toggleForm('form-doc')">Annuler</button>
@@ -1186,7 +1299,6 @@
         <option value="📱 Divers">Divers</option>
       </select>
       <input type="date" id="tx-date"/>
-      <button class="btn-primary" onclick="addTransaction()">Ajouter</button>
     </div>
     <div class="form-row" style="align-items:center">
       <label class="pdf-btn">Justificatif
@@ -1207,6 +1319,11 @@
       </div>
     </div>
     <div style="font-size:11px;color:var(--ink-hint);margin-top:4px" id="tx-hint"><span id="tx-hint-text">La devise locale est convertie en € au taux temps réel.</span></div>
+    <!-- Actions en TOUTE FIN de formulaire : dernier bloc, donc derniers
+         éléments focusables au clavier (aucun tabindex, l'ordre Tab suit le DOM). -->
+    <div class="form-row form-actions" style="align-items:center">
+      <button class="btn-primary" onclick="addTransaction()">Ajouter</button>
+    </div>
   </div>
   <div class="section-divider"><span>Historique</span></div>
   <button class="tx-export-btn" onclick="openExportFactures()" title="Regrouper des factures en un seul PDF">

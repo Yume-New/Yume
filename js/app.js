@@ -61,6 +61,34 @@ function _migrateAllTrips(){
     if(t.lieux) t.lieux.forEach(function(l){
       if(l && l.jour && !l.dateVisite){ l.dateVisite = _isoToFrDate(l.jour); delete l.jour; }
     });
+    // ── Multi-documents (étape 5) : docs[] sur les 4 porteurs. Idempotente,
+    //    non destructive (pdfId conservé, aucun blob dupliqué).
+    ['mobilites','hotels','lieux','documents'].forEach(function(key){
+      if(Array.isArray(t[key])) t[key].forEach(_migrateDocs);
+    });
+    // ── Statut de réservation : UNE migration pour les DEUX types ──
+    // (étape 2 §8.3). Idempotente : une fois la valeur canonique posée, no-op.
+    //
+    // a) Transports — replie le vocabulaire historique sur les 3 valeurs
+    //    canoniques (Réservé → Confirmé, À réserver → À confirmer). Sans ça,
+    //    un statut hors liste retomberait sur la 1re option du <select> à
+    //    l'édition et serait réécrit en silence (bug déjà rencontré sur les
+    //    catégories de dépense, §8.2). Une valeur inconnue est CONSERVÉE.
+    if(t.mobilites) t.mobilites.forEach(function(m){
+      if(!m || m.type==='pass') return;          // le pass a son propre jeu
+      var n=_statutNorm(m.statut);
+      if(n && n!==m.statut) m.statut=n;
+    });
+    // b) Hébergements — le champ n'existait pas. Défaut déduit du n° de
+    //    réservation, seul indice disponible dans les données : une résa
+    //    saisie = réservation confirmée, sinon à confirmer. Heuristique
+    //    ASSUMÉE et corrigeable à la main sur chaque fiche ; elle ne s'applique
+    //    qu'une fois (les hébergements créés ensuite portent leur vrai statut).
+    if(t.hotels) t.hotels.forEach(function(h){
+      if(!h) return;
+      if(h.statut){ var hn=_statutNorm(h.statut); if(hn!==h.statut) h.statut=hn; return; }
+      h.statut = (h.resa && String(h.resa).trim()) ? 'Confirmé' : 'À confirmer';
+    });
     // Liens web : garantir liens=[] sur lieux / mobilités / hôtels
     // (non destructif : ne touche jamais un tableau déjà présent).
     [t.lieux, t.mobilites, t.hotels].forEach(function(arr){
@@ -173,13 +201,31 @@ function _lienNormalizeUrl(u){
   return u;
 }
 // Bloc de formulaire (création + édition) — conteneur + bouton d'ajout.
+// Le libellé « LIENS » est remplacé par le bouton accordéon lui-même : il porte
+// déjà l'intitulé. Même classe .loc-reveal que la localisation → style et
+// gabarit strictement identiques.
 function _liensBlockHtml(prefix){
   return '<div class="liens-block">'
-    + '<div class="liens-block-label">Liens</div>'
-    + '<div id="'+prefix+'-liens-list" class="liens-list"></div>'
-    + '<button type="button" class="btn-add-lien" onclick="_lienAddRow(\''+prefix+'\')">'
-      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un lien</button>'
+    + _accBtnHtml(prefix+'-liens-reveal', '_liensToggle(\''+prefix+'\')', 'Ajouter un lien', _ICO_LINK)
+    + '<div class="acc-panel" id="'+prefix+'-liens-panel" style="display:none">'
+      + '<div id="'+prefix+'-liens-list" class="liens-list"></div>'
+      + '<button type="button" class="btn-add-lien" onclick="_lienAddRow(\''+prefix+'\')">'
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter une autre ligne</button>'
+    + '</div>'
   + '</div>';
+}
+
+// Bouton d'accordéon — SOURCE UNIQUE du markup des 3 blocs (icône + libellé +
+// chevron). Reprend .loc-reveal, donc rien à resynchroniser côté style.
+var _ICO_LINK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>';
+var _ICO_DOC='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
+var _ICO_CHEV='<svg class="loc-reveal-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+function _accBtnHtml(btnId, onclick, label, icon, open){
+  return '<button type="button" class="loc-reveal'+(open?' is-open':'')+'" id="'+btnId+'" onclick="'+onclick+'" aria-expanded="'+(open?'true':'false')+'">'
+    + (icon||'')
+    + '<span class="loc-reveal-lbl">'+_tlEsc(label)+'</span>'
+    + _ICO_CHEV
+  + '</button>';
 }
 function _lienAddRow(prefix, label, url){
   var list = document.getElementById(prefix+'-liens-list');
@@ -187,7 +233,7 @@ function _lienAddRow(prefix, label, url){
   var row = document.createElement('div');
   row.className = 'lien-row';
   row.innerHTML =
-    '<input type="text" class="lien-label" placeholder="Libellé (optionnel)" value="'+_tlEsc(label||'')+'"/>'
+    '<input type="text" class="lien-label" placeholder="Libellé affiché (ex. Réservation)" value="'+_tlEsc(label||'')+'"/>'
     + '<input type="url" class="lien-url" placeholder="https://…" value="'+_tlEsc(url||'')+'"/>'
     + '<button type="button" class="lien-del" title="Supprimer ce lien" onclick="_lienDelRow(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
   list.appendChild(row);
@@ -202,6 +248,8 @@ function _lienFillRows(prefix, liens){
   if(!list) return;
   list.innerHTML = '';
   (liens||[]).forEach(function(L){ if(L) _lienAddRow(prefix, L.label, L.url); });
+  // Déplié par défaut s'il y a déjà des liens (édition), replié sinon (création).
+  if(typeof _liensSyncState==='function') _liensSyncState(prefix);
 }
 // Lit les lignes → [{label,url}]. URL normalisée+requise (lignes vides ignorées).
 function _lienReadRows(prefix){
@@ -216,10 +264,28 @@ function _lienReadRows(prefix){
   }
   return out;
 }
+// Libellé d'affichage d'un lien — SOURCE UNIQUE consommée par le popover, le
+// tooltip de l'icône et le formulaire. On n'affiche JAMAIS l'URL brute : si
+// aucun libellé n'est saisi, on dérive l'HÔTE (booking.com, maps.google.com),
+// qui reste court et reconnaissable ; « Lien » n'est plus qu'un dernier recours.
+function _lienLabel(L){
+  if(!L) return 'Lien';
+  var lab=String(L.label==null?'':L.label).trim();
+  if(lab) return lab;
+  var u=_lienNormalizeUrl(L.url||'');
+  if(!u) return 'Lien';
+  // Extraction d'hôte sans URL() (ES5) : on coupe après le schéma puis au 1er /
+  var host=u.replace(/^[a-zA-Z][a-zA-Z0-9+.\-]*:\/\//,'').split(/[\/?#]/)[0];
+  host=host.replace(/^www\./,'');
+  return host || 'Lien';
+}
+
 // Icône d'accès sur une carte (chaîne vide si aucun lien). IDs quotés via data-*.
 function _liensIconHtml(cat, id, liens){
   if(!liens || !liens.length) return '';
-  var lbl = liens.length>1 ? (liens.length+' liens') : 'Ouvrir le lien';
+  // Un seul lien → le tooltip porte SON libellé (et non « Ouvrir le lien »),
+  // pour identifier la destination sans l'ouvrir.
+  var lbl = liens.length>1 ? (liens.length+' liens') : _lienLabel(liens[0]);
   return '<button class="card-lien-btn" type="button" data-liens-cat="'+cat+'" data-liens-id="'+_tlEsc(String(id))+'" title="'+lbl+'" aria-label="'+lbl+'">'+_LIEN_ICON+'</button>';
 }
 // Résout le tableau liens d'un item selon sa catégorie.
@@ -262,7 +328,7 @@ function _lienShowPopover(anchor, liens){
   for(var i=0;i<liens.length;i++){
     // <a target=_blank rel=noopener> : navigation native en nouvel onglet.
     html += '<a class="liens-pop-item" href="'+_tlEsc(_lienNormalizeUrl(liens[i].url))+'" target="_blank" rel="noopener noreferrer">'
-      + _LIEN_ICON + '<span>'+_tlEsc(liens[i].label||'Lien')+'</span></a>';
+      + _LIEN_ICON + '<span>'+_tlEsc(_lienLabel(liens[i]))+'</span></a>';
   }
   pop.innerHTML = html;
   document.body.appendChild(pop);
@@ -413,7 +479,7 @@ function parseMagicAddress(ctx){
   if(!inp||!btn||!res)return;
   var raw=inp.value.trim();
   if(!raw){res.className='magic-addr-result ko';res.textContent='Colle une adresse à parser.';return;}
-  btn.disabled=true;btn.textContent='⏳…';
+  btn.disabled=true;btn.textContent='Analyse…';   // (charte zéro emoji : texte, plus de sablier)
   res.className='magic-addr-result';res.textContent='';
   fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q='+encodeURIComponent(raw),{headers:{'Accept-Language':'fr,en'}})
   .then(function(r){return r.json();})
@@ -521,6 +587,15 @@ function _detectCatFromAddr(amenity,tourism,raw){
   if(a==='clothes'||a==='mall'||r.indexOf('shopping')!==-1)return 'Shopping';
   return '';
 }
+// Poubelle filaire — même tracé que les boutons de suppression PDF déjà en
+// place (_mobRenderPdfBadge, mPdfBlock) : un seul dessin pour tous.
+var _ICO_TRASH='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+
+// Loupe filaire — remplace l'emoji \U0001F50D du bouton « Vérifier l'adresse »
+// (charte zéro emoji, §2). Unique porteur : le reset de formulaire, qui
+// réécrit le bouton en innerHTML.
+var _ICO_SEARCH='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="13" height="13"><circle cx="11" cy="11" r="7"/><line x1="16.2" y1="16.2" x2="21" y2="21"/></svg>';
+
 function verifierAdresse(context){
   var cfg={
     'hotel':     {prefix:'ht',  btnId:'ht-verify-btn',   resId:'ht-addr-result',   latId:'ht-adresse-lat',  lngId:'ht-adresse-lng'},
@@ -572,7 +647,8 @@ function verifierAdresse(context){
       var filled=_parseAndFill(cfg.prefix,addrObj);
       btn.className='btn-verify-addr verified';
       var attemptLabel=attemptNo>1?' (tentative '+attemptNo+'/'+totalAttempts+')':'';
-      btn.innerHTML='<span class="verify-icon" style="color:#1e7a45">&#10003;</span> Adresse trouvée'+attemptLabel+(filled.length?' · '+filled.join(', ')+' ✨':'');
+      // (charte zéro emoji : le \u2728 de fin de message a été retiré)
+      btn.innerHTML='<span class="verify-icon" style="color:#1e7a45">&#10003;</span> Adresse trouvée'+attemptLabel+(filled.length?' · '+filled.join(', '):'');
       res.className='addr-result-badge visible ok';
       var dn=d.display_name?d.display_name.split(',').slice(0,4).join(', '):queries[attemptNo-1];
       res.textContent=dn+' · '+lat.toFixed(5)+', '+lng.toFixed(5);
@@ -611,6 +687,142 @@ function _addrRemoveGeo(prefix){
   var btn=document.getElementById(prefix+'-verify-btn'); if(btn) btn.className='btn-verify-addr';
   if(typeof showToast==='function') showToast('Localisation retirée', 'info');
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// GÉOLOCALISATION À DEUX VOIES (étape 2 §8.3) — composant PARTAGÉ
+// ══════════════════════════════════════════════════════════════════════
+// Voie 1 (existante, INCHANGÉE) : adresse texte → géocodage. Autocomplete
+//   gares (STATION_DATA, lat/lng), Photon/Komoot puis repli Nominatim via
+//   _nominatimCascade / verifierAdresse. Rien n'est réécrit ici.
+// Voie 2 (nouvelle) : coordonnées GPS saisies À LA MAIN, en secours quand le
+//   géocodage ne renvoie qu'une position approximative (centre-ville au lieu
+//   du lieu précis — cas des gares, cf. §10).
+//
+// AUCUNE des deux n'est requise et aucune ne bloque l'autre : on enregistre
+// avec adresse seule, GPS seul, ou les deux. Si les DEUX sont renseignés, le
+// GPS manuel PRIME pour l'affichage carte.
+//
+// Stockage : gpsLat / gpsLng — VOLONTAIREMENT distincts de lat/lng. lat/lng
+// est le cache de géocodage, remis à null à chaque changement d'adresse
+// (saveHotel/saveLieu) ; y écrire le GPS manuel le ferait effacer en silence
+// dès la prochaine retouche d'adresse. Champs absents = falsy → rétrocompatible,
+// aucune migration nécessaire.
+
+// Parse un couple lat/lng. Renvoie {lat,lng}, null (rien saisi) ou 'invalid'.
+function _gpsParse(latRaw, lngRaw){
+  var sLat=String(latRaw==null?'':latRaw).trim().replace(/,/g,'.');
+  var sLng=String(lngRaw==null?'':lngRaw).trim().replace(/,/g,'.');
+  if(!sLat && !sLng) return null;              // voie GPS non utilisée
+  if(!sLat || !sLng) return 'invalid';          // une seule des deux → incomplet
+  var la=parseFloat(sLat), ln=parseFloat(sLng);
+  if(!isFinite(la) || !isFinite(ln)) return 'invalid';
+  if(la<-90 || la>90 || ln<-180 || ln>180) return 'invalid';
+  return {lat:la, lng:ln};
+}
+
+// Lecture des deux champs d'un formulaire. Tolère le collage d'un couple
+// « 35.6586, 139.7454 » dans le seul champ Latitude (flux réel : copier depuis
+// une fiche de carte sur mobile) → on scinde avant de valider.
+function _gpsRead(prefix){
+  var eLat=document.getElementById(prefix+'-gps-lat');
+  var eLng=document.getElementById(prefix+'-gps-lng');
+  if(!eLat || !eLng) return null;               // contexte sans bloc GPS
+  var rawLat=(eLat.value||'').trim(), rawLng=(eLng.value||'').trim();
+  var pair=rawLat.match(/^(-?\d+(?:[.,]\d+)?)\s*[;,\s]\s*(-?\d+(?:[.,]\d+)?)$/);
+  if(pair && !rawLng){ rawLat=pair[1]; rawLng=pair[2]; eLat.value=rawLat; eLng.value=rawLng; }
+  return _gpsParse(rawLat, rawLng);
+}
+
+// Retour visuel live (jamais bloquant : on n'empêche aucune saisie).
+function _gpsOnInput(prefix){
+  var hint=document.getElementById(prefix+'-gps-hint');
+  if(!hint) return;
+  var r=_gpsRead(prefix);
+  hint.classList.remove('ok','ko');
+  if(r==='invalid'){
+    hint.classList.add('ko');
+    hint.textContent='Coordonnées incomplètes ou hors bornes (lat -90/90, lng -180/180).';
+  } else if(r){
+    hint.classList.add('ok');
+    hint.textContent='Position retenue : '+r.lat.toFixed(5)+', '+r.lng.toFixed(5)+' — prime sur l’adresse.';
+  } else {
+    hint.textContent=_GPS_HINT;
+  }
+}
+
+var _GPS_HINT='Facultatif. Priment sur l’adresse si renseignées. Tu peux coller « lat, lng » dans Latitude.';
+
+function _gpsClear(prefix){
+  var eLat=document.getElementById(prefix+'-gps-lat');
+  var eLng=document.getElementById(prefix+'-gps-lng');
+  if(eLat) eLat.value=''; if(eLng) eLng.value='';
+  _gpsOnInput(prefix);
+}
+
+// Bloc de saisie — SOURCE UNIQUE du markup, utilisée par les 4 contextes
+// hébergement/lieu (ht, eh, lieu, el) et par les 2 extrémités transport.
+function _gpsBlockHtml(prefix, lat, lng, title){
+  var vLat=(lat===0||lat)&&isFinite(parseFloat(lat))?parseFloat(lat):'';
+  var vLng=(lng===0||lng)&&isFinite(parseFloat(lng))?parseFloat(lng):'';
+  return '<div class="gps-block" id="'+prefix+'-gps-block">'
+    +'<div class="gps-block-head">'
+      +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="13" height="13"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2"/><line x1="12" y1="1.5" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22.5"/><line x1="1.5" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22.5" y2="12"/></svg>'
+      +'<span class="gps-block-label">'+(title||'Coordonnées GPS exactes')+'</span>'
+      +'<span class="gps-block-opt">facultatif</span>'
+    +'</div>'
+    +'<div class="gps-grid">'
+      +'<div class="gps-field"><label for="'+prefix+'-gps-lat">Latitude</label>'
+        +'<input type="text" id="'+prefix+'-gps-lat" value="'+vLat+'" placeholder="35.65860" autocomplete="off" oninput="_gpsOnInput(\''+prefix+'\')"/></div>'
+      +'<div class="gps-field"><label for="'+prefix+'-gps-lng">Longitude</label>'
+        +'<input type="text" id="'+prefix+'-gps-lng" value="'+vLng+'" placeholder="139.74540" autocomplete="off" oninput="_gpsOnInput(\''+prefix+'\')"/></div>'
+    +'</div>'
+    +'<div class="gps-row-actions">'
+      +'<button class="btn-gps-clear" type="button" onclick="_gpsClear(\''+prefix+'\')">Effacer</button>'
+      +'<div class="gps-hint" id="'+prefix+'-gps-hint">'+_GPS_HINT+'</div>'
+    +'</div>'
+  +'</div>';
+}
+
+// Applique la voie GPS sur un objet (hôtel/lieu). Renvoie false si la saisie
+// est invalide (l'appelant annule alors l'enregistrement avec un toast).
+// GPS renseigné = élément localisé → lève geoOff (§8.2 : un geoOff n'a AUCUN pin).
+function _gpsApply(prefix, obj){
+  var r=_gpsRead(prefix);
+  if(r==='invalid'){
+    showToast('Coordonnées GPS invalides — corrige ou vide les deux champs', 'error');
+    return false;
+  }
+  if(r){ obj.gpsLat=r.lat; obj.gpsLng=r.lng; obj.geoOff=false; }
+  else  { delete obj.gpsLat; delete obj.gpsLng; }
+  return true;
+}
+
+// Résolution de position partagée : GPS manuel d'abord, cache de géocodage
+// ensuite. Renvoie null si l'élément n'est pas localisable.
+function _geoPoint(o){
+  if(!o) return null;
+  var gl=parseFloat(o.gpsLat), gn=parseFloat(o.gpsLng);
+  if(isFinite(gl)&&isFinite(gn)&&gl>=-90&&gl<=90&&gn>=-180&&gn<=180) return {lat:gl,lng:gn,source:'gps'};
+  var la=parseFloat(o.lat), ln=parseFloat(o.lng);
+  if(isFinite(la)&&isFinite(ln)) return {lat:la,lng:ln,source:'addr'};
+  return null;
+}
+
+// Remplit les 2 slots statiques des formulaires d'ajout (même convention que
+// #doc-pdf-slot / mPdfBlock : un seul markup, injecté).
+(function _initGpsSlots(){
+  function fill(){
+    [['ht','ht-gps-slot'],['lieu','lieu-gps-slot']].forEach(function(p){
+      var slot=document.getElementById(p[1]);
+      if(slot && !slot.getAttribute('data-filled')){
+        slot.innerHTML=_gpsBlockHtml(p[0],'','');
+        slot.setAttribute('data-filled','1');
+      }
+    });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',fill);
+  else fill();
+})();
 
 // Migration rétrocompat : si un item a l'ancien champ 'adresse' mais pas les nouveaux,
 // on tente de décomposer ou on le conserve dans 'rue' pour ne rien perdre.
@@ -654,7 +866,7 @@ function _buildPaysSelect(selectId){
 
   // Optgroup voyage actif
   if(tripCountries.length){
-    html += '<optgroup label="🌏 Pays du voyage">';
+    html += '<optgroup label="Pays du voyage">';   // (charte zéro emoji : \u{1F30F} retiré)
     tripCountries.forEach(function(c){
       var flag = isoToFlag(countryToISO(c));
       html += '<option value="'+c.replace(/"/g,'&quot;')+'">'+flag+' '+c+'</option>';
@@ -905,7 +1117,7 @@ function clearAllModals(){
   ['ht-addr-result','lieu-addr-result','ht-verify-btn','lieu-verify-btn'].forEach(function(id){
     var el=document.getElementById(id);
     if(!el) return;
-    if(el.tagName==='BUTTON'){ el.className='btn-verify-addr'; el.innerHTML='<span class="verify-icon">&#128269;</span> Vérifier l\'adresse'; el.disabled=false; }
+    if(el.tagName==='BUTTON'){ el.className='btn-verify-addr'; el.innerHTML='<span class="verify-icon">'+_ICO_SEARCH+'</span> Vérifier l\'adresse'; el.disabled=false; }
     else{ el.className='addr-result-badge'; el.textContent=''; }
   });
 
@@ -2069,26 +2281,34 @@ function showAppScreen(){
 // ══════════════════════════════════════════════════════════
 // EMOJI AUTO par type + destination
 // ══════════════════════════════════════════════════════════
+// ATTENTION : la valeur renvoyée est stockée dans meta.emoji … qui n'est LU
+// nulle part (vérifié : 2 écritures, 0 lecture ; #new-trip-emoji n'existe plus
+// dans index.html). Elle n'est donc jamais affichée — c'est pourquoi ce
+// nettoyage se contente de retirer les littéraux emoji du CODE et n'y met pas
+// d'icône SVG : y stocker du markup polluerait la donnée persistée sans aucun
+// effet visible. Champ candidat à suppression (validation architecte, §11).
 function getAutoEmoji(tripMeta){
   var type     = tripMeta.type     || 'V';
   var destType = tripMeta.destType || 'international';
   var country  = tripMeta.country  || '';
 
   if(type === 'VA'){
-    return '💼'; // Affaires toujours valise (sauf override manuel)
+    return 'VA';        // voyage d'affaires
   }
   // Voyage perso
   if(destType === 'france'){
-    return '🚗'; // France → voiture
+    return 'FR';        // France
   }
   // International → drapeau si pays reconnu
   if(country){
     var iso = (typeof countryToISO === 'function') ? countryToISO(country) : '';
     if(iso && iso.length === 2){
-      return (typeof isoToFlag === 'function') ? isoToFlag(iso) : '✈';
+      // isoToFlag renvoie un drapeau : HORS PÉRIMÈTRE de ce nettoyage (les
+      // drapeaux pays servent tout le sélecteur de pays, cf. §4).
+      return (typeof isoToFlag === 'function') ? isoToFlag(iso) : 'INTL';
     }
   }
-  return '✈';
+  return 'INTL';
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2677,9 +2897,197 @@ function renderHomeStats(){
 
 // Accueil mobile : révèle/masque les boutons stylo/poubelle des voyages
 
+// ══════════════════════════════════════════════════════════════════
+// ACCUEIL MOBILE (étape 4 §8.3) — maquette 4a
+// Deux états EXCLUSIFS : vide (composition centrée, une seule action) et
+// plein (stats → Prochain départ → À venir / Passés → bouton flottant).
+// Réutilise _featuredTrip() (aucune logique de scoring dupliquée) et
+// parseDDMMYYYY. Le voyage à la une est DÉDOUBLONNÉ : il n'apparaît que dans
+// « Prochain départ », jamais dans les groupes en dessous.
+// ══════════════════════════════════════════════════════════════════
+var _HM_MOIS = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+
+// Plage de dates compacte : « 5 → 19 août » si même mois, sinon
+// « 28 août → 3 sept. », et l'année n'apparaît que si elle diffère de l'actuelle.
+function _hmRange(dep, ret){
+  if(!dep) return '';
+  var y = new Date().getFullYear();
+  function j(d){ return d.getDate(); }
+  function jm(d){ return d.getDate()+' '+_HM_MOIS[d.getMonth()]; }
+  function jmy(d){ return jm(d)+(d.getFullYear()!==y?' '+d.getFullYear():''); }
+  if(!ret) return jmy(dep);
+  if(dep.getFullYear()===ret.getFullYear() && dep.getMonth()===ret.getMonth()){
+    return j(dep)+' → '+jmy(ret);
+  }
+  return jm(dep)+' → '+jmy(ret);
+}
+
+// Pastille de compte à rebours du voyage à la une.
+function _hmPill(state, dep, ret, now){
+  var DAY=86400000;
+  if(state==='ongoing'){
+    var total=Math.max(1, Math.round((ret-dep)/DAY));
+    var jour =Math.min(total, Math.round((now-dep)/DAY)+1);
+    return {txt:'En cours · J'+jour, cls:'ongoing'};
+  }
+  if(state==='upcoming'){
+    var d=Math.round((dep-now)/DAY);
+    return {txt:(d===0?"Aujourd'hui":(d===1?'Demain':'dans '+d+' j')), cls:'upcoming'};
+  }
+  if(state==='past') return {txt:'Terminé', cls:'past'};
+  return {txt:'', cls:''};
+}
+
+// Avancement des PRÉPARATIFS d'un voyage — 5 critères binaires, pondérés
+// également (donc pas de 33 % ni de 17 % : 0/20/40/60/80/100).
+// DÉFINITION À ARBITRER : elle est ici explicite et lisible plutôt que devinée
+// ailleurs dans le code, où aucun helper de ce genre n'existait
+// (updateVoyageProgressBar mesure le temps ÉCOULÉ, pas la préparation).
+function _tripPrepPct(tid){
+  var t=allTrips[tid]; if(!t) return 0;
+  var a=(typeof _tripArrays==='function')?_tripArrays(tid):t;
+  var n=0;
+  if(((a.mobilites||[]).length + (a.passes||[]).length + (a.locations||[]).length) > 0) n++;
+  if((a.hotels||[]).length)                              n++;
+  if((a.lieux||[]).length)                               n++;
+  if((t.budget||0) > 0)                                  n++;
+  if((a.documents||[]).length || (a.transactions||[]).length) n++;
+  return n*20;
+}
+
+// Ligne de voyage des groupes « À venir » / « Passés ». Les passés gardent
+// EXACTEMENT la même apparence (aucun grisé, aucune opacité réduite).
+function _hmTripRow(tid){
+  var m=(allTrips[tid]||{}).meta||{};
+  var dep=m.dateDep?parseDDMMYYYY(m.dateDep):null;
+  var ret=m.dateRet?parseDDMMYYYY(m.dateRet):null;
+  var sub=_hmRange(dep,ret) || (m.created||'');
+  var b=document.createElement('button');
+  b.className='hm-row';
+  b.type='button';
+  b.setAttribute('data-tid', tid);          // id JAMAIS interpolé (§5.1)
+  b.innerHTML=
+     '<span class="hm-row-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="17" height="17" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.4-7-11a7 7 0 0 1 14 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg></span>'
+    +'<span class="hm-row-txt"><span class="hm-row-name"></span><span class="hm-row-sub"></span></span>'
+    +'<svg class="hm-row-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+  b.querySelector('.hm-row-name').textContent = m.name || 'Voyage';
+  b.querySelector('.hm-row-sub').textContent  = sub;
+  b.onclick = function(){ openTrip(tid); };  // closure, pas d'onclick interpolé
+  return b;
+}
+
+function renderHomeMobile(){
+  var host=document.getElementById('home-mobile');
+  if(!host) return;
+  var empty=document.getElementById('hm-empty');
+  var full =document.getElementById('hm-full');
+  var fab  =document.getElementById('hm-fab-wrap');
+  var ids=Object.keys(allTrips||{});
+
+  // ── ÉTAT VIDE : composition centrée, une seule action, AUCUNE stat ──
+  if(!ids.length){
+    full.style.display='none';
+    if(fab) fab.style.display='none';        // l'action unique est au centre
+    empty.style.display='';
+    empty.innerHTML=
+       '<div class="hm-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="34" height="34" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.4-7-11a7 7 0 0 1 14 0c0 4.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.8"/></svg></div>'
+      +'<h2 class="hm-empty-title">Votre premier voyage<br>commence ici</h2>'
+      +'<p class="hm-empty-sub">Créez un voyage pour rassembler vols, hébergements, lieux et budget en un seul endroit — même hors connexion.</p>'
+      +'<button class="hm-empty-cta" type="button" onclick="openCreateModal()">'
+        +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" width="17" height="17" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+        +'<span>Créer mon premier voyage</span>'
+      +'</button>';
+    return;
+  }
+
+  // ── ÉTAT PLEIN ──
+  empty.style.display='none';
+  full.style.display='';
+  if(fab) fab.style.display='';
+
+  var now=new Date(); now.setHours(0,0,0,0);
+  var feat=_featuredTrip();                  // SOURCE UNIQUE du voyage à la une
+  var featId=feat.id;
+
+  // Stats : voyages, pays distincts, voyages à venir
+  var pays={}, aVenir=0;
+  ids.forEach(function(tid){
+    var m=(allTrips[tid]||{}).meta||{};
+    var isIntl=!m.destType || m.destType==='international';
+    if(isIntl && m.country) pays[m.country]=1;
+    var d=m.dateDep?parseDDMMYYYY(m.dateDep):null;
+    if(d && d>now) aVenir++;
+  });
+  var stats=[{v:ids.length, l:ids.length>1?'voyages':'voyage'},
+             {v:Object.keys(pays).length, l:Object.keys(pays).length>1?'pays':'pays'},
+             {v:aVenir, l:'à venir'}];
+  document.getElementById('hm-stats').innerHTML=stats.map(function(s){
+    return '<div class="hm-stat"><div class="hm-stat-v">'+s.v+'</div><div class="hm-stat-l">'+_tlEsc(s.l)+'</div></div>';
+  }).join('');
+
+  // Carte « Prochain départ » — voyage à la une
+  var fh=document.getElementById('hm-featured');
+  fh.innerHTML='';
+  if(featId && allTrips[featId]){
+    var m=allTrips[featId].meta||{};
+    var dep=m.dateDep?parseDDMMYYYY(m.dateDep):null;
+    var ret=m.dateRet?parseDDMMYYYY(m.dateRet):null;
+    var pill=_hmPill(feat.state, dep, ret, now);
+    var pct=_tripPrepPct(featId);
+    var villes=(Array.isArray(m.countries)&&m.countries.length>1)
+      ? m.countries.join(' · ')
+      : (m.country||'');
+    var sub=[villes, _hmRange(dep,ret)].filter(Boolean).join(' · ');
+    var lbl=(feat.state==='past')?'Dernier voyage':(feat.state==='ongoing'?'Voyage en cours':'Prochain départ');
+    var card=document.createElement('div');
+    card.innerHTML=
+       '<div class="hm-grp-label">'+lbl+'</div>'
+      +'<button class="hm-feat" type="button">'
+        +'<div class="hm-feat-top">'
+          +'<span class="hm-feat-name"></span>'
+          +(pill.txt?'<span class="hm-feat-pill '+pill.cls+'"></span>':'')
+        +'</div>'
+        +(sub?'<div class="hm-feat-sub"></div>':'')
+        +'<div class="hm-feat-bar"><span style="width:'+pct+'%"></span></div>'
+        +'<div class="hm-feat-pct">Préparatifs '+pct+' %</div>'
+      +'</button>';
+    card.querySelector('.hm-feat-name').textContent=m.name||'Voyage';
+    if(pill.txt) card.querySelector('.hm-feat-pill').textContent=pill.txt;
+    if(sub) card.querySelector('.hm-feat-sub').textContent=sub;
+    card.querySelector('.hm-feat').onclick=function(){ openTrip(featId); };
+    while(card.firstChild) fh.appendChild(card.firstChild);
+  }
+
+  // Groupes « À venir » / « Passés » — DÉDOUBLONNÉS du voyage à la une
+  var gh=document.getElementById('hm-groups');
+  gh.innerHTML='';
+  var venir=[], passes_=[];
+  ids.forEach(function(tid){
+    if(tid===featId) return;                 // ← DÉDOUBLONNAGE
+    var m=(allTrips[tid]||{}).meta||{};
+    var d=m.dateDep?parseDDMMYYYY(m.dateDep):null;
+    var r=m.dateRet?parseDDMMYYYY(m.dateRet):null;
+    if((r||d) && (r||d) < now) passes_.push({tid:tid, k:+(r||d)});
+    else venir.push({tid:tid, k:d?+d:Infinity});
+  });
+  venir.sort(function(a,b){ return a.k-b.k; });       // départ le plus proche d'abord
+  passes_.sort(function(a,b){ return b.k-a.k; });     // terminé le plus récent d'abord
+  function grp(label, arr, withCount){
+    if(!arr.length) return;
+    var t=document.createElement('div');
+    t.className='hm-grp-label';
+    t.textContent=label+(withCount?' · '+arr.length:'');
+    gh.appendChild(t);
+    arr.forEach(function(o){ gh.appendChild(_hmTripRow(o.tid)); });
+  }
+  grp('À venir', venir, false);
+  grp('Passés',  passes_, true);
+}
+
 function renderTripsList(){
   renderHomeHero();
   renderHomeStats();
+  renderHomeMobile();
   var container = document.getElementById('trips-list-container');
   if(!container) return;
   container.innerHTML = '';
@@ -4410,10 +4818,114 @@ function openAddTop(formId){
   setTimeout(function(){ form.scrollIntoView({behavior:'smooth', block:'start'}); }, 60);
 }
 
+// Formulaire de création → { clé de brouillon, slot }. Point d'entrée UNIQUE du
+// rendu du bloc multi-documents en création : une seule table à maintenir.
+// ══════════════════════════════════════════════════════════════════════
+// LOCALISATION REPLIÉE À LA CRÉATION (bouton « Ajouter une localisation »)
+// ══════════════════════════════════════════════════════════════════════
+// Uniquement sur les formulaires de CRÉATION. Le bloc adresse/GPS n'est ni
+// déplacé ni modifié : il est seulement masqué jusqu'au clic, puis affiché tel
+// quel — le géocodage, la voie GPS et leurs handlers sont INCHANGÉS.
+// En ÉDITION, ce mécanisme n'existe pas : les modales rendent le bloc
+// directement, il n'y a donc jamais de bouton à recliquer sur une fiche
+// existante.
+var _LOC_REVEAL_FORMS = {
+  'form-hotel': 'ht',
+  'form-lieu':  'lieu'
+};
+// Le bouton RESTE visible et porte l'état : un 2e clic replie le bloc. Sans ça,
+// le bouton disparaissait à l'ouverture et il n'y avait plus aucun moyen de
+// refermer la localisation.
+// ══════════════════════════════════════════════════════════════════════
+// ACCORDÉON GÉNÉRIQUE — un seul mécanisme pour Localisation, Liens, Documents
+// ══════════════════════════════════════════════════════════════════════
+// Extrait du bouton « Ajouter une localisation », qui en était le patron. Les
+// trois blocs partagent donc EXACTEMENT le même comportement et la même classe
+// de bouton (.loc-reveal) : aucune logique dupliquée.
+//   btnId   : le bouton porteur de l'état
+//   panelId : le conteneur à plier / déplier
+//   labels  : { closed, open } — libellés affichés dans .loc-reveal-lbl
+function _accSetState(btnId, panelId, open, labels){
+  var pan=document.getElementById(panelId);
+  var b=document.getElementById(btnId);
+  if(pan) pan.style.display = open ? '' : 'none';
+  if(b){
+    b.classList.toggle('is-open', !!open);
+    b.setAttribute('aria-expanded', open?'true':'false');
+    var lbl=b.querySelector('.loc-reveal-lbl');
+    if(lbl && labels) lbl.textContent = open ? labels.open : labels.closed;
+  }
+}
+function _accIsOpen(panelId){
+  var pan=document.getElementById(panelId);
+  return !!pan && getComputedStyle(pan).display!=='none';
+}
+function _accToggle(btnId, panelId, labels){
+  _accSetState(btnId, panelId, !_accIsOpen(panelId), labels);
+}
+
+// ── Localisation : simple spécialisation de l'accordéon générique ──
+var _LOC_LABELS={ closed:'Ajouter une localisation', open:'Masquer la localisation' };
+function _locSetState(prefix, open){
+  _accSetState(prefix+'-loc-reveal', prefix+'-loc-group', open, _LOC_LABELS);
+}
+function _locToggle(prefix){
+  _accToggle(prefix+'-loc-reveal', prefix+'-loc-group', _LOC_LABELS);
+}
+function _locReveal(prefix){ _locSetState(prefix, true); }
+// Replie à chaque ouverture d'un formulaire de création (état par défaut).
+function _locCollapse(prefix){ _locSetState(prefix, false); }
+
+// ── Liens : même accordéon. Ouvre déplié si des liens existent déjà, et le
+//    premier dépliage ajoute une ligne vide s'il n'y en a aucune (le contenu
+//    annoncé par le bouton doit être là).
+var _LIENS_LABELS={ closed:'Ajouter un lien', open:'Masquer les liens' };
+function _liensToggle(prefix){
+  var panelId=prefix+'-liens-panel';
+  var willOpen=!_accIsOpen(panelId);
+  if(willOpen){
+    var list=document.getElementById(prefix+'-liens-list');
+    if(list && !list.querySelector('.lien-row')) _lienAddRow(prefix);
+  }
+  _accSetState(prefix+'-liens-reveal', panelId, willOpen, _LIENS_LABELS);
+}
+// Synchronise l'état d'ouverture sur le CONTENU : déplié dès qu'il y a un lien.
+function _liensSyncState(prefix){
+  var list=document.getElementById(prefix+'-liens-list');
+  var has=!!(list && list.querySelector('.lien-row'));
+  _accSetState(prefix+'-liens-reveal', prefix+'-liens-panel', has, _LIENS_LABELS);
+}
+
+// ── Documents : même accordéon, piloté par le nombre de documents. ──
+function _docsToggle(blockId){
+  // Libellés calculés à la volée pour porter le COMPTE de documents.
+  var pan=document.getElementById(blockId+'-panel');
+  var n=pan?pan.querySelectorAll('.doc-item').length:0;
+  _accToggle(blockId+'-reveal', blockId+'-panel',
+    { closed: n ? 'Documents ('+n+')' : 'Ajouter un document',
+      open:   n ? 'Masquer les documents ('+n+')' : 'Masquer les documents' });
+}
+
+var _DOC_DRAFT_FORMS = {
+  'form-mobilite': { key:'mob',  slot:'mob-docs-slot'  },
+  'form-hotel':    { key:'ht',   slot:'ht-docs-slot'   },
+  'form-lieu':     { key:'lieu', slot:'lieu-docs-slot' },
+  'form-doc':      { key:'doc',  slot:'doc-docs-slot'  }
+};
+
 function toggleForm(id){
   var form = document.getElementById(id);
   if(!form) return;
   var isOpening = !form.classList.contains('open');
+  // À CHAQUE ouverture : brouillon remis à zéro (on n'hérite jamais des
+  // documents d'une saisie précédente) puis bloc rendu. En édition (editX), ce
+  // slot n'est pas utilisé : le bloc y est lié à l'objet réel.
+  if(isOpening && _LOC_REVEAL_FORMS[id]){ _locCollapse(_LOC_REVEAL_FORMS[id]); }
+  if(isOpening && _DOC_DRAFT_FORMS[id]){
+    var _df=_DOC_DRAFT_FORMS[id];
+    if(!_docDraftEditing(_df.key)){ _docDraftReset(_df.key); }
+    _docsDraftRender(_df.key, _df.slot);
+  }
 
   // Map form-id → empty-state management
   var sectionMap = {
@@ -4541,40 +5053,11 @@ function initDropdowns(){
 }
 
 // ══════════════════════════════════════════
-// EDIT MODE
+// EDIT MODE — RETIRÉ (correctif) : plus de bouton « Modifier »/emode.
+// L'édition passe par le tap sur une carte → fiche détail → « Modifier ».
+// `emodes` (state.js) reste défini ({} vide) : les lectures résiduelles
+// (emodes.vols/passes/lieux dans quelques templates) sont toujours falsy.
 // ══════════════════════════════════════════
-// [migrated to module — see header]
-function toggleEmode(type){
-  var wasOn=emodes[type];
-  // Reset tous les modes connus
-  ['vols','trains','hotels','passes','lieux','mobilite','locations'].forEach(function(t){
-    emodes[t]=false;
-    document.body.classList.remove('emode-'+t);
-    var btn=document.getElementById('bedit-'+t);
-    if(btn) btn.classList.remove('active');
-  });
-  ['vols','trains','hotels','lieux','mobilite','locations','passes'].forEach(function(t){
-    var b=document.getElementById('ebanner-'+t);
-    if(b) b.classList.remove('visible');
-  });
-  if(!wasOn){
-    emodes[type]=true;
-    document.body.classList.add('emode-'+type);
-    // 'mobilite' active aussi vols et trains (Pass est désormais une
-    // section séparée avec son propre mode d'édition).
-    if(type==='mobilite'){
-      ['vols','trains'].forEach(function(t){
-        emodes[t]=true;
-        document.body.classList.add('emode-'+t);
-      });
-    }
-    var btn=document.getElementById('bedit-'+type);
-    if(btn) btn.classList.add('active');
-    var bk=type;
-    var banner=document.getElementById('ebanner-'+bk);
-    if(banner) banner.classList.add('visible');
-  }
-}
 
 // ══════════════════════════════════════════
 // MODAL
@@ -4674,6 +5157,7 @@ function openTimelineDetail(cat, id, geo){
           nm + (e.dureeEscale?'  ·  '+e.dureeEscale:'') + (e.numero?'  ·  vol '+e.numero:''));
       });
     }
+    rows += _tlRow('N° réservation', obj.resa);
     rows += _tlRow('Statut', obj.statut);
     rows += _tlRow('Note', obj.note);
     pdfId = obj.pdfId;
@@ -4723,6 +5207,20 @@ function openTimelineDetail(cat, id, geo){
     rows += _tlRow('Note', obj.note);
     pdfId = obj.pdfId;
 
+  } else if(cat === 'document'){
+    // Porteur DÉCLARÉ dans DOC_CARRIERS mais absent de cette liste : la fiche
+    // sortait par le `else { return; }` final, donc la modale restait vide et le
+    // bloc multi-documents était INACCESSIBLE pour ce type. Correctif du bug.
+    obj = byId(typeof documents!=='undefined'?documents:[]); if(!obj) return _tlFallback('documents');
+    kind='document'; editFn='editDoc'; typeLabel='Document';
+    color=(typeof _itemColor==='function')?_itemColor('document',obj):'var(--brand)';
+    title=obj.name||obj.nom||'Document';   // saveDoc stocke .name
+    rows += _tlRow('Catégorie', obj.cat);
+    rows += _tlRow('N° / référence', obj.numero);
+    rows += _tlRow('Expiration', obj.expire);
+    rows += _tlRow('Note', obj.note);
+    pdfId = (typeof _docPdfId==='function') ? _docPdfId(obj) : obj.pdfId;
+
   } else if(cat === 'location'){
     obj = byId(typeof locations!=='undefined'?locations:[]); if(!obj) return _tlFallback('locations');
     kind='location'; editFn='editLocation'; typeLabel='Location'; color=_itemColor('location',obj);
@@ -4769,6 +5267,9 @@ function openTimelineDetail(cat, id, geo){
             : '<div class="tld-empty">Aucune information complémentaire.</div>')
     + geoHtml
     + (pdfHtml ? '<div class="tld-pdf-wrap">'+pdfHtml+'</div>' : '')
+    // Multi-documents (étape 5) : un seul point d'intégration pour les 4
+    // porteurs déclarés dans DOC_CARRIERS.
+    + (DOC_CARRIERS[cat] ? _docsBlockHtml(cat, id) : '')
     + '<div class="modal-footer">'
       + '<button class="btn-ghost" onclick="closeModal()">Fermer</button>'
       + '<div class="modal-actions">'
@@ -5376,7 +5877,7 @@ function renderVols(){
         ? '<div class="pdf-action-row" style="margin-top:8px">'
           +'<button class="pdf-view-btn" data-pid="'+v.pdfId+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Voir le billet</button>'
           +(emodes&&emodes.vols
-            ? '<button class="pdf-del-btn" data-pid="'+v.pdfId+'" data-vid="'+v.id+'">🗑 Supprimer</button>'
+            ? '<button class="pdf-del-btn" data-pid="'+v.pdfId+'" data-vid="'+v.id+'">'+_ICO_TRASH+' Supprimer</button>'
             : '')
         +'</div>'
         : '')
@@ -5412,7 +5913,7 @@ function editVol(id){id=isNaN(+id)?id:+id;
     var pname=window.pdfStore[v.pdfId].name;
     pdfHtml='<div class="pdf-action-row" style="margin-bottom:6px">'
       +'<button class="pdf-view-btn" onclick="openPdf(\''+v.pdfId+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> '+pname+'</button>'
-      +'<button class="pdf-del-btn" onclick="editVolDeletePdf(\''+id+'\')">🗑 Supprimer</button>'
+      +'<button class="pdf-del-btn" onclick="editVolDeletePdf(\''+id+'\')">'+_ICO_TRASH+' Supprimer</button>'
     +'</div>';
   }
   openModal(
@@ -5460,7 +5961,7 @@ function editVol(id){id=isNaN(+id)?id:+id;
         +'<input type="hidden" id="ev-escales-json" value="'+encodeURIComponent(JSON.stringify(v.escales||[]))+'"/>'
       : '<div style="margin-top:8px">'
           +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">'
-            +'<input type="checkbox" id="ev-escales-check" onchange="toggleEditEscales()"/> ✈ Ajouter des escales'
+            +'<input type="checkbox" id="ev-escales-check" onchange="toggleEditEscales()"/> Ajouter des escales'
           +'</label>'
           +'<div class="escales-section" id="ev-escales-section">'
             +'<div id="ev-escales-list"></div>'
@@ -5749,7 +6250,10 @@ function _passCard(p, typeBadge){
     }
     var tb = typeBadge ? '<span class="depl-type-badge depl-badge-pass">Pass</span>' : '';
     return '<div class="pass-card item-wrap epass" style="position:relative" data-detail-cat="pass" data-detail-id="'+p.id+'">'
-      +'<div class="pass-title">'+tb+p.nom+' <span class="badge '+sc+'">'+p.statut+'</span></div>'
+      // Le badge de statut n'est rendu QUE si le champ est renseigné : sans
+      // cette garde, un pass sans `statut` affichait « undefined » (le champ
+      // n'est pas obligatoire à la saisie). Jamais de badge vide non plus.
+      +'<div class="pass-title">'+tb+p.nom+(p.statut?' <span class="badge '+sc+'">'+_tlEsc(p.statut)+'</span>':'')+'</div>'
       +(validite?'<div class="pass-info">'+validite+(p.numero?' · N° <span class="copyable" data-copy="'+(p.numero+'').replace(/"/g,'&quot;')+'">'+p.numero+'</span>':'')+(p.prix?' · '+p.prix+' €':'')+'</div>':'')
       +(p.numero&&!validite?'<div class="pass-info">N° <span class="copyable" data-copy="'+(p.numero+'').replace(/"/g,'&quot;')+'">'+p.numero+'</span>'+(p.prix?' · '+p.prix+' €':'')+'</div>':'')
       +(!validite&&!p.numero&&p.prix?'<div class="pass-info">'+p.prix+' €</div>':'')
@@ -5757,7 +6261,6 @@ function _passCard(p, typeBadge){
       +(p.note?'<div class="pass-note">'+_tlEsc(p.note)+'</div>':'')
       +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">'+avt+'</div>'
       +pdfHtml
-      +'<button class="edit-item-btn" data-act="editPass" data-id="'+p.id+'"></button>'
     +'</div>';
 }
 // Rendu du pass : délègue à la page unique Déplacements (étape 4).
@@ -6011,6 +6514,74 @@ var MOB_COLORS = {
   covoiturage:'#c9921a', metro:'#7c5cbf', taxi:'#c9921a', pass:'#5c6bc0'
 };
 var MOB_STATUT_OK = ['Confirmé','Réservé','Activé'];
+
+// ══════════════════════════════════════════════════════════════════════
+// STATUT DE RÉSERVATION — jeu de valeurs UNIQUE, partagé transport +
+// hébergement (étape 2 §8.3)
+// ══════════════════════════════════════════════════════════════════════
+// Un seul jeu de valeurs, un seul rendu de badge, une seule migration.
+// « Sans réservation » couvre la nuit chez un proche, la réservation sur place,
+// le trajet pris au guichet le jour même : ce n'est PAS une anomalie, donc ce
+// statut ne doit jamais produire d'alerte de cohérence (voir smart-alerts.js).
+// Hors périmètre VOLONTAIREMENT : les pass (Activé / Non activé / En transit)
+// et les locations (Confirmée / À confirmer / En attente) gardent leur propre
+// vocabulaire, sémantiquement distinct.
+var STATUT_VALUES = ['Confirmé','À confirmer','Sans réservation'];
+
+// Synonymes hérités → valeur canonique. Le vocabulaire transport historique
+// mélangeait deux paires équivalentes (Confirmé/Réservé, À confirmer/À réserver).
+var _STATUT_ALIASES = {
+  'reserve':'Confirmé', 'reservee':'Confirmé', 'confirme':'Confirmé', 'confirmee':'Confirmé',
+  'a reserver':'À confirmer', 'a confirmer':'À confirmer',
+  'sans reservation':'Sans réservation', 'sans resa':'Sans réservation'
+};
+
+// Normalisation tolérante (accents, casse, espaces) — même principe que
+// _lieuCatMeta : une valeur inconnue n'est JAMAIS écrasée en silence, elle est
+// conservée telle quelle et rendue en badge neutre.
+function _statutNorm(s){
+  var raw=(s==null?'':String(s)).trim();
+  if(!raw) return '';
+  if(STATUT_VALUES.indexOf(raw)!==-1) return raw;
+  var k=raw.toLowerCase()
+    .replace(/[àâä]/g,'a').replace(/[éèêë]/g,'e').replace(/[îï]/g,'i')
+    .replace(/[ôö]/g,'o').replace(/[ùûü]/g,'u').replace(/ç/g,'c')
+    .replace(/\s+/g,' ').trim();
+  return _STATUT_ALIASES[k] || raw;
+}
+
+// N° de réservation EN CONSULTATION (étape 2 §8.3). Affichage seul : le champ
+// `resa` est déjà saisi à l'ajout, aucun champ n'est ajouté au modèle et aucune
+// logique de saisie ne change. Rien n'est rendu si le champ est vide (jamais de
+// ligne ni de badge vide). Réutilise .copyable (tap = copier), déjà en place sur
+// la carte hébergement, via la délégation globale existante.
+function _resaChipHtml(resa){
+  var v=(resa==null?'':String(resa)).trim();
+  if(!v) return '';
+  var safe=v.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return '<span class="mob-tag resa-tag">'
+    +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="11" height="11"><path d="M4 7h16v10H4z"/><path d="M9 7v10"/><path d="M13 11h4"/></svg> '
+    +'Résa <span class="copyable" data-copy="'+safe+'">'+safe+'</span>'
+  +'</span>';
+}
+
+// Rendu de badge UNIQUE — consommé par la carte transport, la carte
+// hébergement et la fiche détail. Icône SVG filaire, jamais d'emoji.
+function _statutBadgeHtml(s, extraCls){
+  var v=_statutNorm(s);
+  if(!v) return '';
+  var cls='statut-att', ico='';
+  if(v==='Confirmé'){
+    cls='statut-ok';
+    ico='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ';
+  } else if(v==='Sans réservation'){
+    cls='statut-none';
+    ico='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><circle cx="12" cy="12" r="9"/><line x1="8" y1="12" x2="16" y2="12"/></svg> ';
+  } else if(v==='À confirmer'){
+    ico='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ';
+  }
+  return '<span class="mob-tag '+cls+(extraCls?' '+extraCls:'')+'">'+ico+v+'</span>';
+}
 
 // ── Groupes de champs par type ──
 var MOB_GROUPS = {
@@ -6485,7 +7056,6 @@ var _deplSort = 'date';   // 'date' (défaut) | 'categorie'
 // Carte d'un transport (mobilité). typeBadge=true → badge de mode (mode Date).
 function _mobCard(m, typeBadge){
     var icon=MOB_ICONS[m.type]||'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>';
-    var statutOk=MOB_STATUT_OK.indexOf(m.statut)!==-1;
     var color=MOB_COLORS[m.type]||'var(--sakura)';
 
     // ── Badge "Couvert par Pass" ──
@@ -6550,24 +7120,21 @@ function _mobCard(m, typeBadge){
       }
       bodyHtml='<div class="mob-segments">'+segHtml+'</div>'
         +'<div class="mob-meta" style="margin-top:5px">'
-          +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+(statutOk?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ':'')+m.statut+'</span>'
+          +_statutBadgeHtml(m.statut)
+          +_resaChipHtml(m.resa)
           +passCoverHtml
           +_liensIconHtml('transport', m.id, m.liens)
-        +'</div>'
-        // La note sort du badge .mob-tag (pensé pour un libellé court) :
-        // bloc de texte dédié qui respecte les sauts de ligne (pre-wrap).
-        +(m.note?'<div class="mob-note-text">'+_tlEsc(m.note)+'</div>':'');
+        +'</div>';
     } else {
       // Vol direct ou autre transport
       bodyHtml='<div class="mob-route">'+routeLabel+'</div>'
         +(details.length?'<div class="mob-detail">'+details.join(' · ')+'</div>':'')
         +'<div class="mob-meta">'
-          +'<span class="mob-tag '+(statutOk?'statut-ok':'statut-att')+'">'+(statutOk?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg> ':'')+m.statut+'</span>'
+          +_statutBadgeHtml(m.statut)
+          +_resaChipHtml(m.resa)
           +passCoverHtml
           +_liensIconHtml('transport', m.id, m.liens)
-        +'</div>'
-        // Note hors badge (voir branche escales ci-dessus).
-        +(m.note?'<div class="mob-note-text">'+_tlEsc(m.note)+'</div>':'');
+        +'</div>';
     }
 
     var tb = typeBadge ? '<span class="depl-type-badge">'+(MOB_LABELS[m.type]||'Transport')+'</span>' : '';
@@ -6585,7 +7152,11 @@ function _mobCard(m, typeBadge){
           +(m.duree?'<div class="mob-duree"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="11" height="11"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> '+m.duree+'</div>':'')
         +'</div>'
       )
-      +'<button class="edit-item-btn" data-act="editMobilite" data-id="'+m.id+'"></button>'
+      // Note : enfant DIRECT de .mob-item (et non de .mob-body) pour occuper
+      // toute la largeur de la carte comme sur les hébergements — dans .mob-body
+      // elle était bridée par la colonne de droite (heure/date). .mob-item est
+      // en flex-wrap, la note prend une ligne entière (flex:1 0 100%).
+      +(m.note?'<div class="mob-note-text">'+_tlEsc(m.note)+'</div>':'')
     +'</div>';
 }
 
@@ -6678,7 +7249,10 @@ function addMobilite(){
     m.resa   =_v('mob-resa-vol');
   }
 
+  // Documents saisis pendant la CRÉATION : versés depuis le brouillon.
+  m.docs = _docDraftTake('mob');
   mobilites.push(m);
+  _syncItemExpense('transport', m.id);
 
   // Reset champs du groupe actif
   if(group){
@@ -6858,12 +7432,10 @@ function editMobilite(id){id=isNaN(+id)?id:+id;
         +modalField('Siège',mInput('em-siege',m.siege||'','22A'))
         +modalField('Voiture',mInput('em-voiture',m.voiture||'','4'))
         +modalField('N° résa.',mInput('em-resa',m.resa||'',''))
-      +'</div>'
-      // Champs GPS gare cachés — conservés pour la carte
-      +'<input type="hidden" id="em-dep-lat" value="'+(m.depLat||'')+'">'
-      +'<input type="hidden" id="em-dep-lng" value="'+(m.depLng||'')+'">'
-      +'<input type="hidden" id="em-arr-lat" value="'+(m.arrLat||'')+'">'
-      +'<input type="hidden" id="em-arr-lng" value="'+(m.arrLng||'')+'">'; 
+      +'</div>';
+      // (Les champs GPS gare, jusqu'ici cachés et propres au train, sont
+      //  remplacés par les DEUX blocs GPS visibles communs à tous les types
+      //  non-pass — voir _gpsBlockHtml('em-dep'/'em-arr') plus bas.)
   } else if(m.type==='bateau'){
     specificFields=
       '<div class="modal-row">'
@@ -6892,12 +7464,24 @@ function editMobilite(id){id=isNaN(+id)?id:+id;
       +modalField('N°',mInput('em-num',m.numero,''))
     +'</div>'
     +specificFields
+    // Voie 2 — GPS manuel des DEUX extrémités (étape 2 §8.3). Cas d'usage réel :
+    // les gares sont géocodées par NOM et retombent sur le centre-ville (§10,
+    // contrairement aux aéroports, précis via AIRPORTS_GPS). Absent pour un pass
+    // (aucune extrémité géographique). Le vol n'entre jamais ici : il est édité
+    // par le formulaire unifié _editVolUnified.
+    +(m.type!=='pass'
+      ? _gpsBlockHtml('em-dep', m.depLat, m.depLng, 'GPS exact du départ')
+        +_gpsBlockHtml('em-arr', m.arrLat, m.arrLng, 'GPS exact de l’arrivée')
+      : '')
     +'<div class="modal-row">'
-      +mSelect('em-statut',['Confirmé','À confirmer','Réservé','À réserver'],m.statut)
+      +mSelect('em-statut',STATUT_VALUES,_statutNorm(m.statut))
       +modalField('Note',mTextarea('em-note',m.note||'','Note (Entrée pour un saut de ligne)'))
     +'</div>'
     +_liensBlockHtml('em')
     +mPdfBlock('em-pdf', m.pdfId||'')
+    // Multi-documents : exposé AUSSI par le parcours « Modifier », pas
+    // seulement par la fiche détail — c'est là que l'utilisateur les cherche.
+    +_docsBlockHtml('transport', id)
     +modalFooter('saveMobilite(\''+id+'\')','deleteMobilite(\''+id+'\')',{type:'le transport',libelle:(typeof MOB_LABELS!=='undefined'&&MOB_LABELS[m.type])||m.titre||m.type||'',hasDoc:!!m.pdfId,fn:'deleteMobilite',id:id})
   );
   _lienFillRows('em', m.liens);
@@ -6931,11 +7515,6 @@ function saveMobilite(id){id=isNaN(+id)?id:+id;
     delete m.codeDep; delete m.codeArr; delete m.terminal; delete m.porte;
     delete m.bagages; delete m.segment2; delete m.escales;
     delete m.cabine; delete m.pont;
-    // Coordonnées GPS gare : conserver si déjà présentes
-    var emDepLat=_gv('em-dep-lat'), emDepLng=_gv('em-dep-lng');
-    var emArrLat=_gv('em-arr-lat'), emArrLng=_gv('em-arr-lng');
-    if(emDepLat&&!isNaN(parseFloat(emDepLat))){ m.depLat=parseFloat(emDepLat); m.depLng=parseFloat(emDepLng||'0'); }
-    if(emArrLat&&!isNaN(parseFloat(emArrLat))){ m.arrLat=parseFloat(emArrLat); m.arrLng=parseFloat(emArrLng||'0'); }
   } else if(m.type==='bateau'){
     m.cabine=_gv('em-cabine');
     m.pont  =_gv('em-pont');
@@ -6948,6 +7527,16 @@ function saveMobilite(id){id=isNaN(+id)?id:+id;
     delete m.codeDep; delete m.codeArr; delete m.siege; delete m.voiture;
     delete m.segment2; delete m.escales; delete m.cabine; delete m.pont;
   }
+  // Voie 2 — GPS manuel des deux extrémités, COMMUN à tous les types édités
+  // ici (train, bateau, bus, covoiturage, métro, taxi). Vidé → on retire les
+  // coordonnées, ce qui laisse le géocodage par nom reprendre la main.
+  var _gDep=_gpsRead('em-dep'), _gArr=_gpsRead('em-arr');
+  if(_gDep==='invalid' || _gArr==='invalid'){
+    showToast('Coordonnées GPS invalides — corrige ou vide les deux champs', 'error');
+    return;
+  }
+  if(_gDep){ m.depLat=_gDep.lat; m.depLng=_gDep.lng; } else { delete m.depLat; delete m.depLng; }
+  if(_gArr){ m.arrLat=_gArr.lat; m.arrLng=_gArr.lng; } else { delete m.arrLat; delete m.arrLng; }
   // La durée totale est SAISIE MANUELLE (décalage horaire) : jamais recalculée
   // depuis les horaires. On conserve m.duree tel quel (ou édité via em-duree).
   var emDuree=document.getElementById('em-duree');
@@ -6963,6 +7552,8 @@ function saveMobilite(id){id=isNaN(+id)?id:+id;
 }
 
 function deleteMobilite(id){id=isNaN(+id)?id:+id;
+  // Dépense automatique liée : retirée AVEC l'élément (sinon montant fantôme).
+  _dropItemExpense('transport', id);
   // Vol à escales : le pdfId vit à la RACINE du vol (escales[] n'en porte
   // pas) → un seul blob à purger, chaîne complète comprise.
   var _delPid=(mobilites.filter(function(m){return m.id==id;})[0]||{}).pdfId;
@@ -7006,7 +7597,13 @@ function deleteMobilite(id){id=isNaN(+id)?id:+id;
 // ══════════════════════════════════════════════════════════════════
 // [migrated to module — see header]
 
-var LOC_ICONS={voiture:'🚗',scooter:'🛵',velo:'🚲',camping:'🚐',bateau:'⛵'};
+// LOC_ICONS est REDÉFINI plus bas dans ce fichier (« Recâblage : locations »)
+// avec les icônes SVG filaires _lu('car-front'/'scooter'/'bike'/'caravan'/
+// 'sailboat'/'building-2'). Piège §5.3 : la dernière définition gagne, donc
+// c'est ELLE qui est active — les emojis qui figuraient ici n'étaient jamais
+// rendus. Déclaration conservée (le recâblage est une affectation nue, sans
+// var) ; seuls les littéraux emoji sont retirés.
+var LOC_ICONS={};
 var LOC_LABELS={voiture:'Voiture',scooter:'Scooter / Moto',velo:'Vélo',camping:'Camping-car',bateau:'Bateau de plaisance'};
 var PASS_CAT_ICONS={rail:'Rail',urban:'Urbain',vignette:'Vignette',autre:'Autre'};
 
@@ -7032,7 +7629,6 @@ function _locCard(l, typeBadge){
       +'</div>'
       +(l.caution?'<div class="loc-caution">Caution : '+l.caution+'</div>':'')
       +(l.note?'<div class="loc-note-text">'+_tlEsc(l.note)+'</div>':'')
-      +'<button class="edit-item-btn" data-act="editLocation" data-id="'+l.id+'"></button>'
     +'</div>';
 }
 // Rendu des locations : délègue à la page unique Déplacements (étape 4).
@@ -7078,7 +7674,7 @@ function _attachDeplPdfListeners(el){
   });
 }
 function _syncDeplSortToggle(){
-  document.querySelectorAll('#depl-sort .depl-sort-seg').forEach(function(b){
+  document.querySelectorAll('#depl-sort .lgs-btn').forEach(function(b){
     b.classList.toggle('active', b.getAttribute('data-sort')===_deplSort);
   });
 }
@@ -7104,21 +7700,29 @@ function renderDeplacements(){
   }
   var html='';
   if(_deplSort==='categorie'){
+    // Pass en TÊTE ici aussi, pour que la position des pass ne change pas d'une
+    // vue à l'autre (mêmes cartes, même place).
+    if(passes.length){
+      html+='<div class="depl-group-title">Pass</div>'+passes.map(function(p){ return _passCard(p,false); }).join('');
+    }
     if(mobilites.length){
       var sm=mobilites.slice().sort(function(a,b){ var da=a.date||'',db=b.date||''; if(da<db)return -1;if(da>db)return 1; return (a.heureDep||'').localeCompare(b.heureDep||''); });
       html+='<div class="depl-group-title">Transport</div>'+sm.map(function(m){ return _mobCard(m,false); }).join('');
-    }
-    if(passes.length){
-      html+='<div class="depl-group-title">Pass</div>'+passes.map(function(p){ return _passCard(p,false); }).join('');
     }
     if(locations.length){
       html+='<div class="depl-group-title">Location</div>'+locations.map(function(l){ return _locCard(l,false); }).join('');
     }
   } else {
-    // Par DATE : fusion + tri chronologique + groupement par jour (badges de type).
+    // Par DATE : les PASS d'abord, en tête de page, hors chronologie — un pass
+    // couvre une PÉRIODE de validité (souvent tout le voyage), ce n'est pas un
+    // événement daté ; l'insérer à sa date de début le noyait au milieu des
+    // trajets. Puis fusion + tri chronologique des transports et locations.
+    if(passes.length){
+      html+='<div class="depl-group-title">Pass</div>'
+        +passes.map(function(p){ return _passCard(p,false); }).join('');
+    }
     var entries=[];
     mobilites.forEach(function(m){ entries.push({ key:_deplSortKey('mob',m),  date:_deplStartDate('mob',m),  html:_mobCard(m,true) }); });
-    passes.forEach(function(p){    entries.push({ key:_deplSortKey('pass',p), date:_deplStartDate('pass',p), html:_passCard(p,true) }); });
     locations.forEach(function(l){  entries.push({ key:_deplSortKey('loc',l),  date:_deplStartDate('loc',l),  html:_locCard(l,true) }); });
     entries.sort(function(a,b){ if(a.key.ymd!==b.key.ymd) return a.key.ymd-b.key.ymd; return (a.key.t||'').localeCompare(b.key.t||''); });
     var lastDay=null;
@@ -7134,17 +7738,9 @@ function renderDeplacements(){
 }
 // Délégateur : renderMobilite (appelé partout) rend la page unifiée.
 function renderMobilite(){ renderDeplacements(); }
-// Mode Modifier UNIFIÉ : (dés)active l'édition des 3 types ensemble.
-function toggleDeplEmode(){
-  var on = !(emodes.mobilite || emodes.passes || emodes.locations);
-  ['mobilite','passes','locations','vols','trains'].forEach(function(t){
-    emodes[t]=on;
-    document.body.classList.toggle('emode-'+t, on);
-  });
-  var btn=document.getElementById('bedit-depl'); if(btn) btn.classList.toggle('active', on);
-  var banner=document.getElementById('ebanner-depl'); if(banner) banner.classList.toggle('visible', on);
-  renderDeplacements(); // ré-affiche les boutons PDF-suppr des pass en emode
-}
+// (Correctif : mode « Modifier » RETIRÉ des Déplacements/Hébergements/Lieux —
+//  l'édition passe par le tap sur la carte → fiche détail → « Modifier ».
+//  toggleDeplEmode supprimé.)
 // Feuille d'ajout en 2 temps (type → mode). Réutilise la modale existante.
 function showAddDeplacement(){
   if(typeof _resetTransportChoice==='function') _resetTransportChoice();
@@ -7368,7 +7964,17 @@ function renderHotels(){
   var el=document.getElementById('hotels-list');
   el.style.display='';
   if(!hotels.length){el.innerHTML='<div class="empty-state"><div class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28"><rect x="2" y="6" width="20" height="16" rx="2"/><path d="M2 12h20"/><rect x="7" y="16" width="3" height="6"/><rect x="14" y="16" width="3" height="6"/></svg></div><div class="es-title">Aucun hébergement enregistré</div><div class="es-sub">Ajoute tes hôtels et Airbnb pour suivre ton planning.</div><button class="es-cta" onclick="openAddTop(\'form-hotel\')">+ Ajouter un hébergement</button></div>';renderNightsSummary();return;}
-  el.innerHTML=hotels.map(function(h){
+  // Tri par date de CHECK-IN croissante — dans le RENDU uniquement (copie
+  // slice, le tableau `hotels` stocké garde son ordre d'ajout). _hotelDateObj
+  // gère les 3 formats, dont « JJ mois » (piège §5.10). Sans date → en fin.
+  var _sortedHotels = hotels.slice().sort(function(a,b){
+    var da=_hotelDateObj(a.checkin), db=_hotelDateObj(b.checkin);
+    if(!da && !db) return 0;
+    if(!da) return 1;
+    if(!db) return -1;
+    return da - db;
+  });
+  el.innerHTML=_sortedHotels.map(function(h){
     var c=getVilleColor(h.ville);
     // Ligne adresse élégante : rue + "Ville, Pays" avec badge pays
     var adresseLine = '';
@@ -7404,11 +8010,11 @@ function renderHotels(){
         +'</div>'
         +(_rem?'<div class="hotel-reminder'+(_rem.urgent?' urgent':'')+'">'+_luOut+'<span>'+_rem.text+'</span></div>':'')
         +(_bits.length?'<div class="hotel-info">'+_bits.join(' · ')+'</div>':'')
+        +(h.statut?'<div class="hotel-statut">'+_statutBadgeHtml(h.statut)+'</div>':'')
         +(_times.length?'<div class="hotel-times">'+_times.join(' · ')+'</div>':'')
         +(h.note?'<div class="hotel-note">'+_tlEsc(h.note)+'</div>':'')
         +(h.resa?'<div class="hotel-ref" style="color:'+c+'">Résa · <span class="copyable" data-copy="'+(h.resa+'').replace(/"/g,'&quot;')+'">'+h.resa+'</span></div>':'')
       +'</div>'
-      +'<button class="edit-item-btn" data-act="editHotel" data-id="'+h.id+'"></button>'
     +'</div>';
   }).join('');
   renderNightsSummary();
@@ -7440,6 +8046,7 @@ function editHotel(id){id=isNaN(+id)?id:+id;
     +'<div class="modal-row">'
       +modalField('Type de chambre',mInput('eh-type',h.type,'Chambre double'))
       +modalField('N° réservation',mInput('eh-resa',h.resa,'ABC-123'))
+      +modalField('Statut',mSelect('eh-statut',STATUT_VALUES,_statutNorm(h.statut)))
     +'</div>'
     +'<div class="modal-row">'
       +modalField('Heure d\'arrivée','<input type="time" id="eh-heure-arr" value="'+(h.heureArr||'')+'" style="padding:9px 10px;font-size:13px;font-family:DM Sans,sans-serif;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);outline:none;width:100%"/>')
@@ -7469,9 +8076,13 @@ function editHotel(id){id=isNaN(+id)?id:+id;
         +'<button class="btn-remove-geo" type="button" onclick="_addrRemoveGeo(\'eh\')" title="Retirer la localisation de la carte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="13" height="13"><path d="M12 21s-7-6.4-7-11a7 7 0 0 1 12-4.9"/><line x1="4" y1="4" x2="20" y2="20"/></svg> Retirer la localisation</button>'
       +'</div>'
       +'<div class="addr-result-badge" id="eh-addr-result"></div>'
+      +_gpsBlockHtml('eh', h.gpsLat, h.gpsLng)
     +'</div>'
     +_liensBlockHtml('eh')
     +mPdfBlock('eh-pdf', h.pdfId||'')
+    // Multi-documents : exposé AUSSI par le parcours « Modifier », pas
+    // seulement par la fiche détail — c'est là que l'utilisateur les cherche.
+    +_docsBlockHtml('hotel', id)
     +modalFooter('saveHotel(\''+id+'\')','deleteHotel(\''+id+'\')',{type:"l'hébergement",libelle:h.nom||'',hasDoc:!!h.pdfId,fn:'deleteHotel',id:id})
   );
   // Le recalcul des nuits est déclenché par calSelectDay (calendrier
@@ -7508,6 +8119,8 @@ function saveHotel(id){id=isNaN(+id)?id:+id;
   h.nuits=_cn>0?_cn:h.nuits;
   h.type=document.getElementById('eh-type').value;
   h.resa=document.getElementById('eh-resa').value;
+  var _ehSt=document.getElementById('eh-statut');
+  if(_ehSt) h.statut=_statutNorm(_ehSt.value)||h.statut;
   var _ehA=document.getElementById('eh-heure-arr'); if(_ehA) h.heureArr=_ehA.value;
   var _ehD=document.getElementById('eh-heure-dep'); if(_ehD) h.heureDep=_ehD.value;
   var _ehN=document.getElementById('eh-note'); if(_ehN) h.note=_ehN.value;
@@ -7525,6 +8138,9 @@ function saveHotel(id){id=isNaN(+id)?id:+id;
   // saveLieu) : la branche de retrait ci-dessous vide h.ville, elle doit
   // donc rester la dernière à décider.
   if(h.ville) h.ville=_normalizeLieuVille(h.ville);
+  // Voie 2 — GPS manuel. Lu AVANT la branche de retrait pour que celle-ci
+  // reste la dernière à décider (un retrait explicite gagne sur tout).
+  if(!_gpsApply('eh', h)) return;
   var _rm=(document.getElementById('eh-geo-remove')||{}).value;
   if(_rm==='1'){
     // Retrait explicite → état géographiquement VIERGE : TOUS les champs géo
@@ -7534,6 +8150,7 @@ function saveHotel(id){id=isNaN(+id)?id:+id;
     h.ville=''; h.rue=''; h.cp=''; h.pays='';
     h.fullAddress=''; h.adresse='';
     h.lat=null; h.lng=null;
+    delete h.gpsLat; delete h.gpsLng;   // retrait = état géo VIERGE, GPS inclus
   } else {
     if(_rm==='0') h.geoOff=false;
     h.rue=newRue; h.cp=newCp; h.pays=newPays;
@@ -7572,7 +8189,12 @@ function addHotel(){
   // Planning. Même table CITY_DATA, même repli conservateur si absente.
   if(v) v = _normalizeLieuVille(v);
   if(!n){ showToast('Nom de l\hébergement requis', 'error'); return; }
-  if(!v){ showToast('Ville requise dans le bloc Adresse', 'error'); return; }
+  // Voie 2 — GPS manuel. Les DEUX voies sont facultatives : la ville n'est
+  // exigée que si aucune coordonnée n'est fournie (sinon la voie GPS seule
+  // serait bloquée par la voie adresse — précisément ce qu'on interdit).
+  var _gps=_gpsRead('ht');
+  if(_gps==='invalid'){ showToast('Coordonnées GPS invalides — corrige ou vide les deux champs', 'error'); return; }
+  if(!v && !_gps){ showToast('Renseigne la ville dans le bloc Adresse, ou des coordonnées GPS', 'error'); return; }
   var ciRaw = document.getElementById('ht-ci').value.trim();
   var coRaw = document.getElementById('ht-co').value.trim();
   var pdfId = (document.getElementById('hotel-pdf')||{}).value||'';
@@ -7586,6 +8208,7 @@ function addHotel(){
     nuits:_calcNights(ciRaw, coRaw),
     type:document.getElementById('ht-type').value,
     resa:document.getElementById('ht-resa').value,
+    statut:_statutNorm((document.getElementById('ht-statut')||{}).value)||'Confirmé',
     heureArr:(document.getElementById('ht-heure-arr')||{}).value||'',
     heureDep:(document.getElementById('ht-heure-dep')||{}).value||'',
     note:(document.getElementById('ht-note')||{}).value||'',
@@ -7594,14 +8217,22 @@ function addHotel(){
     adresse:fullAddress,
     lat:parseFloat((document.getElementById('ht-adresse-lat')||{}).value)||null,
     lng:parseFloat((document.getElementById('ht-adresse-lng')||{}).value)||null,
-    pdfId:pdfId
+    gpsLat:_gps?_gps.lat:undefined,
+    gpsLng:_gps?_gps.lng:undefined,
+    pdfId:pdfId,
+    // Documents saisis pendant la CRÉATION : versés depuis le brouillon.
+    docs:_docDraftTake('ht')
   });
+  // Ligne de dépense liée créée si un document porte un prix.
+  _syncItemExpense('hotel', hotels[hotels.length-1].id);
   // Reset tous les champs
   ['ht-nom','ht-ville','ht-ville-addr','ht-ci','ht-co','ht-nuits','ht-type','ht-resa',
    'ht-heure-arr','ht-heure-dep','ht-note',
    'ht-rue','ht-cp','ht-pays','ht-adresse-lat','ht-adresse-lng','hotel-pdf','ht-magic-input'].forEach(function(id){
     var el=document.getElementById(id);if(el)el.value='';
   });
+  _gpsClear('ht');
+  var _htSt=document.getElementById('ht-statut'); if(_htSt) _htSt.selectedIndex=0;
   ['ht-ci-jour','ht-ci-mois','ht-co-jour','ht-co-mois'].forEach(function(id){var el=document.getElementById(id);if(el)el.selectedIndex=0;});
   ['hint-ht-ci','hint-ht-co','hint-ht-nuits'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove('visible');});
   ['ht-ci','ht-co','ht-nuits'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove('auto-filled');});
@@ -7614,6 +8245,8 @@ function addHotel(){
   showToast('Hébergement ajouté', 'success');
 }
 function deleteHotel(id){id=isNaN(+id)?id:+id;
+  // Dépense automatique liée : retirée AVEC l'élément (sinon montant fantôme).
+  _dropItemExpense('hotel', id);
   var _delPid=(hotels.filter(function(h){return h.id==id;})[0]||{}).pdfId;
   hotels=hotels.filter(function(h){return h.id!=id;});
   _purgePdfIfUnused(_delPid);   // APRÈS retrait : le blob n'est plus référencé
@@ -7624,15 +8257,16 @@ function deleteHotel(id){id=isNaN(+id)?id:+id;
 // LIEUX
 // ══════════════════════════════════════════
 // [migrated to module — see header]
-var _lieuxGroupMode = 'ville';   // 'none' | 'ville' | 'categorie' — défaut : par ville
+var _lieuxGroupMode = 'ville';   // 'ville' | 'categorie' | 'jour' — défaut : par ville
 
 function setLieuxGroup(mode, btn){
-  _lieuxGroupMode = mode;
-  document.querySelectorAll('.lgs-btn').forEach(function(b){ b.classList.remove('active'); });
+  // Modes conservés : 'ville' | 'categorie' | 'jour' (le mode « Liste »/'none'
+  // a été retiré). Garde-fou : toute valeur inconnue retombe sur 'ville'.
+  _lieuxGroupMode = (mode==='categorie'||mode==='jour') ? mode : 'ville';
+  // Scopé à #lieux-group-switch (la classe .lgs-btn est aussi utilisée par le
+  // sélecteur de vue Documents) — ne touche que les boutons de regroupement lieux.
+  document.querySelectorAll('#lieux-group-switch .lgs-btn').forEach(function(b){ b.classList.remove('active'); });
   if(btn) btn.classList.add('active');
-  // En mode regroupé, le filtre par ville/catégorie n'a plus de sens
-  var fb = document.getElementById('places-filter-bar');
-  if(fb) fb.style.display = (mode === 'none') ? '' : 'none';
   renderLieux();
 }
 
@@ -7663,9 +8297,6 @@ function _renderLieuCard(l){
 
   card.innerHTML =
     '<div class="place-row">'
-      + '<span class="drag-handle" onclick="event.stopPropagation()">'
-      + '<svg viewBox="0 0 10 16" width="10" height="16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="2.5" r="1.2"/><circle cx="7" cy="2.5" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="7" cy="8" r="1.2"/><circle cx="3" cy="13.5" r="1.2"/><circle cx="7" cy="13.5" r="1.2"/></svg>'
-      + '</span>'
       + '<div class="place-chip" style="background:' + meta.tint + ';color:' + meta.color + '">' + meta.svg + '</div>'
       + '<div class="place-body">'
         + '<div class="place-head"><span class="place-name">' + l.nom + '</span>' + visBadge + '</div>'
@@ -7674,8 +8305,7 @@ function _renderLieuCard(l){
         + (l.note ? '<div class="place-note">' + _tlEsc(l.note) + '</div>' : '')
         + pdfHtml
       + '</div>'
-    + '</div>'
-    + '<button class="edit-item-btn" data-act="editLieu" data-id="' + l.id + '"></button>';
+    + '</div>';
 
   card.onclick = function(e){
     if(emodes && emodes.lieux) return;
@@ -7691,19 +8321,17 @@ function renderLieux(){
 
   // Synchroniser l'état des boutons de regroupement avec le mode courant
   // (utile au 1er rendu, où le défaut est « par ville »).
-  document.querySelectorAll('.lgs-btn').forEach(function(b){
+  document.querySelectorAll('#lieux-group-switch .lgs-btn').forEach(function(b){
     b.classList.toggle('active', b.getAttribute('data-group') === _lieuxGroupMode);
   });
-  var _fb = document.getElementById('places-filter-bar');
-  if(_fb) _fb.style.display = (_lieuxGroupMode === 'none') ? '' : 'none';
+  // Regroupement TOUJOURS actif : Ville / Catégorie / Jour (le mode « Liste »
+  // plat, avec tri par glisser et barre de filtres, a été retiré).
+  grid.innerHTML='';
+  grid.classList.add('is-grouped');
+  if(!lieux.length){ empty.style.display='block'; grid.style.display='none'; return; }
+  empty.style.display='none'; grid.style.display='';
 
-  // ── Mode regroupé : par ville ou par catégorie ──
-  if(_lieuxGroupMode !== 'none'){
-    grid.innerHTML='';
-    grid.classList.add('is-grouped');
-    if(!lieux.length){ empty.style.display='block'; grid.style.display='none'; return; }
-    empty.style.display='none'; grid.style.display='';
-
+  {
     var key = _lieuxGroupMode;            // 'ville' | 'categorie' | 'jour'
     var groups = {};
     var order = [];
@@ -7764,21 +8392,7 @@ function renderLieux(){
       section.appendChild(inner);
       grid.appendChild(section);
     });
-    _updateLieuxFilters();
-    return;
   }
-
-  // ── Mode liste (filtre par ville/catégorie via les chips) ──
-  grid.classList.remove('is-grouped');
-  lieux.forEach(function(l, i){ if(typeof l.ordre !== 'number') l.ordre = i; });
-  var filtered=currentFilter==='Tous'?lieux.slice():lieux.filter(function(l){return l.ville===currentFilter||l.categorie===currentFilter;});
-  filtered.sort(function(a,b){ return (a.ordre||0)-(b.ordre||0); });
-  grid.innerHTML='';
-  if(!filtered.length){ empty.style.display='block'; grid.style.display='none'; return; }
-  empty.style.display='none'; grid.style.display='';
-  filtered.forEach(function(l){ grid.appendChild(_renderLieuCard(l)); });
-  _updateLieuxFilters();
-  _initLieuxDrag(grid);
 }
 
 
@@ -7801,26 +8415,8 @@ function onLieuVilleInput(val){
   }).slice(0,12);
   dl.innerHTML=hits.map(function(c){return '<option value="'+c+'">';}).join('');
 }
-function _updateLieuxFilters(){
-  var ctrl=document.getElementById('places-filter-bar');
-  if(!ctrl)return;
-  var villes=[],cats=[];
-  lieux.forEach(function(l){
-    if(l.ville&&villes.indexOf(l.ville)===-1)villes.push(l.ville);
-    if(l.categorie&&cats.indexOf(l.categorie)===-1)cats.push(l.categorie);
-  });
-  ctrl.innerHTML=
-    '<button class="filter-btn'+(currentFilter==='Tous'?' active':'')+'" onclick="filterPlaces(\'Tous\',this)">Tous ('+lieux.length+')</button>'
-    +villes.map(function(v){
-      var n=lieux.filter(function(l){return l.ville===v;}).length;
-      return '<button class="filter-btn'+(currentFilter===v?' active':'')+'" onclick="filterPlaces(\''+v.replace(/\'/g,'')+'\',this)">'+v+' ('+n+')</button>';
-    }).join('')
-    +(cats.length?'<span style="margin:0 6px;color:var(--ink-hint);font-size:11px">|</span>':'')
-    +cats.map(function(c){
-      var n=lieux.filter(function(l){return l.categorie===c;}).length;
-      return '<button class="filter-btn cat-btn'+(currentFilter===c?' active':'')+'" onclick="filterPlaces(\''+c.replace(/\'/g,'')+'\',this)">'+c+' ('+n+')</button>';
-    }).join('');
-}
+// (Retiré avec le mode « Liste » : _updateLieuxFilters / filterPlaces /
+//  places-filter-bar — le filtrage par chips n'existait qu'en mode plat.)
 function editLieu(id){id=isNaN(+id)?id:+id;
   var l=lieux.find(function(x){return x.id==id;});if(!l)return;
   // Peupler le datalist pays
@@ -7857,6 +8453,7 @@ function editLieu(id){id=isNaN(+id)?id:+id;
         +'<button class="btn-remove-geo" type="button" onclick="_addrRemoveGeo(\'el\')" title="Retirer la localisation de la carte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="13" height="13"><path d="M12 21s-7-6.4-7-11a7 7 0 0 1 12-4.9"/><line x1="4" y1="4" x2="20" y2="20"/></svg> Retirer la localisation</button>'
       +'</div>'
       +'<div class="addr-result-badge" id="el-addr-result"></div>'
+      +_gpsBlockHtml('el', l.gpsLat, l.gpsLng)
     +'</div>'
     +'<div class="modal-row">'
 +modalField('Catégorie','<input type="text" id="el-categorie" value="'+(l.categorie||'')+
@@ -7869,6 +8466,9 @@ function editLieu(id){id=isNaN(+id)?id:+id;
     +modalField('Date de visite (optionnel)','<input type="text" id="el-jour" class="cal-trigger" value="'+(l.dateVisite||'')+'" placeholder="JJ/MM/AAAA" style="width:100%;cursor:pointer" readonly onclick="openCalendar(\'el-jour\')"/>')
     +_liensBlockHtml('el')
     +mPdfBlock('el-pdf', l.pdfId||'')
+    // Multi-documents : exposé AUSSI par le parcours « Modifier », pas
+    // seulement par la fiche détail — c'est là que l'utilisateur les cherche.
+    +_docsBlockHtml('lieu', id)
     +modalFooter('saveLieu(\''+id+'\')','deleteLieu(\''+id+'\')',{type:'le lieu',libelle:l.nom||'',hasDoc:!!l.pdfId,fn:'deleteLieu',id:id})
   );
   setTimeout(function(){
@@ -7901,6 +8501,8 @@ function saveLieu(id){id=isNaN(+id)?id:+id;
   // Liens web
   l.liens = _lienReadRows('el');
   // Adresse / localisation. Drapeau : '1'=retrait, '0'=réactivation, ''=inchangé.
+  // Voie 2 — GPS manuel (avant la branche de retrait, cf. saveHotel).
+  if(!_gpsApply('el', l)) return;
   var _rm=(document.getElementById('el-geo-remove')||{}).value;
   if(_rm==='1'){
     // Retrait explicite → état géographiquement VIERGE (identique à un lieu
@@ -7910,6 +8512,7 @@ function saveLieu(id){id=isNaN(+id)?id:+id;
     l.ville=''; l.rue=''; l.cp=''; l.pays='';
     l.fullAddress=''; l.adresse='';
     l.lat=null; l.lng=null;
+    delete l.gpsLat; delete l.gpsLng;   // retrait = état géo VIERGE, GPS inclus
   } else {
     if(_rm==='0') l.geoOff=false; // « Vérifier » a réactivé la localisation
     // Réactivation implicite : une rue/CP/pays ressaisi après un retrait relocalise.
@@ -7937,12 +8540,7 @@ function saveLieu(id){id=isNaN(+id)?id:+id;
   closeModal(); renderLieux(); snapshotCurrentTrip();
   showToast('Lieu mis à jour ', 'success');
 }
-function filterPlaces(f,btn){
-  currentFilter=f;
-  document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active');});
-  btn.classList.add('active');
-  renderLieux();
-}
+// (filterPlaces retiré avec le mode « Liste ».)
 function addLieu(){
   var nom   = document.getElementById('lieu-nom').value.trim();
   // Ville vient du bloc adresse (lieu-ville-addr) OU du champ legacy lieu-ville
@@ -7955,7 +8553,11 @@ function addLieu(){
   // construite et la requête de géocodage profitent aussi de la casse.
   if(ville) ville = _normalizeLieuVille(ville);
   if(!nom){ showToast('Nom du lieu requis', 'error'); return; }
-  if(!ville){ showToast('Ville requise dans le bloc Adresse', 'error'); return; }
+  // Voie 2 — GPS manuel (cf. addHotel : la ville ne devient exigible que si
+  // aucune coordonnée n'est fournie).
+  var _gps=_gpsRead('lieu');
+  if(_gps==='invalid'){ showToast('Coordonnées GPS invalides — corrige ou vide les deux champs', 'error'); return; }
+  if(!ville && !_gps){ showToast('Renseigne la ville dans le bloc Adresse, ou des coordonnées GPS', 'error'); return; }
   var ouv   = (document.getElementById('lieu-ouverture')||{}).value||'';
   var fer   = (document.getElementById('lieu-fermeture')||{}).value||'';
   // Catégorie : lue à la CRÉATION comme saveLieu le fait à l'édition
@@ -7982,8 +8584,13 @@ function addLieu(){
     liens:_lienReadRows('lieu'),
     ordre: lieux.length,
     lat:parseFloat((document.getElementById('lieu-adresse-lat')||{}).value)||null,
-    lng:parseFloat((document.getElementById('lieu-adresse-lng')||{}).value)||null
+    lng:parseFloat((document.getElementById('lieu-adresse-lng')||{}).value)||null,
+    gpsLat:_gps?_gps.lat:undefined,
+    gpsLng:_gps?_gps.lng:undefined,
+    docs:_docDraftTake('lieu')
   });
+  _syncItemExpense('lieu', lieux[lieux.length-1].id);
+  _gpsClear('lieu');
   _lienFillRows('lieu', []);
   ['lieu-nom','lieu-ville','lieu-ville-addr','lieu-categorie','lieu-ouverture','lieu-fermeture',
    'lieu-rue','lieu-cp','lieu-pays','lieu-note','lieu-date','lieu-pdf',
@@ -7998,127 +8605,16 @@ function addLieu(){
   showToast('Lieu ajouté', 'success');
 }
 function deleteLieu(id){id=isNaN(+id)?id:+id;
+  // Dépense automatique liée : retirée AVEC l'élément (sinon montant fantôme).
+  _dropItemExpense('lieu', id);
   var _delPid=(lieux.filter(function(l){return l.id==id;})[0]||{}).pdfId;
   lieux=lieux.filter(function(l){return l.id!=id;});
   _purgePdfIfUnused(_delPid);   // APRÈS retrait : le blob n'est plus référencé
   closeModal();renderLieux();snapshotCurrentTrip();
 }
 
-function _initLieuxDrag(grid){
-  var handles = grid.querySelectorAll('.drag-handle');
-  if(!handles.length) return;
-
-  var _dragId   = null;
-  var _ghost    = null;
-  var _dragEl   = null;
-  var _insertIdx = -1;
-  var _offsetY  = 0;
-
-  var _line = document.createElement('div');
-  _line.className = 'drag-insert-line';
-  grid.appendChild(_line);
-
-  function _getSorted(){
-    var f = (currentFilter === 'Tous')
-      ? lieux.slice()
-      : lieux.filter(function(l){ return l.ville===currentFilter||l.categorie===currentFilter; });
-    f.sort(function(a,b){ return (a.ordre||0)-(b.ordre||0); });
-    return f;
-  }
-
-  function _startDrag(e){
-    e.preventDefault();
-    e.stopPropagation();
-    var handle = this;
-    var card = handle.parentNode;
-    while(card && !card.classList.contains('place-card')) card = card.parentNode;
-    if(!card) return;
-    var touch = (e.touches && e.touches[0]) || e;
-    var rect = card.getBoundingClientRect();
-    _dragEl = card;
-    _dragId = card.getAttribute('data-lieu-id');
-    _offsetY = touch.clientY - rect.top;
-    _ghost = card.cloneNode(true);
-    _ghost.style.cssText = 'position:fixed;left:'+rect.left+'px;width:'+rect.width+'px;top:'+rect.top+'px;z-index:9000;pointer-events:none;opacity:.88;box-shadow:0 8px 24px rgba(0,0,0,.18);border-radius:14px';
-    document.body.appendChild(_ghost);
-    card.style.opacity = '0.25';
-    document.body.style.userSelect = 'none';
-    document.body.style.webkitUserSelect = 'none';
-    document.addEventListener('mousemove', _onMove);
-    document.addEventListener('mouseup', _endDrag);
-    document.addEventListener('touchmove', _onMove, {passive:false});
-    document.addEventListener('touchend', _endDrag);
-  }
-
-  function _onMove(e){
-    if(!_ghost) return;
-    e.preventDefault();
-    var touch = (e.touches && e.touches[0]) || e;
-    var y = touch.clientY;
-    _ghost.style.top = (y - _offsetY) + 'px';
-    var cards = grid.querySelectorAll('.place-card');
-    var newIdx = cards.length;
-    for(var i = 0; i < cards.length; i++){
-      if(cards[i] === _dragEl) continue;
-      var cr = cards[i].getBoundingClientRect();
-      if(y < cr.top + cr.height / 2){ newIdx = i; break; }
-    }
-    _insertIdx = newIdx;
-    var gridRect = grid.getBoundingClientRect();
-    if(newIdx < cards.length && cards[newIdx] !== _dragEl){
-      var t = cards[newIdx].getBoundingClientRect().top - gridRect.top - 5;
-      _line.style.cssText = 'display:block;top:'+Math.max(0,t)+'px';
-    } else {
-      var last = null;
-      for(var j = cards.length-1; j >= 0; j--){ if(cards[j] !== _dragEl){ last = cards[j]; break; } }
-      if(last){ _line.style.cssText = 'display:block;top:'+(last.getBoundingClientRect().bottom-gridRect.top+5)+'px'; }
-    }
-  }
-
-  function _endDrag(){
-    document.removeEventListener('mousemove', _onMove);
-    document.removeEventListener('mouseup', _endDrag);
-    document.removeEventListener('touchmove', _onMove);
-    document.removeEventListener('touchend', _endDrag);
-    if(_ghost){ document.body.removeChild(_ghost); _ghost = null; }
-    if(_dragEl){ _dragEl.style.opacity = ''; _dragEl = null; }
-    _line.style.display = 'none';
-    document.body.style.userSelect = '';
-    document.body.style.webkitUserSelect = '';
-    if(!_dragId || _insertIdx === -1){ _dragId=null; _insertIdx=-1; return; }
-    var sorted = _getSorted();
-    var dragIdx = -1;
-    for(var i = 0; i < sorted.length; i++){
-      if(String(sorted[i].id) === String(_dragId)){ dragIdx = i; break; }
-    }
-    if(dragIdx === -1 || _insertIdx === dragIdx || _insertIdx === dragIdx+1){
-      _dragId=null; _insertIdx=-1; return;
-    }
-    var moved = sorted.splice(dragIdx, 1)[0];
-    var at = (_insertIdx > dragIdx) ? _insertIdx-1 : _insertIdx;
-    sorted.splice(at, 0, moved);
-    if(currentFilter === 'Tous'){
-      for(var i = 0; i < sorted.length; i++) sorted[i].ordre = i;
-    } else {
-      var allSorted = lieux.slice().sort(function(a,b){ return (a.ordre||0)-(b.ordre||0); });
-      var filtSet = {};
-      for(var i = 0; i < sorted.length; i++) filtSet[sorted[i].id] = true;
-      var positions = [];
-      for(var i = 0; i < allSorted.length; i++){ if(filtSet[allSorted[i].id]) positions.push(i); }
-      for(var i = 0; i < positions.length; i++) allSorted[positions[i]] = sorted[i];
-      for(var i = 0; i < allSorted.length; i++) allSorted[i].ordre = i;
-    }
-    _dragId=null; _insertIdx=-1;
-    snapshotCurrentTrip();
-    renderLieux();
-  }
-
-  var hs = grid.querySelectorAll('.drag-handle');
-  for(var i = 0; i < hs.length; i++){
-    hs[i].addEventListener('mousedown', _startDrag);
-    hs[i].addEventListener('touchstart', _startDrag, {passive:false});
-  }
-}
+// (_initLieuxDrag retire avec le mode Liste : le tri par glisser des lieux
+//  n'existait qu'en mode plat, desormais supprime.)
 
 // ══════════════════════════════════════════════════════════════════
 // CONVERTISSEUR — Multi-devises & contextuel au voyage
@@ -8556,6 +9052,54 @@ function _expCatRank(clean){
   return i === -1 ? 99 : i;
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// PIÈCES EXPORTABLES (étape 5 §8.3)
+// ══════════════════════════════════════════════════════════════════════
+// L'export ne part plus des seules transactions : il agrège les DOCUMENTS
+// portés par les éléments (docs[], avec leur TYPE) et, pour ne rien perdre, les
+// justificatifs attachés directement à une transaction (chemin historique).
+// Chaque pièce est normalisée en :
+//   { pdfId, titre, type, prix, cat, date, srcCat, srcId, txId }
+// `cat` est la catégorie BUDGÉTAIRE (celle de la dépense liée quand elle
+// existe), ce qui permet au filtre par type de document de se COMBINER avec les
+// filtres par catégorie et par dépense déjà en place.
+function _expPieces(){
+  var out=[];
+  function valid(pid){ return pid && window.pdfStore && window.pdfStore[pid] && window.pdfStore[pid].data; }
+  // a) documents des éléments porteurs
+  Object.keys(DOC_CARRIERS).forEach(function(cat){
+    _docCarrierArr(cat).forEach(function(o){
+      var tx=(typeof _autoTxFor==='function')?_autoTxFor(cat,o.id):null;
+      _docsOf(o).forEach(function(d){
+        if(!valid(d.pdfId)) return;
+        out.push({
+          pdfId:d.pdfId,
+          titre:d.titre || (window.pdfStore[d.pdfId].name||'Document'),
+          type:d.type||'autre',
+          prix:_docPrixMissing(d)?null:_docPrix(d),
+          cat:(tx&&tx.cat) || _AUTO_CAT[cat] || '📱 Divers',
+          date:(tx&&tx.date) || (typeof _autoTxDate==='function'?_autoTxDate(cat,o):'') || '',
+          srcCat:cat, srcId:String(o.id), txId:tx?String(tx.id):''
+        });
+      });
+    });
+  });
+  // b) justificatifs attachés à une transaction (saisie manuelle) — conservés
+  //    pour que l'export reste exhaustif.
+  (typeof transactions!=='undefined'?transactions:[]).forEach(function(t){
+    if(!valid(t.pdfId)) return;
+    out.push({
+      pdfId:t.pdfId,
+      titre:t.desc || (window.pdfStore[t.pdfId].name||'Justificatif'),
+      type:'facture',                       // un justificatif de dépense EST une facture
+      prix:_txAmount(t),
+      cat:t.cat||'📱 Divers', date:t.date||'',
+      srcCat:'transaction', srcId:String(t.id), txId:String(t.id)
+    });
+  });
+  return out;
+}
+
 // Factures exportables du voyage actif (pdfId présent ET entrée pdfStore valide)
 function _expFactures(){
   if(typeof transactions === 'undefined' || !transactions) return [];
@@ -8585,6 +9129,8 @@ function _expCmp(a, b){
 
 // Ouvre la modale de sélection
 function openExportFactures(){
+  var pieces = _expPieces();
+  if(pieces.length) return _openExportPieces(pieces);
   var facs = _expFactures();
   var tripName = (allTrips[currentTripId]&&allTrips[currentTripId].meta&&allTrips[currentTripId].meta.name)||'ce voyage';
   var head = '<div class="modal-header"><div class="modal-title">Exporter les factures</div>'
@@ -8655,6 +9201,160 @@ function openExportFactures(){
   _expRefreshState();
 }
 
+// ── Écran d'export ÉTENDU : catégories budgétaires × pièces × TYPE de document
+// Tout l'existant est conservé (cases par catégorie ET par pièce, présélections
+// CSE/OPCO, compteur, fusion pdf-lib avec page de garde). On AJOUTE une seule
+// dimension : le filtre par type de document, qui se combine avec le reste.
+var _EXP_TYPE_ON = {};        // type → bool (vide = tous les types)
+
+function _openExportPieces(pieces){
+  var head='<div class="modal-header"><div class="modal-title">Exporter les documents</div>'
+    +'<button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
+  // Types réellement présents (on ne propose pas un filtre vide)
+  var present={}; pieces.forEach(function(p){ present[p.type]=(present[p.type]||0)+1; });
+  _EXP_TYPE_ON={};
+  var typeRow='<div class="exp-types" id="exp-types">'
+    +'<div class="exp-types-lbl">Types de document</div><div class="exp-types-row">';
+  DOC_TYPES.forEach(function(t){
+    if(!present[t.k]) return;
+    typeRow+='<button type="button" class="exp-type-chip active" data-exp-type="'+t.k+'" onclick="_expToggleType(\'' + t.k + '\')">'
+      +_tlEsc(t.l)+' <span class="exp-type-n">'+present[t.k]+'</span></button>';
+    _EXP_TYPE_ON[t.k]=true;
+  });
+  typeRow+='</div></div>';
+
+  // Regroupement par catégorie budgétaire (comme avant)
+  var groups={}, order=[];
+  pieces.forEach(function(p){
+    if(!groups[p.cat]){ groups[p.cat]=[]; order.push(p.cat); }
+    groups[p.cat].push(p);
+  });
+  order.sort(function(a,b){
+    var ra=_expCatRank(_catClean(a)), rb=_expCatRank(_catClean(b));
+    if(ra!==rb) return ra-rb;
+    var na=_catClean(a), nb=_catClean(b);
+    return na<nb?-1:na>nb?1:0;
+  });
+
+  var html=head
+    +'<div class="exp-presets">'
+      +'<button type="button" class="exp-preset-btn" onclick="_expPreset(\'cse\')">CSE</button>'
+      +'<button type="button" class="exp-preset-btn" onclick="_expPreset(\'opco\')">OPCO</button>'
+      +'<button type="button" class="exp-preset-btn" onclick="_expPreset(\'all\')">Tout inclure</button>'
+    +'</div>'
+    +'<div class="exp-preset-hint">CSE : Transport + Hébergement · OPCO : + Repas. Les types de document ci-dessous filtrent en plus — les deux se combinent.</div>'
+    +typeRow
+    +'<div class="exp-body">';
+
+  order.forEach(function(k,ci){
+    var clean=_catClean(k);
+    var color=(typeof _catColor==='function')?_catColor(k):'var(--sakura)';
+    var arr=groups[k].slice().sort(function(a,b){ return _expDateKey(a.date)-_expDateKey(b.date); });
+    var tot=arr.reduce(function(sum,p){ return sum+(p.prix||0); },0);
+    html+='<div class="exp-cat" data-exp-catwrap="'+ci+'">'
+      +'<label class="exp-cat-head">'
+        +'<input type="checkbox" class="exp-chk exp-cat-chk" data-exp-cat="'+ci+'" data-exp-catclean="'+_tlEsc(clean)+'"/>'
+        +'<span class="exp-cat-dot" style="background:'+color+'"></span>'
+        +'<span class="exp-cat-name">'+_tlEsc(clean)+'</span>'
+        +'<span class="exp-cat-total">'+arr.length+' · '+_expFmtEur(tot)+'</span>'
+      +'</label>';
+    arr.forEach(function(p){
+      html+='<label class="exp-fac-row" data-exp-rowtype="'+_tlEsc(p.type)+'">'
+        +'<input type="checkbox" class="exp-chk exp-fac-chk" data-exp-pdf="'+_tlEsc(String(p.pdfId))+'" data-exp-type="'+_tlEsc(p.type)+'" data-exp-catkey="'+ci+'"/>'
+        +'<span class="exp-fac-main">'
+          +'<span class="exp-fac-desc">'+_tlEsc(p.titre)+'</span>'
+          +'<span class="exp-fac-meta">'+_tlEsc(_docTypeLabel(p.type))+(p.date?' · '+_tlEsc(p.date):'')+'</span>'
+        +'</span>'
+        +'<span class="exp-fac-amount">'+(p.prix===null?'—':_expFmtEur(p.prix))+'</span>'
+      +'</label>';
+    });
+    html+='</div>';
+  });
+
+  html+='</div>'
+    +'<div class="exp-footer">'
+      +'<span class="exp-count" id="exp-count">0 document sélectionné</span>'
+      +'<button class="btn-ghost" onclick="closeModal()">Annuler</button>'
+      +'<button class="btn-primary" id="exp-run-btn" onclick="_exportPiecesRun()">Exporter</button>'
+    +'</div>';
+
+  openModal(html);
+  // ATTENTION : ne PAS nommer ce cache _expPieces — ce serait écraser la
+  // FONCTION _expPieces() et casser toute réouverture de l'écran d'export.
+  window._expPiecesCache = pieces;
+  _expWire();
+  _expApplyTypeFilter();
+  _expRefreshState();
+}
+
+// Bascule d'un type : masque les lignes correspondantes ET décoche celles qui
+// sortent du filtre, pour qu'une case invisible ne puisse pas rester incluse.
+function _expToggleType(k){
+  _EXP_TYPE_ON[k] = !_EXP_TYPE_ON[k];
+  var chip=document.querySelector('[data-exp-type="'+k+'"].exp-type-chip');
+  if(chip) chip.classList.toggle('active', !!_EXP_TYPE_ON[k]);
+  _expApplyTypeFilter();
+  _expRefreshState();
+}
+function _expApplyTypeFilter(){
+  var root=document.getElementById('editModalInner'); if(!root) return;
+  var rows=root.querySelectorAll('.exp-fac-row');
+  for(var i=0;i<rows.length;i++){
+    var ty=rows[i].getAttribute('data-exp-rowtype');
+    var on=!!_EXP_TYPE_ON[ty];
+    rows[i].style.display = on ? '' : 'none';
+    if(!on){ var cb=rows[i].querySelector('.exp-fac-chk'); if(cb) cb.checked=false; }
+  }
+  // Une catégorie dont toutes les lignes sont filtrées se masque aussi.
+  var cats=root.querySelectorAll('.exp-cat');
+  for(var c=0;c<cats.length;c++){
+    var vis=0, rr=cats[c].querySelectorAll('.exp-fac-row');
+    for(var j=0;j<rr.length;j++){ if(rr[j].style.display!=='none') vis++; }
+    cats[c].style.display = vis ? '' : 'none';
+  }
+}
+
+// Génération : mêmes fusion pdf-lib et page de garde, sur les pièces cochées.
+function _exportPiecesRun(){
+  var root=document.getElementById('editModalInner'); if(!root) return;
+  if(typeof PDFLib==='undefined'){ if(typeof showToast==='function') showToast('Librairie PDF indisponible (recharge la page)','error',4000); return; }
+  var boxes=root.querySelectorAll('.exp-fac-chk'), chosen=[];
+  var all=window._expPiecesCache||[];
+  for(var i=0;i<boxes.length;i++){
+    if(!boxes[i].checked) continue;
+    var pid=boxes[i].getAttribute('data-exp-pdf');
+    for(var j=0;j<all.length;j++){ if(String(all[j].pdfId)===String(pid)){ chosen.push(all[j]); break; } }
+  }
+  if(!chosen.length){ if(typeof showToast==='function') showToast('Sélectionne au moins un document','error'); return; }
+  // Tri : catégorie budgétaire, puis date, puis type — l'ordre attendu d'un
+  // dossier de remboursement.
+  chosen.sort(function(a,b){
+    var ra=_expCatRank(_catClean(a.cat)), rb=_expCatRank(_catClean(b.cat));
+    if(ra!==rb) return ra-rb;
+    var da=_expDateKey(a.date), db=_expDateKey(b.date);
+    if(da!==db) return da-db;
+    return String(a.type).localeCompare(String(b.type));
+  });
+  var tripName=(allTrips[currentTripId]&&allTrips[currentTripId].meta&&allTrips[currentTripId].meta.name)||'voyage';
+  var btn=document.getElementById('exp-run-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Génération…'; }
+  // _expMergePDF attend des objets à {desc, cat, date, pdfId, amount} : on
+  // adapte les pièces sans toucher au moteur de fusion (UN seul PDF consolidé).
+  var asFacs=chosen.map(function(p){
+    return { id:p.pdfId, desc:p.titre+' — '+_docTypeLabel(p.type), cat:p.cat,
+             date:p.date, pdfId:p.pdfId, amount:(p.prix||0), raw:(p.prix||0), devise:'EUR' };
+  });
+  _expMergePDF(asFacs, tripName).then(function(bytes){
+    _expDownload(bytes, 'documents-'+_expSlug(tripName)+'.pdf');
+    closeModal();
+    if(typeof showToast==='function') showToast('PDF consolidé généré ('+chosen.length+' document'+(chosen.length>1?'s':'')+')','success');
+  }).catch(function(e){
+    if(typeof console!=='undefined') console.error('[Yume] export pièces:', e);
+    if(btn){ btn.disabled=false; btn.textContent='Exporter'; }
+    if(typeof showToast==='function') showToast('Échec de la génération du PDF','error',4000);
+  });
+}
+
 // Câblage des cases (délégation locale sur le conteneur de la modale)
 function _expWire(){
   var root = document.getElementById('editModalInner');
@@ -8694,24 +9394,40 @@ function _expRefreshState(){
   var on=0;
   for(var i=0;i<facs.length;i++){ if(facs[i].checked) on++; }
   var cnt = document.getElementById('exp-count');
-  if(cnt) cnt.textContent = on + ' facture' + (on>1?'s':'') + ' sélectionnée' + (on>1?'s':'');
+  if(cnt) cnt.textContent = on + ' document' + (on>1?'s':'') + ' sélectionné' + (on>1?'s':'');
   var btn = document.getElementById('exp-run-btn');
   if(btn){ btn.disabled = (on===0); btn.style.opacity = on===0 ? '.5' : ''; }
 }
 
 // Preset : coche les catégories dont le libellé nettoyé est dans la liste
 function _expPreset(kind){
-  var wanted = (kind==='opco') ? ['Transport','Hébergement','Repas'] : ['Transport','Hébergement'];
   var root = document.getElementById('editModalInner');
   if(!root) return;
+  // « all » = tout inclure : réactive aussi TOUS les types, sinon un type
+  // désactivé laisserait des pièces dehors alors que l'intention est l'inverse.
+  if(kind==='all' && typeof _expApplyTypeFilter==='function'){
+    Object.keys(_EXP_TYPE_ON).forEach(function(k){ _EXP_TYPE_ON[k]=true; });
+    var chips=root.querySelectorAll('.exp-type-chip');
+    for(var c=0;c<chips.length;c++){ chips[c].classList.add('active'); }
+    _expApplyTypeFilter();
+  }
+  var wanted = (kind==='opco') ? ['Transport','Hébergement','Repas']
+             : (kind==='all')  ? null            // null = toutes les catégories
+             : ['Transport','Hébergement'];
   var cats = root.querySelectorAll('.exp-cat-chk');
   for(var i=0;i<cats.length;i++){
     var k = cats[i].getAttribute('data-exp-cat');
-    var want = wanted.indexOf(cats[i].getAttribute('data-exp-catclean')) !== -1;
+    var want = (wanted===null) || wanted.indexOf(cats[i].getAttribute('data-exp-catclean')) !== -1;
     cats[i].checked = want;
     cats[i].indeterminate = false;
     var facs = root.querySelectorAll('.exp-fac-chk[data-exp-catkey="'+k+'"]');
-    for(var j=0;j<facs.length;j++){ facs[j].checked = want; }
+    for(var j=0;j<facs.length;j++){
+      // Ne JAMAIS cocher une ligne masquée par le filtre de type : une case
+      // invisible cochée exporterait une pièce que l'utilisateur croit exclue.
+      var row=facs[j].closest('.exp-fac-row');
+      var hidden=row && row.style.display==='none';
+      facs[j].checked = want && !hidden;
+    }
   }
   _expRefreshState();
 }
@@ -9009,13 +9725,37 @@ function updateBudget(){
         rawLine = '<div class="tx-raw">'+rawFmt+' '+devSym+' converti</div>';
       }
 
-      return '<div class="tx-item">'
+      // ── Dépense AUTOMATIQUE (issue des documents d'un élément) ──
+      // Distinguée d'une saisie manuelle par un liseré + un badge cliquable qui
+      // ouvre la fiche de l'élément SOURCE. Ses documents sont listés dessous.
+      var srcDocs = (typeof _txSrcDocs==='function') ? _txSrcDocs(t) : [];
+      var srcHtml = '', srcDocsBlock = '';
+      if(t.auto){
+        var SRCL={transport:'Déplacement',hotel:'Hébergement',lieu:'Lieu',document:'Document'};
+        srcHtml = '<button class="tx-src" data-detail-cat="'+_tlEsc(String(t.srcCat))+'" data-detail-id="'+_tlEsc(String(t.srcId))+'" title="Ouvrir l\'élément source">'
+          +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="11" height="11" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg> '
+          +(SRCL[t.srcCat]||'Source')
+        +'</button>';
+        if(srcDocs.length){
+          srcDocsBlock = '<div class="tx-docs">'+srcDocs.map(function(d){
+            var has=!!(d.pdfId && window.pdfStore && window.pdfStore[d.pdfId]);
+            return '<span class="tx-doc-chip'+(has?'':' nofile')+'"'
+              +(has?' data-act="openPdf" data-id="'+_tlEsc(String(d.pdfId))+'"':'')+'>'
+              +_tlEsc(_docTypeLabel(d.type))+' · '+_tlEsc(d.titre||'sans nom')
+              +(_docPrixMissing(d)?'':' · '+_expFmtEur(_docPrix(d)))
+            +'</span>';
+          }).join('')+'</div>';
+        }
+      }
+
+      return '<div class="tx-item'+(t.auto?' tx-auto':'')+'">'
         +'<div class="tx-body">'
           +'<div class="tx-desc">'+t.desc+deviseBadge+'</div>'
           // Badge sur la ligne CATÉGORIE et non sur .tx-desc : cette dernière
           // est en nowrap + ellipsis, l'indicateur y disparaissait dès que la
           // description était un peu longue (invisible en mobile).
-          +'<div class="tx-cat"><span class="tx-cat-dot" style="background:'+tColor+'"></span>'+_catClean(t.cat)+missingBadge+'</div>'
+          +'<div class="tx-cat"><span class="tx-cat-dot" style="background:'+tColor+'"></span>'+_catClean(t.cat)+missingBadge+srcHtml+'</div>'
+          +srcDocsBlock
         +'</div>'
         +'<div class="tx-right">'
           +'<div class="tx-amount" style="font-size:15px;font-weight:600;color:var(--ink)">-'+eurStr+'</div>'
@@ -11123,6 +11863,395 @@ function _purgePdfBlob(pdfId){
 // voyages, le snapshot fait foi.
 var _PDF_REF_ARRAYS = ['vols','passes','trains','mobilites','locations',
                        'hotels','lieux','documents','transactions'];
+// ══════════════════════════════════════════════════════════════════════
+// MULTI-DOCUMENTS PAR ÉLÉMENT (étape 5 §8.3)
+// ══════════════════════════════════════════════════════════════════════
+// Un élément portait UN seul `pdfId`. Il porte désormais `docs[]` :
+//   { id, titre, type, pdfId, prix }
+//   · titre : nommage LIBRE (« facture du vol »)
+//   · type  : clé de DOC_TYPES (billet / facture / reservation / itineraire /
+//             assurance / autre) — c'est la dimension du filtre d'export
+//   · pdfId : pointeur pdfStore — AUCUN nouveau mécanisme de stockage, on reste
+//             sur la convention existante et sur les gardes _pdfIdInUse /
+//             _purgePdfIfUnused
+//   · prix  : montant EUR optionnel, source de la ligne de dépense (voir
+//             _syncItemExpense) — jamais saisi deux fois
+// `pdfId` d'origine est CONSERVÉ par la migration (non destructif) : les
+// lecteurs historiques continuent de fonctionner.
+
+var DOC_TYPES = [
+  { k:'billet',      l:'Billet' },
+  { k:'facture',     l:'Facture' },
+  { k:'reservation', l:'Réservation' },
+  { k:'itineraire',  l:'Itinéraire' },
+  { k:'assurance',   l:'Assurance' },
+  { k:'autre',       l:'Autre' }
+];
+function _docTypeLabel(k){
+  for(var i=0;i<DOC_TYPES.length;i++){ if(DOC_TYPES[i].k===k) return DOC_TYPES[i].l; }
+  return 'Autre';
+}
+// Catégories PORTEUSES de docs[]. Une seule table : ajouter un porteur ici
+// suffit, tous les helpers en dérivent.
+var DOC_CARRIERS = {
+  transport: function(){ return typeof mobilites!=='undefined'?mobilites:[]; },
+  hotel:     function(){ return typeof hotels   !=='undefined'?hotels   :[]; },
+  lieu:      function(){ return typeof lieux    !=='undefined'?lieux    :[]; },
+  document:  function(){ return typeof documents!=='undefined'?documents:[]; }
+};
+// ── BROUILLONS (création) ────────────────────────────────────────────
+// À la création, l'élément n'a pas encore d'id : ses documents sont collectés
+// dans un brouillon, puis versés sur l'objet par addX(). Le brouillon est
+// exposé comme un PSEUDO-PORTEUR ('draft'), si bien que _docsBlockHtml,
+// _itemDocSet, _docAdd, _docRemove et _docAttach fonctionnent dessus SANS
+// modification : un seul composant pour la création et l'édition, donc pas de
+// divergence possible entre les deux.
+var _DOC_DRAFTS = {};                       // clé → { id, docs:[] }
+var _DOC_DRAFT_SLOTS = { mob:'mob-docs-slot', ht:'ht-docs-slot', lieu:'lieu-docs-slot', doc:'doc-docs-slot' };
+function _docDraft(key){
+  if(!_DOC_DRAFTS[key]) _DOC_DRAFTS[key] = { id:key, docs:[] };
+  return _DOC_DRAFTS[key];
+}
+function _docDraftReset(key){ _DOC_DRAFTS[key] = { id:key, docs:[] }; }
+// Vide le brouillon et rend ses documents, à poser sur l'objet créé.
+function _docDraftTake(key){
+  var d=_docDraft(key), out=d.docs;
+  _DOC_DRAFTS[key] = { id:key, docs:[] };
+  // Le slot est re-rendu vide : sans ça, les lignes de la saisie précédente
+  // restaient affichées dans le formulaire fermé et polluaient les sélecteurs.
+  var slot=(_DOC_DRAFT_SLOTS||{})[key];
+  if(slot) _docsDraftRender(key, slot);
+  return out;
+}
+// Rend (ou re-rend) le bloc dans le slot d'un formulaire de création.
+// Le formulaire Documents sert aussi à l'ÉDITION (doc-edit-id renseigné). Dans
+// ce cas le bloc doit être lié au document réel, pas à un brouillon.
+function _docDraftEditing(key){
+  if(key!=='doc') return false;
+  var e=document.getElementById('doc-edit-id');
+  return !!(e && e.value);
+}
+
+function _docsDraftRender(key, slotId){
+  var slot=document.getElementById(slotId);
+  if(!slot) return;
+  if(key==='doc' && _docDraftEditing('doc')){
+    var did=document.getElementById('doc-edit-id').value;
+    slot.innerHTML=_docsBlockHtml('document', did);
+    return;
+  }
+  slot.innerHTML=_docsBlockHtml('draft', key);
+}
+
+function _docCarrierArr(cat){ var f=DOC_CARRIERS[cat]; return f?f():[]; }
+function _docFindItem(cat, id){
+  if(cat==='draft') return _docDraft(id);   // pseudo-porteur de création
+  var arr=_docCarrierArr(cat);
+  for(var i=0;i<arr.length;i++){ if(String(arr[i].id)===String(id)) return arr[i]; }
+  return null;
+}
+// Accès sûr : garantit le tableau sans le créer si l'objet est absent.
+function _docsOf(o){ return (o && Array.isArray(o.docs)) ? o.docs : []; }
+
+// Montant d'un document (toujours un nombre fini, 0 en repli) — même contrat que
+// _txAmount côté transactions, pour ne jamais propager de NaN dans le budget.
+function _docPrix(d){
+  var n = parseFloat(d && d.prix);
+  return isFinite(n) ? n : 0;
+}
+function _docPrixMissing(d){
+  return !d || d.prix===null || d.prix===undefined || d.prix==='' || !isFinite(parseFloat(d.prix));
+}
+// Somme des prix des documents d'un élément — base de sa ligne de dépense.
+function _docsTotal(o){
+  var t=0, arr=_docsOf(o);
+  for(var i=0;i<arr.length;i++) t += _docPrix(arr[i]);
+  return Math.round(t*100)/100;
+}
+function _docsPricedCount(o){
+  var n=0, arr=_docsOf(o);
+  for(var i=0;i<arr.length;i++){ if(!_docPrixMissing(arr[i])) n++; }
+  return n;
+}
+
+// Migration idempotente et NON destructive : un élément porteur d'un pdfId sans
+// docs[] reçoit un document unique qui pointe le MÊME blob (aucune copie, aucune
+// entrée pdfStore créée). pdfId est laissé en place.
+function _migrateDocs(o){
+  if(!o) return;
+  if(!Array.isArray(o.docs)) o.docs = [];
+  if(o.pdfId && !o.docs.length){
+    var nm = (window.pdfStore && window.pdfStore[o.pdfId] && window.pdfStore[o.pdfId].name) || 'Document';
+    o.docs.push({ id:uid(), titre:nm, type:'autre', pdfId:o.pdfId, prix:null });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// LIAISON BUDGET (étape 5 §8.3) — le prix des documents alimente UNE dépense
+// ══════════════════════════════════════════════════════════════════════
+// Règle : UNE seule ligne de dépense par ÉLÉMENT (pas une par document, cf.
+// plan). Son montant = somme des prix des documents de l'élément. La dépense
+// est marquée `auto:true` + `srcCat`/`srcId`, ce qui permet de la distinguer
+// d'une saisie manuelle et d'atteindre l'élément source.
+//
+// _syncItemExpense est le SEUL écrivain des dépenses automatiques. Toute
+// création / mise à jour / suppression passe par lui — c'est ce qui garantit
+// qu'aucun montant fantôme ne survit :
+//   · prix modifié      → montant recalculé sur la ligne existante
+//   · dernier prix retiré → la ligne est SUPPRIMÉE (pas laissée à 0)
+//   · document supprimé → recalcul, puis suppression si plus aucun prix
+//   · élément supprimé  → _dropItemExpense retire la ligne
+// Une dépense saisie à la main (auto absent) n'est JAMAIS touchée.
+
+var _AUTO_CAT = {
+  transport: '🚉 Transport',
+  hotel:     '🏯 Hébergement',
+  lieu:      '🎌 Activités',
+  document:  '📱 Divers'
+};
+// (Les clés de catégorie budgétaire contiennent un emoji de préfixe : exception
+//  historique DOCUMENTÉE au §4, propre à la donnée budget. _catClean le retire
+//  à l'affichage. On réutilise les mêmes clés pour rester compatible avec les
+//  regroupements, filtres et l'export existants.)
+
+function _autoTxFor(cat, id){
+  if(typeof transactions==='undefined' || !transactions) return null;
+  for(var i=0;i<transactions.length;i++){
+    var t=transactions[i];
+    if(t && t.auto && String(t.srcCat)===String(cat) && String(t.srcId)===String(id)) return t;
+  }
+  return null;
+}
+// Libellé de la dépense dérivé de l'élément source.
+function _autoTxDesc(cat, o){
+  if(!o) return 'Dépense';
+  if(cat==='transport'){
+    var r=(o.dep||'')+(o.arr?' → '+o.arr:'');
+    return (r.trim()? r : (o.titre||'Transport'));
+  }
+  if(cat==='hotel')    return o.nom || 'Hébergement';
+  if(cat==='lieu')     return o.nom || 'Lieu';
+  if(cat==='document') return o.name || o.nom || 'Document';   // saveDoc stocke .name
+  return 'Dépense';
+}
+function _autoTxDate(cat, o){
+  if(!o) return '';
+  if(cat==='transport') return o.date || '';
+  if(cat==='hotel')     return o.checkin || '';
+  if(cat==='lieu')      return o.dateVisite || '';
+  return '';
+}
+
+// Réconciliation d'un élément → sa dépense automatique.
+function _syncItemExpense(cat, id){
+  if(typeof transactions==='undefined' || !transactions) return;
+  var o=_docFindItem(cat,id);
+  var tx=_autoTxFor(cat,id);
+  // Élément disparu, ou plus AUCUN document porteur de prix → aucune dépense
+  // automatique ne doit subsister (sinon montant fantôme).
+  if(!o || !_docsPricedCount(o)){
+    if(tx) transactions=transactions.filter(function(x){ return x!==tx; });
+    return;
+  }
+  var total=_docsTotal(o);
+  if(!isFinite(total) || total<=0){
+    if(tx) transactions=transactions.filter(function(x){ return x!==tx; });
+    return;
+  }
+  if(tx){
+    // Mise à jour EN PLACE : on ne touche que les champs dérivés. paidBy /
+    // forWho, éventuellement renseignés à la main sur cette ligne, survivent.
+    tx.amount = total;
+    tx.raw    = total;
+    tx.devise = 'EUR';
+    tx.desc   = _autoTxDesc(cat,o);
+    tx.date   = _autoTxDate(cat,o) || tx.date || '';
+    if(!tx.cat) tx.cat = _AUTO_CAT[cat] || '📱 Divers';
+  } else {
+    transactions.push({
+      id: uid(),
+      desc: _autoTxDesc(cat,o),
+      amount: total, raw: total, devise: 'EUR',
+      cat: _AUTO_CAT[cat] || '📱 Divers',
+      date: _autoTxDate(cat,o),
+      paidBy: '', forWho: '',
+      pdfId: '',                 // les pièces vivent sur l'élément (docs[])
+      auto: true, srcCat: cat, srcId: String(id)
+    });
+  }
+}
+
+// Élément supprimé → sa dépense automatique part avec lui. À appeler depuis les
+// deleteX des porteurs.
+function _dropItemExpense(cat, id){
+  if(typeof transactions==='undefined' || !transactions) return;
+  transactions=transactions.filter(function(x){
+    return !(x && x.auto && String(x.srcCat)===String(cat) && String(x.srcId)===String(id));
+  });
+}
+
+// Documents rattachés à une dépense automatique (affichés sous la ligne).
+function _txSrcDocs(t){
+  if(!t || !t.auto) return [];
+  var o=_docFindItem(t.srcCat, t.srcId);
+  return _docsOf(o);
+}
+
+// ── Éditeur de documents d'un élément — SOURCE UNIQUE du markup ──────
+// Rendu dans la fiche détail (un seul point d'intégration couvrant les 4
+// porteurs). Les mutations écrivent DIRECTEMENT sur l'objet puis appellent
+// _docsAfterChange : pas de lecture différée au save, donc rien à perdre si la
+// modale se re-rend, et la ligne de dépense reste synchronisée à chaque geste.
+// Identifiant UNIQUE du bloc pour un couple (catégorie, élément) : deux blocs
+// peuvent coexister dans le DOM (slot de création monté + modale d'édition), un
+// id fixe faisait viser le mauvais au re-render.
+function _docsBlockId(cat, id){
+  return 'docs-block-'+String(cat)+'-'+String(id).replace(/[^A-Za-z0-9_-]/g,'');
+}
+function _docsBlockHtml(cat, id){
+  var o=_docFindItem(cat,id);
+  if(!o) return '';
+  var arr=_docsOf(o);
+  var q=function(v){ return String(v).replace(/'/g,"\\'"); };   // ids quotés (§5.1)
+  // Encadré beige et textes « DOCUMENTS » / « Aucun document… » supprimés : ne
+  // reste que le bouton d'accordéon, qui porte l'intitulé et le compte.
+  var bid=_docsBlockId(cat,id);
+  var lbl=arr.length ? ('Masquer les documents ('+arr.length+')') : 'Ajouter un document';
+  var h='<div class="docs-block" id="'+bid+'">'
+    + _accBtnHtml(bid+'-reveal', "_docsToggle('"+q(bid)+"')", lbl, _ICO_DOC, arr.length>0)
+    + '<div class="acc-panel" id="'+bid+'-panel" style="display:'+(arr.length?'':'none')+'">';
+  arr.forEach(function(d){
+    var has=!!(d.pdfId && window.pdfStore && window.pdfStore[d.pdfId]);
+    var fname=has?window.pdfStore[d.pdfId].name:'';
+    h+='<div class="doc-item">'
+      +'<div class="doc-item-r1">'
+        +'<input type="text" class="doc-titre" value="'+_tlEsc(d.titre||'')+'" placeholder="Nom du document (ex. facture du vol)"'
+          +' onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'titre\',this.value)"/>'
+      +'</div>'
+      +'<div class="doc-item-r2">'
+        +'<select class="doc-type" onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'type\',this.value)">'
+          +DOC_TYPES.map(function(t){
+              return '<option value="'+t.k+'"'+(d.type===t.k?' selected':'')+'>'+t.l+'</option>'; }).join('')
+        +'</select>'
+        +'<span class="doc-prix-wrap">'
+          +'<input type="text" class="doc-prix" value="'+(_docPrixMissing(d)?'':_docPrix(d))+'" placeholder="Prix"'
+            +' onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'prix\',this.value)"/>'
+          +'<span class="doc-prix-eur">€</span>'
+        +'</span>'
+        +'<button type="button" class="doc-del" title="Retirer ce document" onclick="_docRemove(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\')">'
+          +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
+        +'</button>'
+      +'</div>'
+      +'<div class="doc-item-r3">'
+        +(has
+          ? '<button type="button" class="pdf-view-btn" onclick="openPdf(\''+q(d.pdfId)+'\')">'
+             +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> '+_tlEsc(fname)+'</button>'
+          : '<span class="doc-nofile">Aucun fichier joint</span>')
+        +'<label class="pdf-btn doc-file-btn">'+(has?'Remplacer':'Joindre')
+          +'<input type="file" accept=".pdf,image/*,application/pdf" style="display:none"'
+          +' onchange="_docAttach(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',this)"/>'
+        +'</label>'
+      +'</div>'
+    +'</div>';
+  });
+  var tot=_docsTotal(o);
+  if(_docsPricedCount(o)){
+    h+='<div class="docs-total">Total documents <b>'+_expFmtEur(tot)+'</b>'
+      +'<span class="docs-total-hint">reporté automatiquement au Budget</span></div>';
+  }
+  h+='<button type="button" class="docs-add" onclick="_docAdd(\''+q(cat)+'\',\''+q(id)+'\')">'
+      +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un document</button>'
+    +'</div><!-- /.acc-panel -->'
+    +'</div>';
+  return h;
+}
+
+// Re-rend le bloc sur place + persiste + resynchronise la dépense liée.
+function _docsAfterChange(cat, id){
+  // Brouillon de création : aucun élément en base, donc aucune dépense à
+  // synchroniser et rien à persister — le versement a lieu dans addX().
+  if(cat!=='draft'){
+    _syncItemExpense(cat, id);
+    snapshotCurrentTrip();
+  }
+  var host=document.getElementById(_docsBlockId(cat,id));
+  if(host){
+    var tmp=document.createElement('div');
+    tmp.innerHTML=_docsBlockHtml(cat,id);
+    if(tmp.firstChild) host.parentNode.replaceChild(tmp.firstChild, host);
+  }
+  if(typeof updateBudget==='function') updateBudget();
+}
+
+function _docAdd(cat, id){
+  var o=_docFindItem(cat,id); if(!o) return;
+  if(!Array.isArray(o.docs)) o.docs=[];
+  o.docs.push({ id:uid(), titre:'', type:'facture', pdfId:'', prix:null });
+  _docsAfterChange(cat,id);
+}
+
+// NB : ne PAS nommer cette fonction _docSet — ce nom est DÉJÀ pris par le
+// setter de champ du formulaire Documents (_docSet(id,v), défini plus haut).
+// Étant définie après, elle l'écrasait silencieusement (piège §5.3) et cassait
+// editDoc / openDocAdd / _resetDocForm / saveDoc.
+function _itemDocSet(cat, id, docId, field, value){
+  var o=_docFindItem(cat,id); if(!o) return;
+  var arr=_docsOf(o), d=null;
+  for(var i=0;i<arr.length;i++){ if(String(arr[i].id)===String(docId)) d=arr[i]; }
+  if(!d) return;
+  if(field==='prix'){
+    var raw=String(value==null?'':value).trim().replace(',','.');
+    if(raw===''){ d.prix=null; }
+    else{
+      var n=parseFloat(raw);
+      // Montant refusé s'il n'est pas un nombre fini positif : on ne laisse
+      // JAMAIS entrer un NaN dans la chaîne budgétaire (§8.2).
+      if(!isFinite(n) || n<0){
+        if(typeof showToast==='function') showToast('Montant invalide — laissé vide','error');
+        d.prix=null;
+      } else { d.prix=Math.round(n*100)/100; }
+    }
+  } else if(field==='titre'){ d.titre=String(value||'').trim(); }
+  else if(field==='type'){ d.type=String(value||'autre'); }
+  _docsAfterChange(cat,id);
+}
+
+function _docRemove(cat, id, docId){
+  var o=_docFindItem(cat,id); if(!o) return;
+  var arr=_docsOf(o), keep=[], gone=null;
+  for(var i=0;i<arr.length;i++){
+    if(String(arr[i].id)===String(docId)) gone=arr[i]; else keep.push(arr[i]);
+  }
+  o.docs=keep;
+  // Le blob n'est purgé que s'il n'est plus référencé NULLE PART (tous voyages).
+  if(gone && gone.pdfId) _purgePdfIfUnused(gone.pdfId);
+  // Si le pdfId legacy pointait ce blob, on le libère aussi pour ne pas laisser
+  // un pointeur vers un blob supprimé.
+  if(gone && gone.pdfId && o.pdfId===gone.pdfId) o.pdfId='';
+  _docsAfterChange(cat,id);
+}
+
+function _docAttach(cat, id, docId, fileInput){
+  var file=fileInput.files[0]; if(!file) return;
+  if(file.size > 15*1024*1024){ if(typeof showToast==='function') showToast('Fichier trop lourd (max 15 Mo)','error'); return; }
+  var o=_docFindItem(cat,id); if(!o) return;
+  var arr=_docsOf(o), d=null;
+  for(var i=0;i<arr.length;i++){ if(String(arr[i].id)===String(docId)) d=arr[i]; }
+  if(!d) return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var prev=d.pdfId;
+    var pid=_pdfUid();
+    window.pdfStore[pid]={ name:file.name, data:e.target.result };
+    savePdfStore();
+    d.pdfId=pid;
+    if(!d.titre) d.titre=file.name;          // nommage libre, pré-rempli
+    if(prev && prev!==pid) _purgePdfIfUnused(prev);
+    _docsAfterChange(cat,id);
+  };
+  reader.readAsDataURL(file);
+}
+
 function _pdfIdInUse(pdfId){
   if(!pdfId) return true;              // pas d'id → ne rien purger
   var used = false;
@@ -11703,10 +12832,14 @@ function saveDoc(){
     // puis annuler » ne casse pas la pièce existante.
     var prevPid = (idx!==-1) ? _docPdfId(documents[idx]) : '';
     if(prevPid && prevPid!==rec.pdfId) _purgePdfBlob(prevPid);
+    // Édition : rec est reconstruit → on NE PERD PAS les documents attachés.
+    if(idx!==-1) rec.docs = _docsOf(documents[idx]);
     if(idx!==-1) documents[idx]=rec; else documents.push(rec);
   } else {
+    rec.docs = _docDraftTake('doc');   // création : versement du brouillon
     documents.push(rec);
   }
+  _syncItemExpense('document', rec.id);
   try { if(typeof snapshotCurrentTrip==='function') snapshotCurrentTrip(); } catch(e){}
   _resetDocForm();
   try { if(typeof toggleForm==='function') toggleForm('form-doc'); } catch(e){}
@@ -11721,6 +12854,8 @@ function deleteDoc(){
   // Purge le blob associé (aligné sur deletePass/deleteHotel) — plus d'orphelin.
   var d=null; for(var i=0;i<documents.length;i++){ if(documents[i].id===id){ d=documents[i]; break; } }
   _purgePdfBlob(_docPdfId(d));
+  // Dépense automatique liée : retirée AVEC le document (sinon montant fantôme).
+  _dropItemExpense('document', id);
   documents = documents.filter(function(x){ return x.id!==id; });
   if(typeof snapshotCurrentTrip==='function') snapshotCurrentTrip();
   _resetDocForm();

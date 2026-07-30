@@ -679,8 +679,13 @@ function bellReport(tid) {
   }
 
   // B2 — transport « à confirmer » dont la date approche (0 à 7 jours).
+  // « Sans réservation » est un choix ASSUMÉ (trajet pris au guichet, billet sur
+  // place) et non une anomalie : il ne doit produire AUCUNE alerte, sinon la
+  // cloche se remplit de faux positifs (étape 2 §8.3). Idem pour les synonymes
+  // hérités « Réservé », équivalents de Confirmé.
   mobs.forEach(function (m) {
-    if (!m.statut || m.statut === 'Confirmé') return;
+    var st = (typeof _statutNorm === 'function') ? _statutNorm(m.statut) : m.statut;
+    if (!st || st === 'Confirmé' || st === 'Sans réservation') return;
     var d = _parseDate(m.date);
     if (!d) return;
     var dd = days(mid(d));

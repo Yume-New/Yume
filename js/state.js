@@ -167,7 +167,6 @@ var villeColors  = {
   tokyo:'#e8748a', kyoto:'#c9921a', hiroshima:'#2d8c6b', osaka:'#2d5e8c'
 };
 var palIdx       = 4;
-var currentFilter = 'Tous';
 var emodes       = {};
 
 
@@ -262,7 +261,6 @@ function _hardResetGlobals() {
   totalNuits    = 30;
   villeColors   = {};
   palIdx        = 4;
-  currentFilter = 'Tous';
   emodes        = {};
 }
 
@@ -391,7 +389,6 @@ function restoreTrip(tid) {
   transactions = _deepClone(d.transactions);
   villeColors  = _deepCloneObj(d.villeColorMap || {});
   palIdx       = d.paletteCursor != null ? d.paletteCursor : 4;
-  currentFilter = 'Tous';
   emodes        = {};
 
   // ── Calcul totalNuits ─────────────────────────────────────────────
