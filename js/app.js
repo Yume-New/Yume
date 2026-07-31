@@ -5276,9 +5276,13 @@ function openTimelineDetail(cat, id, geo){
             : '<div class="tld-empty">Aucune information complémentaire.</div>')
     + geoHtml
     + (pdfHtml ? '<div class="tld-pdf-wrap">'+pdfHtml+'</div>' : '')
-    // Multi-documents (étape 5) : un seul point d'intégration pour les 4
-    // porteurs déclarés dans DOC_CARRIERS.
-    + (DOC_CARRIERS[cat] ? _docsBlockHtml(cat, id) : '')
+    // Multi-documents (étape 5) : un seul point d'intégration pour les porteurs
+    // déclarés dans DOC_CARRIERS. Cette fiche est la vue de CONSULTATION (clic
+    // simple sur une carte) → bloc en LECTURE SEULE : les documents déjà là
+    // restent visibles et ouvrables, mais on n'y ajoute, ne modifie ni ne
+    // supprime rien. L'édition passe par « Modifier », qui ouvre la modale du
+    // type concerné avec le bloc complet.
+    + (DOC_CARRIERS[cat] ? _docsBlockHtml(cat, id, true) : '')
     + '<div class="modal-footer">'
       + '<button class="btn-ghost" onclick="closeModal()">Fermer</button>'
       + '<div class="modal-actions">'
@@ -10300,9 +10304,16 @@ function openCalendar(targetId){
     calMinDate = calRangeStart;
   }
 
-  // ── Appliquer les contraintes de période voyage ──
-  if(period && !calMinDate) calMinDate = period.start;
-  if(period && !calMaxDate && period.end) calMaxDate = period.end;
+  // ── Période du voyage : REPÈRE, PAS une contrainte ──
+  // Elle servait de calMinDate/calMaxDate par défaut, ce qui DÉSACTIVAIT tous
+  // les jours hors voyage : impossible de saisir un vol la veille du départ, un
+  // pass qui commence avant, une dépense après le retour, un document qui expire
+  // plus tard. Combinée au verrou de mois de calMove, le calendrier était
+  // totalement figé quand le voyage tient dans un seul mois.
+  // La période reste le mois d'OUVERTURE (bloc de positionnement ci-dessous) et
+  // s'affiche en indication sous la grille — mais elle ne bloque plus rien.
+  // Seules subsistent les contraintes FONCTIONNELLES posées plus haut :
+  // arrivée de vol (départ → +3 j) et 2e date d'une paire (check-out ≥ check-in).
 
   // ══════════════════════════════════════════════════════════
   // POSITIONNEMENT DU MOIS — PRIORITÉS DANS L'ORDRE :
@@ -10369,25 +10380,16 @@ function closeCalendar(){
 function calMove(dir){
   if(calShowYear){ calYear+=dir*10; }
   else {
+    // Navigation LIBRE. Le mois affiché était auparavant ramené de force dans
+    // la période du voyage : les boutons ‹ › étaient bien branchés et calMonth
+    // changeait, mais le clamp annulait le déplacement au même appel. Quand le
+    // voyage tient dans un seul mois (cas courant), minMonth === maxMonth et le
+    // calendrier était donc FIGÉ sur ce mois, tous formulaires confondus.
+    // La période du voyage reste le mois d'ouverture et l'indication sous la
+    // grille (openCalendar) — elle ne borne plus le déplacement.
     calMonth += dir;
     if(calMonth > 11){ calMonth=0; calYear++; }
     else if(calMonth < 0){ calMonth=11; calYear--; }
-    // Bloquer si on sort de la période voyage — SAUF pour les dates de
-    // création de voyage (modal « Nouveau voyage »), qui doivent pouvoir
-    // naviguer librement (le voyage actif n'est pas encore celui créé).
-    var EXCLUDE_TRIP = ['new-trip-date-dep','new-trip-date-ret'];
-    var isExcluded = EXCLUDE_TRIP.indexOf(calTargetId) !== -1;
-    var period = isExcluded ? null : getTripPeriod();
-    if(period && period.start){
-      var viewDate = new Date(calYear, calMonth, 1);
-      var minMonth = new Date(period.start.getFullYear(), period.start.getMonth(), 1);
-      if(viewDate < minMonth){ calMonth=period.start.getMonth(); calYear=period.start.getFullYear(); }
-    }
-    if(period && period.end){
-      var viewDate2 = new Date(calYear, calMonth, 1);
-      var maxMonth = new Date(period.end.getFullYear(), period.end.getMonth(), 1);
-      if(viewDate2 > maxMonth){ calMonth=period.end.getMonth(); calYear=period.end.getFullYear(); }
-    }
   }
   renderCalendar();
 }
@@ -12388,16 +12390,26 @@ function _docDeviseOptionsHtml(selected){
   return html.replace(/ selected(=("|')selected\2)?/g,'')
              .replace('value="'+code+'"', 'value="'+code+'" selected');
 }
-function _docsBlockHtml(cat, id){
+// `readonly` = mode CONSULTATION (fiche détail, avant tout clic sur
+// « Modifier ») : mêmes documents, mêmes libellés, mais rien d'actionnable —
+// pas de champ éditable, pas de suppression, pas de « Joindre », pas d'« Ajouter
+// un document ». Seule la pastille d'ouverture du fichier reste, pour qu'une
+// pièce déjà là reste consultable. MÊME fonction et MÊME markup que l'édition
+// (source unique, §8.0.1 point 3) : un seul drapeau décide de ce qui est offert.
+function _docsBlockHtml(cat, id, readonly){
   var o=_docFindItem(cat,id);
   if(!o) return '';
   var arr=_docsOf(o);
+  // En consultation, un élément SANS document n'affiche rien du tout : le bouton
+  // d'accordéon annoncerait « Ajouter un document », soit exactement l'action
+  // qu'on retire ici.
+  if(readonly && !arr.length) return '';
   var q=function(v){ return String(v).replace(/'/g,"\\'"); };   // ids quotés (§5.1)
   // Encadré beige et textes « DOCUMENTS » / « Aucun document… » supprimés : ne
   // reste que le bouton d'accordéon, qui porte l'intitulé et le compte.
   var bid=_docsBlockId(cat,id);
   var lbl=arr.length ? ('Masquer les documents ('+arr.length+')') : 'Ajouter un document';
-  var h='<div class="docs-block" id="'+bid+'">'
+  var h='<div class="docs-block'+(readonly?' docs-block-ro':'')+'" id="'+bid+'">'
     + _accBtnHtml(bid+'-reveal', "_docsToggle('"+q(bid)+"')", lbl, _ICO_DOC, arr.length>0)
     + '<div class="acc-panel" id="'+bid+'-panel" style="display:'+(arr.length?'':'none')+'">';
   arr.forEach(function(d){
@@ -12405,35 +12417,43 @@ function _docsBlockHtml(cat, id){
     var fname=has?window.pdfStore[d.pdfId].name:'';
     h+='<div class="doc-item">'
       +'<div class="doc-item-r1">'
-        +'<input type="text" class="doc-titre" value="'+_tlEsc(d.titre||'')+'" placeholder="Nom du document (ex. facture du vol)"'
-          +' onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'titre\',this.value)"/>'
+        +(readonly
+          ? '<span class="doc-titre-ro">'+_tlEsc(d.titre||'Document sans nom')+'</span>'
+          : '<input type="text" class="doc-titre" value="'+_tlEsc(d.titre||'')+'" placeholder="Nom du document (ex. facture du vol)"'
+            +' onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'titre\',this.value)"/>')
       +'</div>'
       +'<div class="doc-item-r2">'
-        +'<select class="doc-type" onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'type\',this.value)">'
-          +DOC_TYPES.map(function(t){
-              return '<option value="'+t.k+'"'+(d.type===t.k?' selected':'')+'>'+t.l+'</option>'; }).join('')
-        +'</select>'
-        +'<span class="doc-prix-wrap">'
-          +'<input type="text" class="doc-prix" value="'+(_docPrixMissing(d)?'':_docPrix(d))+'" placeholder="Prix"'
-            +' onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'prix\',this.value)"/>'
-          +'<select class="doc-devise" title="Devise du montant"'
-            +' onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'devise\',this.value)">'
-            +_docDeviseOptionsHtml(_docDevise(d))
-          +'</select>'
-        +'</span>'
-        +'<button type="button" class="doc-del" title="Retirer ce document" onclick="_docRemove(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\')">'
-          +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
-        +'</button>'
+        +(readonly
+          // Type et montant en TEXTE, dans la devise d'origine (_docPrixLabel,
+          // le même formateur que les chips du Budget).
+          ? '<span class="doc-meta-ro">'+_tlEsc(_docTypeLabel(d.type))
+              +(_docPrixMissing(d)?'':' · '+_docPrixLabel(d))+'</span>'
+          : '<select class="doc-type" onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'type\',this.value)">'
+              +DOC_TYPES.map(function(t){
+                  return '<option value="'+t.k+'"'+(d.type===t.k?' selected':'')+'>'+t.l+'</option>'; }).join('')
+            +'</select>'
+            +'<span class="doc-prix-wrap">'
+              +'<input type="text" class="doc-prix" value="'+(_docPrixMissing(d)?'':_docPrix(d))+'" placeholder="Prix"'
+                +' onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'prix\',this.value)"/>'
+              +'<select class="doc-devise" title="Devise du montant"'
+                +' onchange="_itemDocSet(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',\'devise\',this.value)">'
+                +_docDeviseOptionsHtml(_docDevise(d))
+              +'</select>'
+            +'</span>'
+            +'<button type="button" class="doc-del" title="Retirer ce document" onclick="_docRemove(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\')">'
+              +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
+            +'</button>')
       +'</div>'
       +'<div class="doc-item-r3">'
         +(has
           ? '<button type="button" class="pdf-view-btn" onclick="openPdf(\''+q(d.pdfId)+'\')">'
              +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> '+_tlEsc(fname)+'</button>'
           : '<span class="doc-nofile">Aucun fichier joint</span>')
-        +'<label class="pdf-btn doc-file-btn">'+(has?'Remplacer':'Joindre')
-          +'<input type="file" accept=".pdf,image/*,application/pdf" style="display:none"'
-          +' onchange="_docAttach(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',this)"/>'
-        +'</label>'
+        +(readonly ? ''
+          : '<label class="pdf-btn doc-file-btn">'+(has?'Remplacer':'Joindre')
+            +'<input type="file" accept=".pdf,image/*,application/pdf" style="display:none"'
+            +' onchange="_docAttach(\''+q(cat)+'\',\''+q(id)+'\',\''+q(d.id)+'\',this)"/>'
+          +'</label>')
       +'</div>'
     +'</div>';
   });
@@ -12448,9 +12468,11 @@ function _docsBlockHtml(cat, id){
     h+='<div class="docs-total">Total documents <b>'+_expFmtEur(tot)+'</b>'
       +'<span class="docs-total-hint">'+_hint+'</span></div>';
   }
-  h+='<button type="button" class="docs-add" onclick="_docAdd(\''+q(cat)+'\',\''+q(id)+'\')">'
-      +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un document</button>'
-    +'</div><!-- /.acc-panel -->'
+  if(!readonly){
+    h+='<button type="button" class="docs-add" onclick="_docAdd(\''+q(cat)+'\',\''+q(id)+'\')">'
+      +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un document</button>';
+  }
+  h+='</div><!-- /.acc-panel -->'
     +'</div>';
   return h;
 }

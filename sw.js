@@ -11,7 +11,7 @@
 // PÉREMPTION   : tuiles conservées 7 jours, shell indéfini
 // ══════════════════════════════════════════════════════════════════════
 
-var CACHE_SHELL   = 'yume-shell-v207';
+var CACHE_SHELL   = 'yume-shell-v208';
 var CACHE_TILES   = 'yume-tiles-v1';
 var CACHE_API     = 'yume-api-v1';
 
